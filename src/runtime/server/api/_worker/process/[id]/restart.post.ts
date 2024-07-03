@@ -1,17 +1,15 @@
-import { getRouterParam, pm2Connect, pm2Delete } from '#imports'
+import { getRouterParam, pm2Connect, pm2Restart } from '#imports'
 import { pm2ProcessArray } from '../../../../schema/pm2'
 
 export default defineEventHandler(async (event)=>{
-    const name = getRouterParam(event, 'name') || ''
+    const id = getRouterParam(event, 'id') || ''
 
     await pm2Connect()
 
-    const process = await pm2Delete(name)
+    const process = await pm2Restart(id)
     
     const result = await pm2ProcessArray.safeParse(process)
     if(result.success) 
-        return {
-            success: true
-        }
+        return result.data[0]
     else throw `Error parsing result from process ${result.error}`
 })

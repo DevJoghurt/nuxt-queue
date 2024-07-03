@@ -2,11 +2,11 @@ import { getRouterParam, pm2Connect, pm2Reload } from '#imports'
 import { pm2ProcessArray } from '../../../../schema/pm2'
 
 export default defineEventHandler(async (event)=>{
-    const name = getRouterParam(event, 'name') || ''
+    const id = getRouterParam(event, 'id') || ''
 
     await pm2Connect()
 
-    const process = await pm2Reload(name)
+    const process = await pm2Reload(id)
 
     const result = await pm2ProcessArray.safeParse(process)
     

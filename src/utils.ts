@@ -1,6 +1,6 @@
 import { loadFile } from "magicast"
 import { globby } from 'globby'
-import { useLogger } from "nuxt/kit"
+import { useLogger, addTemplate } from "nuxt/kit"
 import type { WorkerConfig, WorkerOptions, RegisteredWorker } from './types'
 import { writeFile, mkdir } from 'node:fs/promises'
 import defu from "defu"
@@ -12,10 +12,6 @@ type InitializeWorkerOptions = {
     buildDir: string;
 }
 
-function createRegisteredWorkerConfig(file: string){
-
-}
-
 /**
  * Initialize worker and return entry files
  * creates a meta json file that has all the important information of the workers 
@@ -24,8 +20,6 @@ function createRegisteredWorkerConfig(file: string){
  * @returns RegisteredWorker[]
  * 
  */
-
-
 export async function initializeWorker(options: InitializeWorkerOptions){
     const logger = useLogger()
 
@@ -36,6 +30,7 @@ export async function initializeWorker(options: InitializeWorkerOptions){
         deep: 2
     })
 
+    const entryFiles = {} as Record<string, string>
     const registeredWorker = [] as RegisteredWorker[] 
     // read worker configuration and write it as meta config file
     const workerConfig = {} as WorkerConfig
@@ -63,10 +58,16 @@ export async function initializeWorker(options: InitializeWorkerOptions){
         }
 
         if(mod.exports.default?.$type === 'function-call'){
-            const name = mod.exports.default?.$args[0] || ''
-            const options = mod.exports.default?.$args[2] || {} as WorkerConfig
-            if(typeof workerConfig[name] === 'undefined'){
-                workerConfig[name] = options
+            let meta = mod.exports.default?.$args[0] || ''
+            if(typeof meta === "string"){
+                meta = {
+                    id: generatedID,
+                    name: meta
+                }
+            }
+            const workerConfigArgs = mod.exports.default?.$args[2] || {} as WorkerConfig
+            if(typeof workerConfig[meta.id] === 'undefined'){
+                workerConfig[meta.id] = workerConfigArgs
                 const workerDefaults = {
                     autorun: true,
                     concurrency: 1,
@@ -80,12 +81,14 @@ export async function initializeWorker(options: InitializeWorkerOptions){
                     stalledInterval: 30000
                 } as WorkerOptions
 
+                entryFiles[meta.id] = `${options.rootDir}/${file}`
+
                 registeredWorker.push(defu({
-                    id: generatedID,
-                    name: name,
-                    script: `${generatedID}.mjs`,
+                    id: meta.id,
+                    name: meta.name,
+                    script: `${meta.id}.mjs`,
                     options: {
-                        ...options
+                        ...workerConfigArgs
                     }
                 }, {
                     options: {
@@ -93,24 +96,21 @@ export async function initializeWorker(options: InitializeWorkerOptions){
                     }
                 }))
             }else{
-                logger.error(`Worker [${name}]`,'Name already taken. Please write a worker with a different name.')
+                logger.error(`Worker [${meta.name}]`,`Id ${meta.id} already taken. Please change the worker id.`)
             }
         }else {
             logger.error('Worker:', file,'Found no default export. Please use export default defineWorker() syntax.')
         }
     }
 
-    // Write meta worker json
-    await mkdir(buildDir, {
-        recursive: true
+    // create worker config template
+    addTemplate({
+        filename: 'worker.config.ts',
+        write: true,
+        getContents: () => `export default ${JSON.stringify(registeredWorker, null, 4)}`
     })
-    await writeFile(`${buildDir}/worker.json`,JSON.stringify(registeredWorker, null, 4),"utf8")
 
     logger.success('Initialized worker:', registeredWorker.map((w)=>w.name))
 
-    return registeredWorker
-}
-
-export function checkWorkerUpdates(file: string, options){
-
+    return entryFiles
 }

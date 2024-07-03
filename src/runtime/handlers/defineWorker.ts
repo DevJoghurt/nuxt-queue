@@ -1,48 +1,98 @@
-import type { Processor } from "bullmq"
+import type { Processor, Job } from "bullmq"
 import { Worker } from "bullmq"
 import type { WorkerOptions } from '../../types'
 
-//emulate bull worker
+//Wrapper for bull worker
+
+const redisConfig = {
+  host: 'localhost',
+  port: 6379
+}
+
+type WorkerMeta = string | {
+  id: string;
+  name?: string;
+  description?: string;
+}
+
+type WorkerProcessor = Processor | {
+  worker: Processor;
+  onCompleted: (job: Job, returnValue: any) => void;
+  onProgress: (job: Job, progress: number | object) => void;
+  onFailed: (job: Job, error: any ) => void;
+}
+
+function sendMessage(event: string, message: any) {
+  if(process.send)
+    process.send({
+      type : 'process:msg',
+      data : {
+        event,
+        message
+      }
+    })
+}
 
 
 export const defineWorker = (
-  name: string,
-  processor: Processor,
+  meta: WorkerMeta,
+  processor: WorkerProcessor,
   opts?: WorkerOptions
 ) => {
 
-  const { queue } = useRuntimeConfig()
+  let id = ''
+  if(typeof meta === 'string'){
+    id = meta
+  }else{
+    id = meta.id
+  }
+
+  let workerFunction: Processor = async () => {}  
+  if(typeof processor === "function"){
+    workerFunction = processor
+  }else{
+    workerFunction = processor.worker
+  }
 
   const worker = new Worker(
-    name,
-    processor,
+    id,
+    workerFunction,
     {
       connection: {
-        host: queue.redis.host,
-        port: queue.redis.port
+        host: redisConfig.host,
+        port: redisConfig.port
       },
       ...opts
     },
   );
 
+  worker.on('completed', (job)=>{
+    sendMessage('completed', job);
+  });
+
+  worker.on('ioredis:close', ()=>{
+    sendMessage('ioredis:close', 'Connection to redis is lost');
+  });
+
+  worker.on('closing', (err)=>{
+    sendMessage('error', err);
+  });
+
+  worker.on('error', (err)=>{
+    sendMessage('error', err);
+  });
+
   worker.run(); 
-  
-  //emulate bull worker
-  /*
-  setInterval(async ()=>{
-    await processor.call({
-      name
-    })
-  }, 2000)
-  */
 
   //TODO: implement graceful shutdown of worker -> worker.stop()
-  process.on('SIGINT', function() {
+  process.on('SIGINT', async function() {
+    sendMessage('error', 'Worker closed');
     console.log('close worker gracefully')
+    await worker.close()
     setTimeout(()=>{
       console.log('wait until shutdown')
       process.exit(0)
     }, 2000)
  })
-}
 
+}

@@ -3,7 +3,8 @@ import {
   useLogger,
   createResolver,
   addServerScanDir,
-  addServerImportsDir
+  addServerImportsDir,
+  addServerHandler
 } from "@nuxt/kit"
 import { getRollupConfig, type RollupConfig } from "./builder/config"
 import { watchRollupEntry } from './builder/bundler'
@@ -21,6 +22,7 @@ const meta = {
 
 export interface ModuleOptions {
   dir: string;
+  runtimeDir: string;
   redis: {
       host: string;
       port: number;
@@ -31,6 +33,7 @@ export default defineNuxtModule<ModuleOptions>({
   meta,
   defaults: {
       dir: 'worker',
+      runtimeDir: '',
       redis: {
           host: "localhost",
           port: 6379
@@ -44,19 +47,41 @@ export default defineNuxtModule<ModuleOptions>({
 
       addServerImportsDir(resolve('./runtime/handlers'))
 
+      // Transpile BullBoard api because its not ESM
+      nuxt.options.build.transpile.push("@bull-board/api")
+      nuxt.options.build.transpile.push("@bull-board/h3")
+      nuxt.options.build.transpile.push("@bull-board/ui")
+
+      // Add Server handlers for UI
+      addServerHandler({
+        route: "/_queue",
+        handler: resolve("./runtime/routes/bullBoard.ts"),
+      });
+
+      addServerHandler({
+        route: "/_queue/**",
+        handler: resolve("./runtime/routes/bullBoard.ts"),
+      });
+
+      //Alias for worker config with meta information
+      nuxt.hook("nitro:config", (nitroConfig) => {
+        if (!nitroConfig.alias) return
+    
+        nitroConfig.alias["#worker"] = `${nuxt.options.buildDir}/worker.config.ts`
+      })
+
       const runtimeConfig = nuxt.options.runtimeConfig
 
       runtimeConfig.queue = defu(runtimeConfig?.queue || {}, {
-          redis: options.redis
+        runtimeDir: `${nuxt.options.buildDir}/worker`,
+        redis: options.redis
       })
-
-      //createTemplateTypes()
 
       // ONLY IN DEV MODE
       if(nuxt.options.dev){
 
           //initialize worker
-          let registeredWorker = await initializeWorker({
+          let workerEntryFiles = await initializeWorker({
               rootDir: nuxt.options.rootDir,
               workerDir: options.dir,
               buildDir: nuxt.options.buildDir
@@ -65,7 +90,6 @@ export default defineNuxtModule<ModuleOptions>({
           // start build process
           let rollupConfig = null as null | RollupConfig
 
-          /*
           nuxt.hook('nitro:init', (nitroCtx)=>{
               rollupConfig = getRollupConfig(workerEntryFiles, {
                   buildDir: nuxt.options.buildDir,
@@ -73,20 +97,7 @@ export default defineNuxtModule<ModuleOptions>({
               })
               watchRollupEntry(rollupConfig)
           })
-              */
 
-          // Need watch hook to get update if files are added or removed from directory
-          nuxt.options.watch.push(`${nuxt.options.rootDir}/${options.dir}/*`)
-          nuxt.hook('builder:watch', async (eventType, dir) => {
-              if(dir.includes(options.dir) && ['unlink', 'add'].indexOf(eventType) !== -1){
-                  logger.info('builder:watch', eventType, dir)
-                  registeredWorker = await initializeWorker({
-                    rootDir: nuxt.options.rootDir,
-                    workerDir: options.dir,
-                    buildDir: nuxt.options.buildDir
-                  })
-              }
-          })
       }
       // ONLY IN DEV MODE
   }

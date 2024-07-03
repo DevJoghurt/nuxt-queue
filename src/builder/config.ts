@@ -22,7 +22,7 @@ type Options = {
     nitro: NitroOptions
 }
 
-type EntryFiles = string[]
+type EntryFiles = Record<string, string>
 
 export function getRollupConfig(entryFiles: EntryFiles, options: Options) : RollupConfig {
     const extensions: string[] = [
@@ -43,7 +43,7 @@ export function getRollupConfig(entryFiles: EntryFiles, options: Options) : Roll
             format: 'esm',
             exports: 'auto',
             entryFileNames: '[name].mjs',
-            chunkFileNames: 'chunk_[hash].mjs',
+            chunkFileNames: 'chunks/chunk_[hash].mjs',
             intro: '',
             outro: '',
             generatedCode: {
@@ -56,7 +56,6 @@ export function getRollupConfig(entryFiles: EntryFiles, options: Options) : Roll
             circularDependencies()
         ]
     } as RollupConfig
-
 
     //add nitro compatible auto imports
     if(options.nitro.imports){
@@ -71,6 +70,7 @@ export function getRollupConfig(entryFiles: EntryFiles, options: Options) : Roll
           exclude: [ /node_modules/ ]     
         })
     )
+
     // https://github.com/rollup/plugins/tree/master/packages/node-resolve
     rollupConfig.plugins.push(
         nodeResolve({
@@ -84,21 +84,20 @@ export function getRollupConfig(entryFiles: EntryFiles, options: Options) : Roll
         })
     )
 
-     // https://github.com/rollup/plugins/tree/master/packages/commonjs
+    // https://github.com/rollup/plugins/tree/master/packages/commonjs
     rollupConfig.plugins.push(
         commonjs({
-            esmExternals: (id) => !id.startsWith("unenv/"),
-                requireReturnsDefault: "auto",
-                ...options.nitro.commonJS,
+            requireReturnsDefault: "auto"
         })
     )
 
     // add nitro alias
+    /* 
     rollupConfig.plugins.push(
         alias({
           entries: options.nitro.alias,
         })
       );
-
+    */
     return rollupConfig
 }
