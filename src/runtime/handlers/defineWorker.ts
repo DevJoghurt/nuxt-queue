@@ -1,5 +1,5 @@
 import type { Processor, Job } from "bullmq"
-import { Worker } from "bullmq"
+import { Worker, MetricsTime } from "bullmq"
 import type { WorkerOptions } from '../../types'
 
 //Wrapper for bull worker
@@ -62,7 +62,11 @@ export const defineWorker = (
         host: redisConfig.host,
         port: redisConfig.port
       },
-      ...opts
+      ...Object.assign(opts || {},{
+        metrics: {
+          maxDataPoints: MetricsTime.ONE_WEEK * 2,
+        }
+      })
     },
   );
 
