@@ -9,6 +9,7 @@ node_modules
 .tmp
 .cache
 .local
+dump.rdb
 
 # Yarn
 **/.yarn/cache

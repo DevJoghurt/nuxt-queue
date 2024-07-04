@@ -3,6 +3,7 @@
     Nuxt module playground!
   </div>
 </template>
+<script setup lang="ts">
 
-<script setup>
+  useQueue('test')
 </script>

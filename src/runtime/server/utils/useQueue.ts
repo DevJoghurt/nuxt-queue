@@ -1,6 +1,6 @@
 import { useRuntimeConfig } from "#imports"
 import { consola } from "consola"
-import { Queue, QueueEvents } from "bullmq"
+import { Queue, QueueEvents, QueueEventsListener } from "bullmq"
 import type {
     ConnectionOptions,
     QueueEventsOptions,
@@ -119,13 +119,13 @@ export const $useQueue = () => {
      * @param name Name of the queue
      */
     const getQueueEvents = (name: string) => {
-        const queue = queues.find((queue) => queue.name === name)!
+        const queueEvent = queueEvents.find((queue) => queue.name === name)!
 
-        if (!queue) {
-        logger.warn(`Queue ${name} not found`);
+        if (!queueEvent) {
+        logger.warn(`QueueEvent ${name} not found`);
         }
 
-        return queue
+        return queueEvent
     }
 
     const disconnect = async () => {

@@ -4,12 +4,12 @@ import {
   createResolver,
   addServerScanDir,
   addServerImportsDir,
-  addServerHandler
+  addServerHandler,
+  addImportsDir
 } from "@nuxt/kit"
 import { getRollupConfig, type RollupConfig } from "./builder/config"
 import { watchRollupEntry } from './builder/bundler'
 import { initializeWorker } from './utils'
-import type { RegisteredWorker } from './types'
 import defu from 'defu'
 
 
@@ -46,6 +46,8 @@ export default defineNuxtModule<ModuleOptions>({
       addServerScanDir(resolve('./runtime/server'))
 
       addServerImportsDir(resolve('./runtime/handlers'))
+
+      addImportsDir(resolve('./runtime/composables'))
 
       // Transpile BullBoard api because its not ESM
       nuxt.options.build.transpile.push("@bull-board/api")
