@@ -27,7 +27,7 @@
       "test": "vitest run",
       "test:watch": "vitest watch",
       "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit",
-      "redis": "C:/Users/Hof_J/SW/redis7/redis-server.exe"
+      "redis": "./.local/redis.bat"
     },
     "dependencies": {
       "@nuxt/kit": "^3.12.3",

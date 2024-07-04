@@ -65,8 +65,12 @@ export default defineNuxtModule<ModuleOptions>({
 
       //Alias for worker config with meta information
       nuxt.hook("nitro:config", (nitroConfig) => {
+        // add websocket support
+        nitroConfig.experimental =defu(nitroConfig.experimental,{
+          websocket: true
+        })
+        //add worker alias
         if (!nitroConfig.alias) return
-    
         nitroConfig.alias["#worker"] = `${nuxt.options.buildDir}/worker.config.ts`
       })
 
