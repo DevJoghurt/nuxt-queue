@@ -80,6 +80,10 @@ export const $useQueue = () => {
 
         return queue
     }
+    
+    const getQueues = () => {
+        return queues
+    }
 
     /**
      * Initilizes a queueEvent. If queueEvent is already initialized, it will return undefined but log a warning.
@@ -130,7 +134,7 @@ export const $useQueue = () => {
 
     const disconnect = async () => {
         for(const event of queueEvents){
-            await event.disconnect()
+            await event.removeAllListeners()
         }
     }
 
@@ -140,6 +144,7 @@ export const $useQueue = () => {
         getQueue,
         getQueueEvents,
         disconnect,
+        getQueues,
         connectionOptions
     }
 }

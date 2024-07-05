@@ -20,6 +20,8 @@ export default defineWebSocketHandler({
 
       const eventBus = getQueueEvents(queueId)
 
+      if(!eventBus) return
+
       eventBus.on('completed', ({jobId, returnvalue, prev}) => {
         peer.send({
           eventType: 'completed',
@@ -57,6 +59,27 @@ export default defineWebSocketHandler({
           job: {
             id: jobId,
             name
+          }
+        })
+      })
+
+      eventBus.on('waiting', ({ jobId, prev}) => {
+        peer.send({
+          eventType: 'added',
+          job: {
+            id: jobId,
+            prev
+          }
+        })
+      })
+
+      eventBus.on('failed', ({ jobId, failedReason, prev}) => {
+        peer.send({
+          eventType: 'added',
+          job: {
+            id: jobId,
+            prev,
+            failedReason
           }
         })
       })

@@ -9,7 +9,7 @@ import { resolvePath } from "mlly"
 import { dirname } from "pathe"
 
 const serverAdapter = new H3Adapter();
-serverAdapter.setBasePath("/_queue");
+serverAdapter.setBasePath("/_bull");
 
 export default defineEventHandler(async (event) => {
 

@@ -5,7 +5,10 @@ import {
   addServerScanDir,
   addServerImportsDir,
   addServerHandler,
-  addImportsDir
+  addImportsDir,
+  installModule,
+  addComponent,
+  addComponentsDir
 } from "@nuxt/kit"
 import { getRollupConfig, type RollupConfig } from "./builder/config"
 import { watchRollupEntry } from './builder/bundler'
@@ -35,7 +38,7 @@ export default defineNuxtModule<ModuleOptions>({
       dir: 'worker',
       runtimeDir: '',
       redis: {
-          host: "localhost",
+          host: "127.0.0.1",
           port: 6379
       }
   },
@@ -43,11 +46,28 @@ export default defineNuxtModule<ModuleOptions>({
       const { resolve } = createResolver(import.meta.url)
       const logger = useLogger(meta.name)
 
+
+      //check if @nuxt/ui is installed
+      await installModule('@nuxt/ui',{
+        icons: ['heroicons']
+      })
+
       addServerScanDir(resolve('./runtime/server'))
 
       addServerImportsDir(resolve('./runtime/handlers'))
 
       addImportsDir(resolve('./runtime/composables'))
+
+      addComponentsDir({
+        path: resolve('./runtime/components'),
+        prefix: 'Queue'
+      })
+
+      addComponent({
+        name: 'QueueApp',
+        filePath: resolve('./runtime/app/index.vue'),
+        global: true
+      })
 
       // Transpile BullBoard api because its not ESM
       nuxt.options.build.transpile.push("@bull-board/api")
@@ -56,14 +76,30 @@ export default defineNuxtModule<ModuleOptions>({
 
       // Add Server handlers for UI
       addServerHandler({
-        route: "/_queue",
+        route: "/_bull",
         handler: resolve("./runtime/routes/bullBoard.ts"),
       });
 
       addServerHandler({
-        route: "/_queue/**",
+        route: "/_bull/**",
         handler: resolve("./runtime/routes/bullBoard.ts"),
       });
+
+      const runtimeConfig = nuxt.options.runtimeConfig
+
+      runtimeConfig.queue = defu(runtimeConfig?.queue || {}, {
+        runtimeDir: `${nuxt.options.buildDir}/worker`,
+        redis: options.redis
+      })
+
+      //add tailwindcss support
+      nuxt.hook('tailwindcss:config', (tailwindConfig) => {
+        tailwindConfig.content = tailwindConfig.content || []
+        tailwindConfig.content.files = tailwindConfig.content.files || []
+        tailwindConfig.content.files.push(resolve('./runtime/app/**/*.{vue,js,ts}'))
+        tailwindConfig.content.files.push(resolve('./runtime/components/**/*.{vue,js,ts}'))
+      })
+
 
       //Alias for worker config with meta information
       nuxt.hook("nitro:config", (nitroConfig) => {
@@ -74,13 +110,6 @@ export default defineNuxtModule<ModuleOptions>({
         //add worker alias
         if (!nitroConfig.alias) return
         nitroConfig.alias["#worker"] = `${nuxt.options.buildDir}/worker.config.ts`
-      })
-
-      const runtimeConfig = nuxt.options.runtimeConfig
-
-      runtimeConfig.queue = defu(runtimeConfig?.queue || {}, {
-        runtimeDir: `${nuxt.options.buildDir}/worker`,
-        redis: options.redis
       })
 
       // ONLY IN DEV MODE
