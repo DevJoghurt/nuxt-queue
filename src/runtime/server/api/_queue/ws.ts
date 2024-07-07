@@ -16,73 +16,10 @@ export default defineWebSocketHandler({
 
       const queueId = getQueueId(peer)
 
-      const { getQueueEvents } = $useQueue()
+      const { addListener } = $useQueue()
 
-      const eventBus = getQueueEvents(queueId)
+      addListener(queueId, peer)
 
-      if(!eventBus) return
-
-      eventBus.on('completed', ({jobId, returnvalue, prev}) => {
-        peer.send({
-          eventType: 'completed',
-          job: {
-            id: jobId,
-            returnvalue,
-            prev
-          }
-        })
-      })
-
-      eventBus.on('active', ({jobId, prev}) => {
-        peer.send({
-          eventType: 'active',
-          job: {
-            id: jobId,
-            prev
-          }
-        })
-      })
-
-      eventBus.on('progress', ({ jobId, data}) => {
-        peer.send({
-          eventType: 'progress',
-          job: {
-            id: jobId,
-            progress: data
-          }
-        })
-      })
-
-      eventBus.on('added', ({ jobId, name}) => {
-        peer.send({
-          eventType: 'added',
-          job: {
-            id: jobId,
-            name
-          }
-        })
-      })
-
-      eventBus.on('waiting', ({ jobId, prev}) => {
-        peer.send({
-          eventType: 'added',
-          job: {
-            id: jobId,
-            prev
-          }
-        })
-      })
-
-      eventBus.on('failed', ({ jobId, failedReason, prev}) => {
-        peer.send({
-          eventType: 'added',
-          job: {
-            id: jobId,
-            prev,
-            failedReason
-          }
-        })
-      })
     },
   
     message(peer, message) {
@@ -91,6 +28,12 @@ export default defineWebSocketHandler({
   
     close(peer, event) {
       console.log("[ws] close", peer, event)
+
+      const queueId = getQueueId(peer)
+
+      const { removeListener } = $useQueue()
+
+      removeListener(queueId, peer)
     },
   
     error(peer, error) {

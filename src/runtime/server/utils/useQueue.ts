@@ -1,16 +1,21 @@
 import { useRuntimeConfig } from "#imports"
 import { consola } from "consola"
-import { Queue, QueueEvents, QueueEventsListener } from "bullmq"
+import { Queue, QueueEvents} from "bullmq"
 import type {
     ConnectionOptions,
     QueueEventsOptions,
     QueueOptions,
     RedisOptions
   } from "bullmq"
+import type { Peer } from "crossws"
 
+type EventInstance = {
+    peers: Peer[];
+    queueEvents: QueueEvents;
+}
 
 const queues: Queue[] = []
-const queueEvents: QueueEvents[] = []
+const eventInstances: EventInstance[] = []
 
 export const $useQueue = () => {
     const { redis: {
@@ -85,6 +90,97 @@ export const $useQueue = () => {
         return queues
     }
 
+    const addListener = (queueId: string, peer: Peer) => {
+        const eventInstance = eventInstances.find((eventInstance) => eventInstance.queueEvents.name === queueId)
+        if(eventInstance){
+            if(eventInstance.peers.length === 0) {
+                eventInstance.queueEvents.on("completed", ({jobId, returnvalue, prev}) => {
+                    for(const peer of eventInstance.peers){
+                        peer.send({
+                            eventType: 'completed',
+                            job: {
+                                id: jobId,
+                                returnvalue,
+                                prev
+                            }
+                        })
+                    }
+                })
+
+                eventInstance.queueEvents.on('active', ({jobId, prev}) => {
+                    for(const peer of eventInstance.peers){
+                        peer.send({
+                        eventType: 'active',
+                        job: {
+                            id: jobId,
+                            prev
+                        }
+                        })
+                    }
+                })
+        
+                eventInstance.queueEvents.on('progress', ({ jobId, data}) => {
+                    for(const peer of eventInstance.peers){
+                        peer.send({
+                            eventType: 'progress',
+                            job: {
+                                id: jobId,
+                                progress: data
+                            }
+                        })
+                    }
+                })
+        
+                eventInstance.queueEvents.on('added', ({ jobId, name}) => {
+                    for(const peer of eventInstance.peers){
+                        peer.send({
+                        eventType: 'added',
+                        job: {
+                            id: jobId,
+                            name
+                        }
+                        })
+                    }
+                })
+        
+                eventInstance.queueEvents.on('waiting', ({ jobId, prev}) => {
+                    for(const peer of eventInstance.peers){
+                        peer.send({
+                            eventType: 'added',
+                            job: {
+                                id: jobId,
+                                prev
+                            }
+                        })
+                    }
+                })
+        
+                eventInstance.queueEvents.on('failed', ({ jobId, failedReason, prev}) => {
+                    peer.send({
+                    eventType: 'added',
+                    job: {
+                        id: jobId,
+                        prev,
+                        failedReason
+                    }
+                    })
+                })
+            }
+
+            eventInstance.peers.push(peer)
+        }
+    }
+
+    const removeListener = (queueId: string, peer: Peer) => {
+        const eventInstance = eventInstances.find((eventInstance) => eventInstance.queueEvents.name === queueId)
+        if(eventInstance){
+            //find peer and remove it
+            const index = eventInstance.peers.findIndex((p) => p.id === peer.id)
+            if(index > -1) eventInstance.peers.splice(index, 1)
+            if(eventInstance.peers.length === 0) eventInstance.queueEvents.removeAllListeners()
+        }
+    }
+
     /**
      * Initilizes a queueEvent. If queueEvent is already initialized, it will return undefined but log a warning.
      *
@@ -95,15 +191,15 @@ export const $useQueue = () => {
         opts?: Omit<QueueEventsOptions, "connection">
     ) => {
         // check if queueEvent already exists
-        if (queueEvents.find((queue) => queue.name === name)) {
+        if (eventInstances.find((eventInstance) => eventInstance.queueEvents.name === name)) {
             logger.warn(`QueueEvent ${name} already exists`)
-        return
+            return
         }
         const defaultConnectionOptions: ConnectionOptions = {
             enableOfflineQueue: false,
         }
     
-        const queueEvent = new QueueEvents(name, {
+        const queueEvents = new QueueEvents(name, {
             connection: { 
                 ...redisOptions, 
                 ...defaultConnectionOptions 
@@ -111,10 +207,13 @@ export const $useQueue = () => {
             ...opts,
         })
     
-        queueEvents.push(queueEvent)
+        eventInstances.push({
+            peers: [],
+            queueEvents
+        })
 
         logger.success(`QueueEvent Instance ${name} initialized`)
-        return queueEvents
+        return eventInstances
     }
 
     /**
@@ -123,18 +222,19 @@ export const $useQueue = () => {
      * @param name Name of the queue
      */
     const getQueueEvents = (name: string) => {
-        const queueEvent = queueEvents.find((queue) => queue.name === name)!
+        const eventInstance = eventInstances.find((eventInstance) => eventInstance.queueEvents.name === name)!
 
-        if (!queueEvent) {
-        logger.warn(`QueueEvent ${name} not found`);
+        if (!eventInstance) {
+            logger.warn(`QueueEvent ${name} not found`);
         }
 
-        return queueEvent
+        return eventInstance
     }
 
     const disconnect = async () => {
-        for(const event of queueEvents){
-            await event.removeAllListeners()
+        for(const eventInstance of eventInstances){
+            eventInstance.peers = []
+            await eventInstance.queueEvents.removeAllListeners()
         }
     }
 
@@ -145,6 +245,8 @@ export const $useQueue = () => {
         getQueueEvents,
         disconnect,
         getQueues,
+        addListener,
+        removeListener,
         connectionOptions
     }
 }
