@@ -82,6 +82,7 @@ function pm2LaunchBus() {
 export const $usePM2 = () => {
 
     const initLaunchBus = async () => {
+        await connect()
         pm2BusInstance  = await pm2LaunchBus()
 
         return pm2BusInstance
