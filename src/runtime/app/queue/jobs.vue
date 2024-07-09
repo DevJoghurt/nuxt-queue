@@ -7,29 +7,35 @@
             </div>
             <div>
                 <div class="flex flex-row gap-4 justify-end">
-                    <QueueJobCounter type="Active" :count="queue?.jobs.active" />
-                    <QueueJobCounter type="Waiting" :count="queue?.jobs.waiting" />
-                    <QueueJobCounter type="Completed" :count="queue?.jobs.completed" />
-                    <QueueJobCounter type="Failed" :count="queue?.jobs.failed" />
+                    <QueueStatCounter type="Active" :count="queue?.jobs.active" />
+                    <QueueStatCounter type="Waiting" :count="queue?.jobs.waiting" />
+                    <QueueStatCounter type="Completed" :count="queue?.jobs.completed" />
+                    <QueueStatCounter type="Failed" :count="queue?.jobs.failed" />
                 </div>
             </div>
         </section>
         <section>
             <UCard>
                 <UTable :columns="columns" :rows="jobs" :sort="{
-                    column: 'id',
+                    column: 'timestamp',
                     direction: 'desc'
                 }">
                     <template #progress-data="{ row }">
                         <UProgress :value="row.progress" indicator />
                     </template>
                 </UTable>
+                <template #footer>
+                    <div class="flex justify-start px-3 py-3.5">
+                        <UPagination v-model="page" :page-count="pageCount" :total="jobs.length" />
+                    </div>
+                </template>
             </UCard>
         </section>
     </div>
 </template>
 <script setup lang="ts">
-    import { useRoute } from '#imports'
+    import { useRoute, useFetch, ref, useQueueSubscription } from '#imports'
+    import type { Ref } from 'vue'
     import type { QueueData, Jobs } from '../../types'
 
     const route = useRoute()
@@ -57,7 +63,15 @@
         }
     })
 
+    const page = ref(1)
+    const pageCount = 5
+
     const columns = [{
+        key: 'timestamp',
+        label: 'Created',
+        sortable: true,
+        direction: 'desc' as const
+    },{
         key: 'id',
         label: 'ID',
         sortable: true,
@@ -72,11 +86,6 @@
     }, {
         key: 'progress',
         label: 'Progress'
-    }, {
-        key: 'timestamp',
-        label: 'Created',
-        sortable: true,
-        direction: 'desc' as const
     }, {
         key: 'finishedOn',
         label: 'Finished'
@@ -109,12 +118,12 @@
         },
         onProgress: (event) => {
             console.log(event)
-            jobs.value = jobs.value.map((job) =>{
-                if(parseInt(event.id) === job.id){
+            jobs.value = jobs.value?.map((job) =>{
+                if(event.id === job.id){
                     job.progress = event.progress
                 }
                 return job
-            })
+            }) || null
         }
     })
 

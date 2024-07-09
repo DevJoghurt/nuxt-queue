@@ -1,7 +1,7 @@
 import z from 'zod'
 
 export const JobSchema = z.object({
-    id: z.string().transform((id)=>parseInt(id)),
+    id: z.string(),
     name: z.string(),
     data: z.any(),
     progress: z.number(),
