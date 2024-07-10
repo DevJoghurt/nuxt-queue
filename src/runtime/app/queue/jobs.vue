@@ -7,26 +7,135 @@
             </div>
             <div>
                 <div class="flex flex-row gap-4 justify-end">
-                    <QueueStatCounter type="Active" :count="queue?.jobs.active" />
-                    <QueueStatCounter type="Waiting" :count="queue?.jobs.waiting" />
-                    <QueueStatCounter type="Completed" :count="queue?.jobs.completed" />
-                    <QueueStatCounter type="Failed" :count="queue?.jobs.failed" />
+                    <QueueStatCounter name="Active" color="orange" :count="queue?.jobs.active" />
+                    <QueueStatCounter name="Waiting" color="yellow" :count="queue?.jobs.waiting" />
+                    <QueueStatCounter name="Completed" color="green" :count="queue?.jobs.completed" />
+                    <QueueStatCounter name="Failed" color="red" :count="queue?.jobs.failed" />
                 </div>
             </div>
         </section>
         <section>
-            <UCard>
-                <UTable :columns="columns" :rows="jobs" :sort="{
-                    column: 'timestamp',
-                    direction: 'desc'
-                }">
+            <UCard
+            class="w-full"
+            :ui="{
+                base: '',
+                divide: 'divide-y divide-gray-200 dark:divide-gray-700',
+                header: { padding: 'px-4 py-5' },
+                body: { padding: '', base: 'divide-y divide-gray-200 dark:divide-gray-700' },
+                footer: { padding: 'p-4' }
+            }">
+                <!-- Filters -->
+                <div class="flex items-center justify-end gap-3 px-4 py-3">
+                    <USelectMenu 
+                        v-model="filters" 
+                        :options="jobStates" 
+                        multiple 
+                        class="w-40">
+                            <template #label>
+                                <span v-if="filters.length" class="truncate">{{ filters.join(', ') }}</span>
+                                <span v-else>Filter</span>
+                            </template>
+                    </USelectMenu>
+                </div>
+
+                <!-- Header and Action buttons -->
+                <div class="flex justify-between items-center w-full px-4 py-3">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-sm leading-5">Rows per page:</span>
+
+                        <USelect
+                            v-model="limit"
+                            :options="[10, 20, 30, 40, 50]"
+                            class="me-2 w-20"
+                            size="xs"
+                        />
+                    </div>
+
+                    <div class="flex gap-1.5 items-center">
+                            <UDropdown v-if="selectedRows.length > 1" :items="actions" :ui="{ width: 'w-36' }">
+                                <UButton
+                                    icon="i-heroicons-chevron-down"
+                                    trailing
+                                    color="gray"
+                                    size="xs"
+                                >
+                                    Action
+                                </UButton>
+                            </UDropdown>
+
+                            <USelectMenu v-model="selectedColumns" :options="columns" multiple>
+                        <UButton
+                            icon="i-heroicons-view-columns"
+                            color="gray"
+                            size="xs"
+                        >
+                            Columns
+                        </UButton>
+                        </USelectMenu>
+
+                        <UButton
+                        icon="i-heroicons-funnel"
+                        color="gray"
+                        size="xs"
+                        :disabled="filters.length === 0"
+                        @click="resetFilters"
+                        >
+                        Reset
+                        </UButton>
+                    </div>
+                </div>
+
+                <UTable
+                    v-model="selectedRows" 
+                    :columns="columnsTable" 
+                    :rows="data.jobs" 
+                    :sort="{
+                        column: 'timestamp',
+                        direction: 'desc'
+                    }"
+                    :loading="pending"
+                    @select="select"
+                    class="w-full"
+                    :ui="{ 
+                        td: { 
+                            base: 'max-w-[0] truncate' 
+                        }
+                    }"
+                    >
+                    <template #state-data="{ row }">
+                        <UBadge v-if="row.state === 'completed'" variant="subtle" color="green" size="sm">{{ row.state }}</UBadge>
+                        <UBadge v-if="row.state === 'waiting'" variant="subtle" color="yellow" size="sm">{{ row.state }}</UBadge>
+                        <UBadge v-if="row.state === 'failed'" variant="subtle" color="red" size="sm">{{ row.state }}</UBadge>
+                        <UBadge v-if="row.state === 'active'" variant="subtle" color="orange" size="sm">{{ row.state }}</UBadge>
+                    </template>
                     <template #progress-data="{ row }">
                         <UProgress :value="row.progress" indicator />
                     </template>
                 </UTable>
                 <template #footer>
-                    <div class="flex justify-start px-3 py-3.5">
-                        <UPagination v-model="page" :page-count="pageCount" :total="jobs.length" />
+                    <div class="flex flex-wrap justify-between items-center">
+                        <div>
+                            <span class="text-sm leading-5">
+                                Showing
+                                <span class="font-medium">{{ page }}</span>
+                                to
+                                <span class="font-medium">{{ data.pageCount }}</span>
+                                of
+                                <span class="font-medium">{{ data.total }}</span>
+                                results
+                            </span>
+                        </div>
+                        <UPagination 
+                            v-model="page" 
+                            :page-count="data.limit" 
+                            :total="data.total"
+                            :to="(page: number) => ({
+                                query: {
+                                    ...route.query,
+                                    page 
+                                }
+                            })"
+                            />
                     </div>
                 </template>
             </UCard>
@@ -34,43 +143,59 @@
     </div>
 </template>
 <script setup lang="ts">
-    import { useRoute, useFetch, ref, useQueueSubscription } from '#imports'
+    import { useRoute, navigateTo, useFetch, ref, useQueueSubscription } from '#imports'
     import type { Ref } from 'vue'
-    import type { QueueData, Jobs } from '../../types'
+    import type { QueueData, Job } from '../../types'
 
     const route = useRoute()
 
     const { 
-        data: queue, 
-        status, 
-        error,
+        data: queue,
         refresh
     } = await useFetch<QueueData>(`/api/_queue/${route.query?.id}`, {
             method: 'GET'
     })
 
-    
-    const { data: jobs, refresh: refreshJobs } = await useFetch(`/api/_queue/${route.query?.id}/job`,{
-        transform: (data: Jobs) => {
-            return data.map((job) => ({
-                id: job.id,
-                name: job.name,
-                progress: job.progress,
-                timestamp: job.timestamp,
-                state: job.state,
-                finishedOn: job.finishedOn
-            }))
+    // Selected Rows
+    const selectedRows = ref([]) as Ref<Job[]>
+    function select (job: Job) {
+        const { page, ...query } = route.query
+        navigateTo({
+            query: {
+                ...query,
+                job: job.id
+            }
+        })
+    }
+
+    const jobStates = ['active', 'completed', 'delayed', 'failed', 'paused', 'prioritized', 'waiting', 'waiting-children']
+    const filters = ref([])
+    const page = ref(parseInt(route.query?.page) || 1)
+    const limit = ref(parseInt(route.query?.limit) || 20)
+
+    const resetFilters = () => {
+        filters.value = []
+    }
+
+    const { 
+        data,
+        pending, 
+        refresh: refreshJobs 
+    } = await useFetch(`/api/_queue/${route.query?.id}/job`,{
+        query: {
+            limit: limit,
+            page: page,
+            filter: filters
         }
     })
-
-    const page = ref(1)
-    const pageCount = 5
 
     const columns = [{
         key: 'timestamp',
         label: 'Created',
-        sortable: true,
-        direction: 'desc' as const
+        sortable: true
+    },{
+        key: 'state',
+        label: 'State'
     },{
         key: 'id',
         label: 'ID',
@@ -80,9 +205,6 @@
         key: 'name',
         label: 'Name',
         sortable: true
-    },{
-        key: 'state',
-        label: 'State'
     }, {
         key: 'progress',
         label: 'Progress'
@@ -90,6 +212,9 @@
         key: 'finishedOn',
         label: 'Finished'
     }]
+
+    const selectedColumns = ref(columns)
+    const columnsTable = computed(() => columns.filter((column) => selectedColumns.value.includes(column)))
 
     const queueId = ref(route.query?.id) as Ref<string>
 
@@ -102,14 +227,17 @@
         onFailed: (event) => {
             console.log(event)
             refresh()
+            updateJob(event.id, 'state', 'failed')
         },
         onWaiting: (event) => {
             console.log(event)
             refresh()
+            updateJob(event.id, 'state', 'waiting')
         },
         onActive: (event) => {
             console.log(event)
             refresh()
+            updateJob(event.id, 'state', 'active')
         },
         onAdded: (event) => {
             console.log(event)
@@ -118,13 +246,31 @@
         },
         onProgress: (event) => {
             console.log(event)
-            jobs.value = jobs.value?.map((job) =>{
-                if(event.id === job.id){
-                    job.progress = event.progress
-                }
-                return job
-            }) || null
+            updateJob(event.id, 'progress', event.progress)
         }
     })
+
+    const updateJob = (jobId: string | number ,key: string, value: any) => {
+        if(data.value?.jobs && data.value.jobs.length > 0){
+            for(const job of data.value.jobs){
+                if(jobId === job.id){
+                    job[key] = value
+                }
+            }
+        }
+    }
+
+    // Actions
+    const actions = [
+    [{
+        key: 'completed',
+        label: 'Completed',
+        icon: 'i-heroicons-check'
+    }], [{
+        key: 'uncompleted',
+        label: 'In Progress',
+        icon: 'i-heroicons-arrow-path'
+    }]
+    ]
 
 </script>

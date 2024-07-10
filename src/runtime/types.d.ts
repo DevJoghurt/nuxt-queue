@@ -1,7 +1,8 @@
-import { JobSchemaArray } from './schema'
+import { JobSchemaArray, JobSchema } from './schema'
 import z from 'zod'
 
 export type Jobs = z.infer<typeof JobSchemaArray>
+export type Job = z.infer<typeof JobSchema>
 
 export type JobCounts = { 
   active: number

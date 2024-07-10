@@ -26,7 +26,7 @@
                         }]
                     ]"
                 >
-                    <QueueStatCounter type="Processes" :count="w.processes" />
+                    <QueueStatCounter name="Processes" :count="w.processes" />
                 </QueueListItem>
             </div>
         </div>

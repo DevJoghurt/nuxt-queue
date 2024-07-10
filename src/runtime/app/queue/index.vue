@@ -14,10 +14,10 @@
                     :title="queue.id"
                     :link="`?tab=queue&id=${queue.id}`"
                 >
-                    <QueueStatCounter type="Active" :count="queue?.jobs.active" />
-                    <QueueStatCounter type="Waiting" :count="queue?.jobs.waiting" />
-                    <QueueStatCounter type="Completed" :count="queue?.jobs.completed" />
-                    <QueueStatCounter type="Failed" :count="queue?.jobs.failed" />
+                    <QueueStatCounter name="Active" color="orange" :count="queue?.jobs.active" />
+                    <QueueStatCounter name="Waiting" color="yellow" :count="queue?.jobs.waiting" />
+                    <QueueStatCounter name="Completed" color="green" :count="queue?.jobs.completed" />
+                    <QueueStatCounter name="Failed" color="red" :count="queue?.jobs.failed" />
                 </QueueListItem>
             </div>
         </div>

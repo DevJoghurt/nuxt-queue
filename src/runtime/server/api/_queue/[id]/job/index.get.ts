@@ -1,13 +1,31 @@
 import { 
     defineEventHandler,
+    getRouterParam,
     $useQueue
   } from '#imports'
 import worker from '#worker'
 import { JobSchemaArray } from '../../../../../schema'
+import { z } from 'zod'
+
+const FilterSchema = z.enum(['active', 'completed', 'delayed', 'failed', 'paused', 'prioritized', 'waiting', 'waiting-children'])
+
+const jobQuerySchema = z.object({
+    limit: z.coerce.number().default(20),
+    page: z.coerce.number().default(1),
+    filter: z.union([FilterSchema, FilterSchema.array()]).transform((data)=>{
+        return Array.isArray(data)
+        ? data
+        : [data]
+    }).default([])
+  })
 
 
 export default defineEventHandler(async (event)=>{
     const id = getRouterParam(event, 'id')
+    const parsedQuery = await getValidatedQuery(event, query => jobQuerySchema.safeParse(query)) 
+
+    if (!parsedQuery.success)
+        throw parsedQuery.error
 
     const w = worker.find((worker)=> worker.id === id)
   
@@ -18,8 +36,15 @@ export default defineEventHandler(async (event)=>{
     const { getQueue } = $useQueue()
 
     const queue = getQueue(w.id)
+
+    const jobsCounts = await queue.getJobCounts(...parsedQuery.data.filter)
+    let total = 0
+    for(const jobCount in jobsCounts){
+        total = total + jobsCounts[jobCount]
+    }
+    const pageCount = Math.ceil(total/parsedQuery.data.limit)
   
-    const jobs = await queue.getJobs()
+    const jobs = await queue.getJobs(parsedQuery.data.filter, ((parsedQuery.data.page-1)*parsedQuery.data.limit), ((parsedQuery.data.page-1)*parsedQuery.data.limit) + parsedQuery.data.limit)
 
     for(const job of jobs){
         job.state = await queue.getJobState(job.id)
@@ -27,7 +52,13 @@ export default defineEventHandler(async (event)=>{
 
     const result = await JobSchemaArray.safeParse(jobs)
     if(result.success) 
-        return result.data
+        return {
+            page: parsedQuery.data.page,
+            limit: parsedQuery.data.limit,
+            pageCount,
+            total,
+            jobs: result.data
+    }
     else
         throw `Job data parsing error ${result.error}`
 })

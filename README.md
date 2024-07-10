@@ -28,6 +28,10 @@ npx nuxi@latest module add nuxt-queue
 }
 ```
 
+## ROADMAP
+
+- Flow support + UI ([Vue Flow](https://vueflow.dev/))
+
 
 ## ©️ License
 
