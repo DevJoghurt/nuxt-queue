@@ -102,6 +102,9 @@
                         }
                     }"
                     >
+                    <template #timestamp-data="{ row }">
+                        <span>{{ new Date(row.timestamp).toLocaleString() }}</span>
+                    </template>
                     <template #state-data="{ row }">
                         <UBadge v-if="row.state === 'completed'" variant="subtle" color="green" size="sm">{{ row.state }}</UBadge>
                         <UBadge v-if="row.state === 'waiting'" variant="subtle" color="yellow" size="sm">{{ row.state }}</UBadge>
@@ -143,7 +146,14 @@
     </div>
 </template>
 <script setup lang="ts">
-    import { useRoute, navigateTo, useFetch, ref, useQueueSubscription } from '#imports'
+    import { 
+        useRoute, 
+        navigateTo, 
+        useFetch, 
+        ref, 
+        useQueueSubscription, 
+        computed 
+    } from '#imports'
     import type { Ref } from 'vue'
     import type { QueueData, Job } from '../../types'
 

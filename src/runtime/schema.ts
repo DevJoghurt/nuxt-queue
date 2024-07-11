@@ -14,8 +14,8 @@ export const JobSchema = z.object({
     attemptsStarted: z.number(),
     attemptsMade: z.number(),
     delay: z.number(),
-    timestamp: z.number().transform((timestamp)=> new Date(timestamp).toLocaleString()),
-    finishedOn: z.number().optional().transform((timestamp)=> timestamp? new Date(timestamp).toLocaleString() : undefined),
+    timestamp: z.number(),
+    finishedOn: z.number().optional(),
     processedOn: z.number().optional()
 })
 
