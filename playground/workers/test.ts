@@ -15,8 +15,7 @@ async function wait(job) {
 
 
 export default defineWorker({
-    id: 'test',
-    name: "Create Test Worker",
+    name: 'test',
     description: "Read all data from Test db"
 },async (job) => {
     job.log('Hello from test worker')

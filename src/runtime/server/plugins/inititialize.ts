@@ -21,8 +21,8 @@ export default defineNitroPlugin(async (nitro) => {
     })
 
     for(const workerInstance of worker) {
-        initQueue(workerInstance.id)
-        initQueueEvent(workerInstance.id)
+        initQueue(workerInstance.name)
+        initQueueEvent(workerInstance.name)
     }
 
 

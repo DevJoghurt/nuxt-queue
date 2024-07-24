@@ -10,8 +10,8 @@ const redisConfig = {
 }
 
 type WorkerMeta = string | {
-  id: string;
-  name?: string;
+  name: string;
+  id?: string;
   description?: string;
 }
 
@@ -40,11 +40,11 @@ export const defineWorker = (
   opts?: WorkerOptions
 ) => {
 
-  let id = ''
+  let name = ''
   if(typeof meta === 'string'){
-    id = meta
+    name = meta
   }else{
-    id = meta.id
+    name = meta.name
   }
 
   let workerFunction: Processor = async () => {}  
@@ -55,7 +55,7 @@ export const defineWorker = (
   }
 
   const worker = new Worker(
-    id,
+    name,
     workerFunction,
     {
       connection: {

@@ -23,7 +23,7 @@ type InitializeWorkerOptions = {
 export async function initializeWorker(options: InitializeWorkerOptions){
     const logger = useLogger()
 
-    const buildDir = `${options.buildDir}/worker`
+    const buildDir = `${options.buildDir}/workers`
     // scan files and find worker entry files
     const files = await globby(`${options.workerDir}/**/*.{ts,js,mjs}`, { 
         cwd: options.rootDir,
@@ -65,6 +65,11 @@ export async function initializeWorker(options: InitializeWorkerOptions){
                     name: meta
                 }
             }
+            if(typeof meta === "object"){
+                meta = defu(meta,{
+                    id: generatedID
+                })
+            }
             const workerConfigArgs = mod.exports.default?.$args[2] || {} as WorkerConfig
             if(typeof workerConfig[meta.id] === 'undefined'){
                 workerConfig[meta.id] = workerConfigArgs
@@ -96,7 +101,7 @@ export async function initializeWorker(options: InitializeWorkerOptions){
                     }
                 }))
             }else{
-                logger.error(`Worker [${meta.name}]`,`Id ${meta.id} already taken. Please change the worker id.`)
+                logger.error(`Worker [${meta.name}]`,`Id ${meta.id} already taken. Please change the worker file name.`)
             }
         }else {
             logger.error('Worker:', file,'Found no default export. Please use export default defineWorker() syntax.')
@@ -110,7 +115,7 @@ export async function initializeWorker(options: InitializeWorkerOptions){
         getContents: () => `export default ${JSON.stringify(registeredWorker, null, 4)}`
     })
 
-    logger.success('Initialized worker:', registeredWorker.map((w)=>w.name))
+    logger.success('Initialized worker:', registeredWorker.map((w)=>w.id))
 
     return entryFiles
 }

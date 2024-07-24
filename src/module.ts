@@ -32,10 +32,12 @@ export interface ModuleOptions {
   };
 }
 
+// check out how the build process is done: https://github.com/danielroe/nuxt-workers/tree/main?s=03 
+
 export default defineNuxtModule<ModuleOptions>({
   meta,
   defaults: {
-      dir: 'worker',
+      dir: 'workers',
       runtimeDir: '',
       redis: {
           host: "127.0.0.1",

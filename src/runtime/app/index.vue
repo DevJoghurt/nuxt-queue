@@ -12,7 +12,7 @@
     </div>
 </template>
 <script setup lang="ts">
-    import { useRoute } from '#imports'
+    import { useRoute, ref, reactive, watch } from '#imports'
     import Queue from './queue/index.vue'
     import QueueJobs from './queue/jobs.vue'
     import QueueJob from './queue/job.vue'
@@ -47,6 +47,7 @@
     watch(() => route.query, (val) => {
         tab.value = val?.tab || 'dashboard'
         id.value = val?.id || null
+        job.value = val?.job || null
         
         for(const link of links[0]) {
             link.active = link.tab === tab.value

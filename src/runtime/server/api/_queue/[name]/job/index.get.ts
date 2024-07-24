@@ -21,16 +21,16 @@ const jobQuerySchema = z.object({
 
 
 export default defineEventHandler(async (event)=>{
-    const id = getRouterParam(event, 'id')
+    const name = getRouterParam(event, 'name')
     const parsedQuery = await getValidatedQuery(event, query => jobQuerySchema.safeParse(query)) 
 
     if (!parsedQuery.success)
         throw parsedQuery.error
 
-    const w = worker.find((worker)=> worker.id === id)
+    const w = worker.find((worker)=> worker.name === name)
   
     if(!w){
-        throw `Queue with ${id} not found`
+        throw `Queue with ${name} not found`
     }
 
     const { getQueue } = $useQueue()

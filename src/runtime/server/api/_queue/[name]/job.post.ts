@@ -6,12 +6,12 @@ import {
 import worker from '#worker'
 
 export default defineEventHandler(async (event)=>{
-    const id = getRouterParam(event, 'id')
+    const name = getRouterParam(event, 'name')
 
-    const w = worker.find((worker)=> worker.id === id)
+    const w = worker.find((worker)=> worker.name === name)
 
     if(!w){
-        throw `Queue with ${id} not found`
+        throw `Queue with ${name} not found`
     }
 
     const { getQueue } = $useQueue()
