@@ -6,12 +6,12 @@ import {
 
 
 export default defineEventHandler(async (event)=>{
-    const id = getRouterParam(event, 'id') || ''
+    const name = getRouterParam(event, 'name') || ''
 
     const { list, remove } = $usePM2()
 
     const allProcesses = await list()
-    const processes = allProcesses.filter((process)=>process.namespace === id)
+    const processes = allProcesses.filter((process)=>process.namespace === name)
 
     for(const process of processes){
         await remove(process.id)

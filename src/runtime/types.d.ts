@@ -1,8 +1,13 @@
 import { JobSchemaArray, JobSchema } from './schema'
+import type { WorkerOptions as BullmqWorkerOptions } from "bullmq"
 import z from 'zod'
 
 export type Jobs = z.infer<typeof JobSchemaArray>
 export type Job = z.infer<typeof JobSchema>
+
+export type WorkerOptions =  Omit<BullmqWorkerOptions, "connection" | "useWorkerThreads">
+
+export type WorkerConfig = Record<string, WorkerOptions>
 
 export type JobCounts = { 
   active: number
@@ -11,11 +16,11 @@ export type JobCounts = {
   delayed: number
   waiting: number
   paused: number
-
 }
-S
+
 export type QueueData = {
-  id: string
+  name: string
   active: boolean
   jobs: JobCounts
+  worker: number
 }

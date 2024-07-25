@@ -17,13 +17,14 @@ export default defineEventHandler(async (event)=>{
 
   const { getQueue } = $useQueue()
 
-  const queue = getQueue(w.id)
+  const queue = getQueue(w.name)
 
   const data = {} as QueueData
 
-  data.id = queue.name
+  data.name = queue.name
   data.active = await queue.isPaused() ? false : true
   data.jobs = await queue.getJobCounts() as JobCounts
+  data.worker = await queue.getWorkersCount()
 
   return data
 })

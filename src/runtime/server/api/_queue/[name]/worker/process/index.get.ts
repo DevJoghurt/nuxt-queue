@@ -4,13 +4,12 @@ import {
     $usePM2 
 } from '#imports'
 
-
 export default defineEventHandler(async (event)=>{
-    const id = getRouterParam(event, 'id') || ''
+    const name = getRouterParam(event, 'name') || ''
 
     const { list } = $usePM2()
 
     const processes = await list()
 
-    return processes.filter((process)=>process.namespace === id)
+    return processes.filter((process)=>process.namespace === name)
 })

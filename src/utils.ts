@@ -23,7 +23,6 @@ type InitializeWorkerOptions = {
 export async function initializeWorker(options: InitializeWorkerOptions){
     const logger = useLogger()
 
-    const buildDir = `${options.buildDir}/workers`
     // scan files and find worker entry files
     const files = await globby(`${options.workerDir}/**/*.{ts,js,mjs}`, { 
         cwd: options.rootDir,
@@ -40,7 +39,7 @@ export async function initializeWorker(options: InitializeWorkerOptions){
         // check if file path has a folder -> generatedID must be split
         if(generatedID.includes('/')){
             const fileNameArray = generatedID.split('/')
-            if(fileNameArray.length === 2 && fileNameArray[1] === 'worker'){
+            if(fileNameArray.length === 2 && fileNameArray[1] === 'queue'){
                 generatedID = fileNameArray[0]
             }else {
                 // no worker entry -> check next one

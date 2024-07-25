@@ -4,10 +4,9 @@
             <UHorizontalNavigation :links="links" class="border-b border-gray-200 dark:border-gray-800 px-4" />
         </div>
         <div>
-            <Queue v-if="tab === 'queue' && !id" />
-            <QueueJobs v-if="tab === 'queue' && id && !job" />
-            <QueueJob v-if="tab === 'queue' && id && job" />
-            <Process v-if="tab === 'worker'" />
+            <Queue v-if="tab === 'queue' && !name" />
+            <QueueJobs v-if="tab === 'queue' && name && !job" />
+            <QueueJob v-if="tab === 'queue' && name && job" />
         </div>
     </div>
 </template>
@@ -16,12 +15,11 @@
     import Queue from './queue/index.vue'
     import QueueJobs from './queue/jobs.vue'
     import QueueJob from './queue/job.vue'
-    import Process from './worker/index.vue'
 
     const route = useRoute()
 
     const tab = ref(route.query?.tab || 'dashboard')
-    const id = ref(route.query?.id || null)
+    const name = ref(route.query?.name || null)
     const job = ref(route.query?.job || null)
 
     const links = reactive([
@@ -36,17 +34,12 @@
             tab: 'queue',
             to: '?tab=queue',
             active: tab.value === 'queue'
-        }, {
-            label: 'Worker',
-            tab: 'worker',
-            to: '?tab=worker',
-            active: tab.value === 'worker'
         }]
     ])
 
     watch(() => route.query, (val) => {
         tab.value = val?.tab || 'dashboard'
-        id.value = val?.id || null
+        name.value = val?.name || null
         job.value = val?.job || null
         
         for(const link of links[0]) {

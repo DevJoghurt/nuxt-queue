@@ -2,7 +2,7 @@
     <div class="px-8 py-6">
         <section class="flex justify-between py-4">
             <div>
-                <h1 class="text-xl font-bold">Queue - {{ queueId }}</h1>
+                <h1 class="text-xl font-bold">Queue - {{ queueName }}</h1>
                 <p class="text-sm font-thin text-gray-500">Overview of all Jobs</p>
             </div>
             <div>
@@ -11,6 +11,7 @@
                     <QueueStatCounter name="Waiting" color="yellow" :count="queue?.jobs.waiting" />
                     <QueueStatCounter name="Completed" color="green" :count="queue?.jobs.completed" />
                     <QueueStatCounter name="Failed" color="red" :count="queue?.jobs.failed" />
+                    <QueueStatCounter name="Worker" color="cyan" :count="queue?.worker" />
                 </div>
             </div>
         </section>
@@ -114,6 +115,9 @@
                     <template #progress-data="{ row }">
                         <UProgress :value="row.progress" indicator />
                     </template>
+                    <template #finishedOn-data="{ row }">
+                        <span>{{ new Date(row.finishedOn).toLocaleString() }}</span>
+                    </template>
                 </UTable>
                 <template #footer>
                     <div class="flex flex-wrap justify-between items-center">
@@ -162,7 +166,7 @@
     const { 
         data: queue,
         refresh
-    } = await useFetch<QueueData>(`/api/_queue/${route.query?.id}`, {
+    } = await useFetch<QueueData>(`/api/_queue/${route.query?.name}`, {
             method: 'GET'
     })
 
@@ -191,7 +195,7 @@
         data,
         pending, 
         refresh: refreshJobs 
-    } = await useFetch(`/api/_queue/${route.query?.id}/job`,{
+    } = await useFetch(`/api/_queue/${route.query?.name}/job`,{
         query: {
             limit: limit,
             page: page,
@@ -210,7 +214,6 @@
         key: 'id',
         label: 'ID',
         sortable: true,
-
     }, {
         key: 'name',
         label: 'Name',
@@ -226,9 +229,9 @@
     const selectedColumns = ref(columns)
     const columnsTable = computed(() => columns.filter((column) => selectedColumns.value.includes(column)))
 
-    const queueId = ref(route.query?.id) as Ref<string>
+    const queueName = ref(route.query?.name) as Ref<string>
 
-    useQueueSubscription(queueId.value, {
+    useQueueSubscription(queueName.value, {
         onCompleted: (event) => {
             console.log(event)
             refresh()

@@ -12,6 +12,7 @@ export default defineNitroPlugin(async (nitro) => {
     const pm2EventBus = await initLaunchBus()
 
     pm2EventBus.on('process:msg', function(processMsg) {
+        logger.info(`Process [${processMsg?.process?.namespace || ''}]`, processMsg?.data?.message)
         if(processMsg?.data?.event === 'error'){
             logger.error(`Process [${processMsg?.process?.namespace || ''}]`,processMsg?.data?.message)
         }

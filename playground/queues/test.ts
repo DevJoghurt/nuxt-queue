@@ -14,7 +14,7 @@ async function wait(job) {
   }
 
 
-export default defineWorker({
+export default defineQueueWorker({
     name: 'test',
     description: "Read all data from Test db"
 },async (job) => {

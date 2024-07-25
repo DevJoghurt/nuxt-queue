@@ -11,20 +11,33 @@
             <div class="space-y-4">
                 <QueueListItem
                     v-for="queue of queues" 
-                    :title="queue.id"
-                    :link="`?tab=queue&id=${queue.id}`"
+                    :title="queue.name"
+                    :link="`?tab=queue&name=${queue.name}`"
+                    :dropdown="[
+                        [{ 
+                            label: 'New process', 
+                            icon: 'i-heroicons-play',
+                            click: async () => await startNewProcess(queue.name)
+                        }],
+                        [{ 
+                            label: 'Kill all process', 
+                            icon: 'i-heroicons-x-circle',
+                            click: async () => await killAllProcess(queue.name)
+                        }]
+                    ]"
                 >
                     <QueueStatCounter name="Active" color="orange" :count="queue?.jobs.active" />
                     <QueueStatCounter name="Waiting" color="yellow" :count="queue?.jobs.waiting" />
                     <QueueStatCounter name="Completed" color="green" :count="queue?.jobs.completed" />
                     <QueueStatCounter name="Failed" color="red" :count="queue?.jobs.failed" />
+                    <QueueStatCounter name="Worker" color="cyan" :count="queue?.worker" />
                 </QueueListItem>
             </div>
         </div>
     </div>
 </template>
 <script setup lang="ts">
-    import { useFetch, onMounted, onBeforeUnmount } from '#imports'
+    import { useFetch, onMounted, onBeforeUnmount, ref } from '#imports'
     import type { QueueData } from '../../types'
 
     const intval = ref<ReturnType<typeof setInterval> | null>(null)
@@ -37,6 +50,18 @@
     } = await useFetch<QueueData[]>('/api/_queue', {
             method: 'GET'
     })
+
+    const startNewProcess = async (name: string) => {
+        await fetch(`/api/_queue/${name}/worker/process`, {
+            method: 'POST'
+        })
+    }
+
+    const killAllProcess = async (name: string) => {
+        await fetch(`/api/_queue/${name}/worker/process`, {
+            method: 'DELETE'
+        })
+    }
 
     onMounted(() => {
         intval.value = setInterval(() => {

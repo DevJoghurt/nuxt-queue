@@ -34,7 +34,7 @@ function sendMessage(event: string, message: any) {
 }
 
 
-export const defineWorker = (
+export const defineQueueWorker = (
   meta: WorkerMeta,
   processor: WorkerProcessor,
   opts?: WorkerOptions
@@ -97,6 +97,6 @@ export const defineWorker = (
       console.log('wait until shutdown')
       process.exit(0)
     }, 2000)
- })
+  })
 
 }

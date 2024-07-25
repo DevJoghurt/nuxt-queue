@@ -4,7 +4,6 @@ import {
   } from '#imports'
 import type { JobCounts, QueueData } from '../../../types'
 
-
 export default defineEventHandler(async (event)=>{
 
     const { getQueues } = $useQueue()
@@ -16,9 +15,10 @@ export default defineEventHandler(async (event)=>{
     for(const queue of queues){
       const jobs = await queue.getJobCounts() as JobCounts
        data.push({
-        id: queue.name,
+        name: queue.name,
         active: await queue.isPaused() ? false : true,
-        jobs
+        jobs,
+        worker: await queue.getWorkersCount()
       })
     }
 

@@ -35,7 +35,7 @@ export default defineEventHandler(async (event)=>{
 
     const { getQueue } = $useQueue()
 
-    const queue = getQueue(w.id)
+    const queue = getQueue(w.name)
 
     const jobsCounts = await queue.getJobCounts(...parsedQuery.data.filter)
     let total = 0

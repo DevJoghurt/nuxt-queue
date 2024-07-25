@@ -4,7 +4,6 @@ import {
   createResolver,
   addServerScanDir,
   addServerImportsDir,
-  addServerHandler,
   addImportsDir,
   installModule,
   addComponent,
@@ -32,12 +31,10 @@ export interface ModuleOptions {
   };
 }
 
-// check out how the build process is done: https://github.com/danielroe/nuxt-workers/tree/main?s=03 
-
 export default defineNuxtModule<ModuleOptions>({
   meta,
   defaults: {
-      dir: 'workers',
+      dir: 'queues',
       runtimeDir: '',
       redis: {
           host: "127.0.0.1",
@@ -71,21 +68,6 @@ export default defineNuxtModule<ModuleOptions>({
         global: true
       })
 
-      // Transpile BullBoard api because its not ESM
-      nuxt.options.build.transpile.push("@bull-board/api")
-      nuxt.options.build.transpile.push("@bull-board/h3")
-      nuxt.options.build.transpile.push("@bull-board/ui")
-
-      // Add Server handlers for UI
-      addServerHandler({
-        route: "/_bull",
-        handler: resolve("./runtime/routes/bullBoard.ts"),
-      });
-
-      addServerHandler({
-        route: "/_bull/**",
-        handler: resolve("./runtime/routes/bullBoard.ts"),
-      });
 
       const runtimeConfig = nuxt.options.runtimeConfig
 
