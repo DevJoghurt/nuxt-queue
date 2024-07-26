@@ -1,5 +1,4 @@
 import { defineEventHandler, $useQueue } from '#imports'
-import worker  from '#worker'
 
 export default defineEventHandler(async ()=>{
 

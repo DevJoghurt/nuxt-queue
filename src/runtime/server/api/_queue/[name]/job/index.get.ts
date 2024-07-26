@@ -1,9 +1,9 @@
 import { 
     defineEventHandler,
     getRouterParam,
-    $useQueue
+    $useQueue,
+    useRuntimeConfig
   } from '#imports'
-import worker from '#worker'
 import { JobSchemaArray } from '../../../../../schema'
 import { z } from 'zod'
 
@@ -27,15 +27,15 @@ export default defineEventHandler(async (event)=>{
     if (!parsedQuery.success)
         throw parsedQuery.error
 
-    const w = worker.find((worker)=> worker.name === name)
-  
-    if(!w){
+    const { queues } = useRuntimeConfig().queue
+
+    if(!queues[name]){
         throw `Queue with ${name} not found`
     }
 
     const { getQueue } = $useQueue()
 
-    const queue = getQueue(w.name)
+    const queue = getQueue(name)
 
     const jobsCounts = await queue.getJobCounts(...parsedQuery.data.filter)
     let total = 0

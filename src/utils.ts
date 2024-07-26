@@ -1,8 +1,8 @@
 import { loadFile } from "magicast"
 import { globby } from 'globby'
-import { useLogger, addTemplate } from "nuxt/kit"
+import { useLogger } from "nuxt/kit"
 import type { WorkerConfig, WorkerOptions, RegisteredWorker } from './types'
-import { writeFile, mkdir } from 'node:fs/promises'
+import type { QueueOptions } from './types.js'
 import defu from "defu"
 
 
@@ -30,6 +30,7 @@ export async function initializeWorker(options: InitializeWorkerOptions){
     })
 
     const entryFiles = {} as Record<string, string>
+    const queues = {} as Record<string, QueueOptions>
     const registeredWorker = [] as RegisteredWorker[] 
     // read worker configuration and write it as meta config file
     const workerConfig = {} as WorkerConfig
@@ -99,6 +100,11 @@ export async function initializeWorker(options: InitializeWorkerOptions){
                         ...workerDefaults
                     }
                 }))
+                // create queue config
+                queues[meta.id] = {
+                    runtime: 'pm2',
+                    remote: false
+                }
             }else{
                 logger.error(`Worker [${meta.name}]`,`Id ${meta.id} already taken. Please change the worker file name.`)
             }
@@ -107,14 +113,11 @@ export async function initializeWorker(options: InitializeWorkerOptions){
         }
     }
 
-    // create worker config template
-    addTemplate({
-        filename: 'worker.config.ts',
-        write: true,
-        getContents: () => `export default ${JSON.stringify(registeredWorker, null, 4)}`
-    })
-
     logger.success('Initialized worker:', registeredWorker.map((w)=>w.id))
 
-    return entryFiles
+    return {
+        entryFiles,
+        queues,
+        workers: registeredWorker
+    }
 }

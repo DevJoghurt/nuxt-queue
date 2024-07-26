@@ -13,22 +13,13 @@ import { getRollupConfig, type RollupConfig } from "./builder/config"
 import { watchRollupEntry } from './builder/bundler'
 import { initializeWorker } from './utils'
 import defu from 'defu'
+import type { ModuleOptions } from './types'
 
 
 const meta = {
   name: 'queue',
   version: '0.1',
   configKey: 'queue'
-}
-
-
-export interface ModuleOptions {
-  dir: string;
-  runtimeDir: string;
-  redis: {
-      host: string;
-      port: number;
-  };
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -91,26 +82,28 @@ export default defineNuxtModule<ModuleOptions>({
         nitroConfig.experimental =defu(nitroConfig.experimental,{
           websocket: true
         })
-        //add worker alias
-        if (!nitroConfig.alias) return
-        nitroConfig.alias["#worker"] = `${nuxt.options.buildDir}/worker.config.ts`
+      })
+
+      //initialize worker and queues
+      let { entryFiles, queues, workers } = await initializeWorker({
+          rootDir: nuxt.options.rootDir,
+          workerDir: options.dir,
+          buildDir: nuxt.options.buildDir
+      })
+    
+      nuxt.options.runtimeConfig.queue = defu(nuxt.options.runtimeConfig.queue || {}, {
+          queues: defu(queues, options.queues),
+          workers
       })
 
       // ONLY IN DEV MODE
       if(nuxt.options.dev){
 
-          //initialize worker
-          let workerEntryFiles = await initializeWorker({
-              rootDir: nuxt.options.rootDir,
-              workerDir: options.dir,
-              buildDir: nuxt.options.buildDir
-          })
-
           // start build process
           let rollupConfig = null as null | RollupConfig
 
           nuxt.hook('nitro:init', (nitroCtx)=>{
-              rollupConfig = getRollupConfig(workerEntryFiles, {
+              rollupConfig = getRollupConfig(entryFiles, {
                   buildDir: nuxt.options.buildDir,
                   nitro: nitroCtx.options
               })

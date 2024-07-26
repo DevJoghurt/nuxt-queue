@@ -1,22 +1,22 @@
 import { 
     defineEventHandler, 
     getRouterParam,
-    $useQueue
+    $useQueue,
+    useRuntimeConfig
 } from '#imports'
-import worker from '#worker'
 
 export default defineEventHandler(async (event)=>{
     const name = getRouterParam(event, 'name')
 
-    const w = worker.find((worker)=> worker.name === name)
+    const { queues } = useRuntimeConfig().queue
 
-    if(!w){
+    if(!queues[name]){
         throw `Queue with ${name} not found`
     }
 
     const { getQueue } = $useQueue()
 
-    const queue = getQueue(w.id)
+    const queue = getQueue(name)
 
     await queue.add('wall', { color: 'pink' })
 })

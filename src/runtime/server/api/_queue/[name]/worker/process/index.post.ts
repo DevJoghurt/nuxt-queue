@@ -4,15 +4,14 @@ import {
     $usePM2, 
     useRuntimeConfig } from '#imports'
 import { randomUUID } from 'node:crypto'
-import worker from '#worker'
 
 export default defineEventHandler(async (event)=>{
     const name = getRouterParam(event, 'name')
 
-    const { runtimeDir } = useRuntimeConfig().queue
+    const { runtimeDir, workers } = useRuntimeConfig().queue
 
     // @ts-ignore
-    const w = worker.find((worker)=> worker.name === name)
+    const w = workers.find((worker)=> worker.name === name)
 
     if(!w){
         throw `Worker with ${name} not found`

@@ -1,7 +1,5 @@
-import { defineNitroPlugin } from 'nitropack/runtime'
 import { consola } from "consola"
-import worker from "#worker"
-import { $useQueue, $usePM2 } from '#imports'
+import { $useQueue, $usePM2, useRuntimeConfig, defineNitroPlugin } from '#imports'
 
 export default defineNitroPlugin(async (nitro) => {
     const logger = consola.create({}).withTag("QUEUE")
@@ -21,9 +19,11 @@ export default defineNitroPlugin(async (nitro) => {
         }
     })
 
-    for(const workerInstance of worker) {
-        initQueue(workerInstance.name)
-        initQueueEvent(workerInstance.name)
+    const { queues } = useRuntimeConfig().queue
+
+    for(const queueName in queues) {
+        initQueue(queueName, queues[queueName])
+        initQueueEvent(queueName, queues[queueName])
     }
 
 

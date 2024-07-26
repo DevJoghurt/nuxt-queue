@@ -1,24 +1,24 @@
 import { 
     defineEventHandler,
     getRouterParam,
-    $useQueue
+    $useQueue,
+    useRuntimeConfig
   } from '#imports'
-import worker from '#worker'
 
 
 export default defineEventHandler(async (event)=>{
     const name = getRouterParam(event, 'name') || ''
     const id = getRouterParam(event, 'id') || ''
 
-    const w = worker.find((worker)=> worker.name === name)
+    const { queues } = useRuntimeConfig().queue
 
-    if(!w){
+    if(!queues[name]){
         throw `Queue with ${name} not found`
     }
 
     const { getQueue } = $useQueue()
 
-    const queue = getQueue(w.name)
+    const queue = getQueue(name)
 
     const logs = await queue.getJobLogs(id)
 
