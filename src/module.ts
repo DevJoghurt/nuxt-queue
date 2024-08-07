@@ -10,7 +10,7 @@ import {
   addComponentsDir
 } from "@nuxt/kit"
 import { getRollupConfig, type RollupConfig } from "./builder/config"
-import { watchRollupEntry } from './builder/bundler'
+import { watchRollupEntry, buildWorker } from './builder/bundler'
 import { initializeWorker } from './utils'
 import defu from 'defu'
 import type { ModuleOptions } from './types'
@@ -38,9 +38,7 @@ export default defineNuxtModule<ModuleOptions>({
 
 
       //check if @nuxt/ui is installed
-      await installModule('@nuxt/ui',{
-        icons: ['heroicons']
-      })
+      await installModule('@nuxt/ui')
 
       addServerScanDir(resolve('./runtime/server'))
 
@@ -63,7 +61,7 @@ export default defineNuxtModule<ModuleOptions>({
       const runtimeConfig = nuxt.options.runtimeConfig
 
       runtimeConfig.queue = defu(runtimeConfig?.queue || {}, {
-        runtimeDir: `${nuxt.options.buildDir}/worker`,
+        runtimeDir: nuxt.options.dev ? `${nuxt.options.buildDir}/worker` : 'build',
         redis: options.redis
       })
 
@@ -96,20 +94,27 @@ export default defineNuxtModule<ModuleOptions>({
           workers
       })
 
+      // start build process
+      let rollupConfig = null as null | RollupConfig
+
+      nuxt.hook('nitro:build:public-assets', async (nitro) => {
+        rollupConfig = getRollupConfig(entryFiles, {
+            buildDir: nuxt.options.buildDir,
+            nitro: nitro.options
+        })
+        
+        await buildWorker(rollupConfig)
+      })
+
       // ONLY IN DEV MODE
       if(nuxt.options.dev){
-
-          // start build process
-          let rollupConfig = null as null | RollupConfig
-
-          nuxt.hook('nitro:init', (nitroCtx)=>{
+          nuxt.hook('nitro:init', (nitro)=>{
               rollupConfig = getRollupConfig(entryFiles, {
                   buildDir: nuxt.options.buildDir,
-                  nitro: nitroCtx.options
+                  nitro: nitro.options
               })
               watchRollupEntry(rollupConfig)
           })
-
       }
       // ONLY IN DEV MODE
   }

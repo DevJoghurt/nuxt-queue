@@ -1,6 +1,7 @@
 import * as rollup from 'rollup'
 import { useLogger } from '@nuxt/kit'
 import type { RollupConfig } from './config'
+import { formatRollupError } from './error'
 
 /**
  * Watcher for rollup build in dev mode
@@ -34,4 +35,21 @@ export function watchRollupEntry(rollupConfig: RollupConfig){
           // consola.error(event.error)
       }
     })
+}
+
+export async function buildWorker(rollupConfig: RollupConfig){
+  const logger = useLogger()
+
+  logger.info(
+    `Building Queue Worker`
+  );
+
+  const build = await rollup.rollup(rollupConfig).catch((error) => {
+    logger.error(formatRollupError(error));
+    throw error;
+  });
+
+  await build.write(rollupConfig.output);
+
+  logger.success('Successfully built worker')
 }

@@ -83,7 +83,8 @@ export const $usePM2 = () => {
 
     const initLaunchBus = async () => {
         await connect()
-        pm2BusInstance  = await pm2LaunchBus()
+        if(!pm2BusInstance) 
+            pm2BusInstance  = await pm2LaunchBus()
 
         return pm2BusInstance
     }

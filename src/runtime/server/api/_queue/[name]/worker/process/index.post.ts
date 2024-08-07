@@ -1,8 +1,10 @@
 import { 
     defineEventHandler, 
     getRouterParam, 
-    $usePM2, 
-    useRuntimeConfig } from '#imports'
+    $usePM2,
+    resolveWorkerRuntimePath, 
+    useRuntimeConfig 
+} from '#imports'
 import { randomUUID } from 'node:crypto'
 
 export default defineEventHandler(async (event)=>{
@@ -23,7 +25,7 @@ export default defineEventHandler(async (event)=>{
         name: `${w.name}-${randomUUID()}`,
         watch: true,
         script: w.script,
-        cwd: runtimeDir,
+        cwd: resolveWorkerRuntimePath(runtimeDir),
         namespace: w.name
     })
 
