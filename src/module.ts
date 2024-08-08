@@ -65,11 +65,11 @@ export default defineNuxtModule<ModuleOptions>({
     // add tailwindcss support
     nuxt.hook('tailwindcss:config', (tailwindConfig) => {
       tailwindConfig.content = tailwindConfig.content || []
-      //@ts-ignore
+      // @ts-ignore
       tailwindConfig.content.files = tailwindConfig.content.files || []
-      //@ts-ignore
+      // @ts-ignore
       tailwindConfig.content.files.push(resolve('./runtime/app/**/*.{vue,js,ts}'))
-      //@ts-ignore
+      // @ts-ignore
       tailwindConfig.content.files.push(resolve('./runtime/components/**/*.{vue,js,ts}'))
     })
 
