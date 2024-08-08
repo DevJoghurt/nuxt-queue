@@ -1,18 +1,17 @@
 import { defineEventHandler, $useQueue } from '#imports'
 
-export default defineEventHandler(async ()=>{
+export default defineEventHandler(async () => {
+  const workerList = []
 
-    const workerList = []
+  const { getQueues } = $useQueue()
 
-    const { getQueues } = $useQueue()
+  const queues = getQueues()
 
-    const queues = getQueues()
+  // count active processes
+  for (const q of queues) {
+    const worker = await q.getWorkers()
+    workerList.push(...worker)
+  }
 
-    //count active processes
-    for(const q of queues){
-        const worker = await q.getWorkers()
-        workerList.push(...worker)
-    }
-
-    return workerList
+  return workerList
 })

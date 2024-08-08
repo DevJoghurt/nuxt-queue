@@ -1,19 +1,18 @@
-import { 
-    defineEventHandler, 
-    $usePM2 
+import {
+  defineEventHandler,
+  $usePM2,
 } from '#imports'
 
+export default defineEventHandler(async () => {
+  const { list, remove } = $usePM2()
 
-export default defineEventHandler(async ()=>{
-    const { list, remove } = $usePM2()
+  const processes = await list()
 
-    const processes = await list()
+  for (const process of processes) {
+    await remove(process.id)
+  }
 
-    for(const process of processes){
-        await remove(process.id)
-    }
-
-    return {
-        success: true
-    }
+  return {
+    success: true,
+  }
 })

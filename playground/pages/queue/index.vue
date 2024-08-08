@@ -1,5 +1,5 @@
 <template>
-    <div>
-        <QueueApp/>
-    </div>
+  <div>
+    <QueueApp />
+  </div>
 </template>

@@ -14,6 +14,10 @@ export default createConfigForNuxt({
       './playground',
     ],
   },
-}).append(
-  // your custom flat config here...
-)
+}).append({
+  rules: {
+    '@typescript-eslint/no-explicit-any': 'off',
+    'vue/multi-word-component-names': 'off',
+    '@typescript-eslint/ban-ts-comment': 'off',
+  },
+})

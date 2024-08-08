@@ -1,18 +1,17 @@
-import { 
+import type { JobCounts, QueueData } from '../../../../types'
+import {
   defineEventHandler,
   $useQueue,
-  useRuntimeConfig
+  useRuntimeConfig,
 } from '#imports'
-import type { JobCounts, QueueData } from '../../../../types'
 
-
-export default defineEventHandler(async (event)=>{
+export default defineEventHandler(async (event) => {
   const name = getRouterParam(event, 'name') || ''
 
   const { queues } = useRuntimeConfig().queue
 
-  if(!queues[name]){
-      throw `Queue with ${name} not found`
+  if (!queues[name]) {
+    throw `Queue with ${name} not found`
   }
 
   const { getQueue } = $useQueue()

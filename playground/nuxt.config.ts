@@ -1,31 +1,31 @@
 export default defineNuxtConfig({
   modules: [
-    '../src/module'
+    '../src/module',
   ],
-  devtools: { 
-    enabled: true 
+  devtools: {
+    enabled: true,
   },
   runtimeConfig: {
     queue: {
       redis: {
         host: '127.0.0.1',
-        port: 6379
+        port: 6379,
       },
       queues: {
-        'CronQueue': {
-          remote: true
+        CronQueue: {
+          remote: true,
         },
-        'DownloadQueue': {
-          remote: true
+        DownloadQueue: {
+          remote: true,
         },
-        'ReindexQueue': {
-          remote: true
+        ReindexQueue: {
+          remote: true,
         },
-        'SubscriptionQueue': {
-          remote: true
-        }
-      }
-    }
+        SubscriptionQueue: {
+          remote: true,
+        },
+      },
+    },
   },
   compatibilityDate: '2024-07-03',
 })
