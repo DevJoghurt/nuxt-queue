@@ -1,6 +1,6 @@
 import { loadFile } from 'magicast'
 import { globby } from 'globby'
-import { useLogger } from 'nuxt/kit'
+import { useLogger } from '@nuxt/kit'
 import defu from 'defu'
 import type { WorkerConfig, WorkerOptions, RegisteredWorker } from './types'
 import type { QueueOptions } from './types.js'
