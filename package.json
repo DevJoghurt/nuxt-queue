@@ -18,12 +18,12 @@
       "dist"
     ],
     "scripts": {
-      "prepack": "nuxt-module-build build",
+      "build": "yarn dev:prepare && nuxt-module-build build",
+      "prepack": "yarn build",
       "dev": "nuxi dev playground",
       "dev:build": "nuxi build playground",
       "dev:preview": "nuxi preview playground",
       "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxi prepare playground",
-      "release": "npm run lint && npm run test && npm run prepack && changelogen --release && npm publish && git push --follow-tags",
       "lint": "eslint .",
       "test": "vitest run",
       "test:watch": "vitest watch",
@@ -65,7 +65,8 @@
       "nuxt": "^3.12.4",
       "typescript": "latest",
       "vitest": "^2.0.5",
-      "vue-tsc": "^2.0.29"
+      "vue-tsc": "^2.0.29",
+      "bumpp": "9.4.2"
     }
   }
   

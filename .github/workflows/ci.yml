@@ -18,12 +18,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: "yarn"
 
-      - name: Install dependencies
-        run: npx nypm@latest i
+      - name: 📦 Install dependencies
+        run: yarn install
 
-      - name: Lint
-        run: npm run lint
+      - name: 🚧 Set up project
+        run: yarn dev:prepare
+
+      - name: 🔠 Lint project
+        run: yarn run lint
 
   test:
     runs-on: ubuntu-latest
@@ -34,9 +38,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: "yarn"
 
-      - name: Install dependencies
-        run: npx nypm@latest i
+      - name: 📦 Install dependencies
+        run: yarn install
 
-      - name: Test
-        run: npm run test
+      - name: 🚧 Set up project
+        run: yarn run dev:prepare
+
+      - name: 🧪 Test project
+        run: yarn run test
+      
+      - name: 🛠 Build project
+        run: yarn run build

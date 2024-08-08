@@ -1,0 +1,39 @@
+name: Release
+
+permissions:
+  contents: write
+  packages: read
+  pull-requests: write
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+    
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Set node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: yarn install
+
+      - run: npx changelogithub
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Publish package
+        run: chmod +x ./scripts/release.sh && ./scripts/release.sh
+        env:
+          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
