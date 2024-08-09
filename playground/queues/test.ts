@@ -7,7 +7,7 @@ async function wait(job) {
       counter++
       if (counter > 5) {
         clearInterval(intval)
-        resolve()
+        resolve(true)
       }
     }, 4000)
   })

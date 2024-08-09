@@ -1,4 +1,5 @@
 import {
+  defineEventHandler,
   getRouterParam,
   $usePM2,
 } from '#imports'

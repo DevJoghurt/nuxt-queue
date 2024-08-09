@@ -28,7 +28,7 @@ export async function initializeWorker(options: InitializeWorkerOptions) {
     deep: 2,
   })
 
-  const entryFiles = {} as Record<string, string>
+  let entryFiles = null as Record<string, string> | null
   const queues = {} as Record<string, QueueOptions>
   const registeredWorker = [] as RegisteredWorker[]
   // read worker configuration and write it as meta config file
@@ -86,6 +86,7 @@ export async function initializeWorker(options: InitializeWorkerOptions) {
           stalledInterval: 30000,
         } as WorkerOptions
 
+        entryFiles = entryFiles || {}
         entryFiles[meta.id] = `${options.rootDir}/${file}`
 
         registeredWorker.push(defu({

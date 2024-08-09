@@ -101,6 +101,7 @@ export default defineNuxtModule<ModuleOptions>({
 
     // BUILD WORKER for production
     nuxt.hook('nitro:build:public-assets', async (nitro) => {
+      if(!entryFiles) return // no building if no entry files
       rollupConfig = getRollupConfig(entryFiles, {
         buildDir: nitro.options.output.serverDir,
         nitro: nitro.options,
@@ -112,6 +113,7 @@ export default defineNuxtModule<ModuleOptions>({
     // ONLY IN DEV MODE
     if (nuxt.options.dev) {
       nuxt.hook('nitro:init', (nitro) => {
+        if(!entryFiles) return // no building if no entry files
         rollupConfig = getRollupConfig(entryFiles, {
           buildDir: nuxt.options.buildDir,
           nitro: nitro.options,
