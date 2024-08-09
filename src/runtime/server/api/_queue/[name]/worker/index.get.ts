@@ -1,4 +1,7 @@
-import { defineEventHandler, getRouterParam, $useQueue } from '#imports'
+import {
+  defineEventHandler,
+  getRouterParam,
+  $useQueue } from '#imports'
 
 export default defineEventHandler(async (event) => {
   const name = getRouterParam(event, 'name') || ''

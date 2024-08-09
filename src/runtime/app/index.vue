@@ -22,18 +22,12 @@ import { useRoute, ref, reactive, watch } from '#imports'
 
 const route = useRoute()
 
-const tab = ref(route.query?.tab || 'dashboard')
+const tab = ref(route.query?.tab || 'queue')
 const name = ref(route.query?.name || null)
 const job = ref(route.query?.job || null)
 
 const links = reactive([
   [{
-    label: 'Dashboard',
-    tab: 'dashboard',
-    to: route.path,
-    active: tab.value === 'dashboard',
-
-  }, {
     label: 'Queue',
     tab: 'queue',
     to: '?tab=queue',
@@ -42,7 +36,7 @@ const links = reactive([
 ])
 
 watch(() => route.query, (val) => {
-  tab.value = val?.tab || 'dashboard'
+  tab.value = val?.tab || 'queue'
   name.value = val?.name || null
   job.value = val?.job || null
 
