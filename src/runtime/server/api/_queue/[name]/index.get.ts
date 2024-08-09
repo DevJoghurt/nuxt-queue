@@ -3,6 +3,7 @@ import {
   defineEventHandler,
   $useQueue,
   useRuntimeConfig,
+  getRouterParam,
 } from '#imports'
 
 export default defineEventHandler(async (event) => {
