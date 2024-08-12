@@ -2,7 +2,7 @@
   "name": "nuxt-queue",
   "version": "0.0.6",
   "description": "Nuxt queue service based on Bullmq",
-  "repository": "@nuxthealth/queue",
+  "repository": "DevJoghurt/nuxt-fhir",
   "license": "MIT",
   "type": "module",
   "exports": {
