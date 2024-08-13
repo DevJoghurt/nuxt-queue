@@ -19,6 +19,7 @@ type QueueOptions = {
   // if the worker runs local or remote
   remote: boolean
   options?: BullmqQueueOptions
+  env?: Record<string, string>
 }
 
 export interface ModuleOptions {

@@ -10,16 +10,19 @@ import {
 export default defineEventHandler(async (event) => {
   const name = getRouterParam(event, 'name')
 
-  const { runtimeDir, workers, redis } = useRuntimeConfig().queue
+  const { runtimeDir, workers, redis, queues } = useRuntimeConfig().queue
 
   // @ts-ignore
   const w = workers.find(worker => worker.name === name)
+  const q = queues[name] || {}
 
-  if (!w) {
+  if (!w || !q) {
     throw `Worker with ${name} not found`
   }
 
   const { start } = $usePM2()
+
+  const env = q.env || {}
 
   const process = await start({
     name: `${w.name}-${randomUUID()}`,
@@ -30,6 +33,7 @@ export default defineEventHandler(async (event) => {
     env: {
       REDIS_PORT: redis.port.toString(),
       REDIS_HOST: redis.host,
+      ...env,
     },
   })
 
