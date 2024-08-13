@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
+import { $usePM2 } from '../../../../../utils/usePM2'
 import {
   defineEventHandler,
   getRouterParam,
-  $usePM2,
   resolveWorkerRuntimePath,
   useRuntimeConfig,
 } from '#imports'

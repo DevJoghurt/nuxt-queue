@@ -1,7 +1,7 @@
+import { $usePM2 } from '../../../../../utils/usePM2'
 import {
   defineEventHandler,
   getRouterParam,
-  $usePM2,
 } from '#imports'
 
 export default defineEventHandler(async (event) => {

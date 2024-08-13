@@ -1,9 +1,9 @@
 import { z } from 'zod'
 import { JobSchemaArray } from '../../../../../schema'
+import { $useQueue } from '../../../../utils/useQueue'
 import {
   defineEventHandler,
   getRouterParam,
-  $useQueue,
   useRuntimeConfig,
   getValidatedQuery,
 } from '#imports'

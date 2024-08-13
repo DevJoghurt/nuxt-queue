@@ -1,7 +1,7 @@
 import type { JobCounts, QueueData } from '../../../types'
+import { $useQueue } from '../../utils/useQueue'
 import {
   defineEventHandler,
-  $useQueue,
 } from '#imports'
 
 export default defineEventHandler(async () => {

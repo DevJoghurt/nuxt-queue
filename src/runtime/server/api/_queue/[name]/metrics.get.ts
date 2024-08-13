@@ -1,7 +1,7 @@
+import { $useQueue } from '../../../utils/useQueue'
 import {
   defineEventHandler,
   getRouterParam,
-  $useQueue,
   useRuntimeConfig,
 } from '#imports'
 

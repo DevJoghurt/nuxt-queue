@@ -1,4 +1,5 @@
-import { defineEventHandler, $useQueue } from '#imports'
+import { $useQueue } from '../../utils/useQueue'
+import { defineEventHandler } from '#imports'
 
 export default defineEventHandler(async () => {
   const workerList = []

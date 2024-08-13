@@ -1,8 +1,8 @@
 import type { Peer } from 'crossws'
 import { getQuery } from 'ufo'
+import { $useQueue } from '../../utils/useQueue'
 import {
   defineWebSocketHandler,
-  $useQueue,
 } from '#imports'
 
 function getQueueId(peer: Peer) {
