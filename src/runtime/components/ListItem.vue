@@ -24,6 +24,8 @@
               />
               <span class="text-sm">Active</span>
             </div>
+            <UBadge v-if="origin && origin==='local'" size="sm" color="blue">Local</UBadge>
+            <UBadge v-if="origin && origin==='remote'" size="sm" color="yellow">Remote</UBadge>
           </div>
         </div>
         <div class="grow pr-12">
@@ -58,6 +60,10 @@ defineProps({
   },
   link: {
     type: String,
+  },
+  origin: {
+    type: String,
+    default: null,
   },
   dropdown: {
     type: Array,

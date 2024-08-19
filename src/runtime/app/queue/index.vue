@@ -17,6 +17,7 @@
           v-for="queue of queues"
           :key="queue.name"
           :title="queue.name"
+          :origin="queue.origin"
           :link="`?tab=queue&name=${queue.name}`"
           :dropdown="[
             [{

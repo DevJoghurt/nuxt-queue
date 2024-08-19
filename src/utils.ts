@@ -103,8 +103,8 @@ export async function initializeWorker(options: InitializeWorkerOptions) {
         }))
         // create queue config
         queues[meta.id] = {
-          runtime: 'pm2',
-          remote: false,
+          processManager: 'pm2',
+          origin: 'local',
         }
       }
       else {

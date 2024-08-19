@@ -14,10 +14,10 @@ export type RegisteredWorker = {
 }
 
 type QueueOptions = {
-  // Queue runtime type, currently only pm2 is supported
-  runtime: 'pm2'
+  // Queue processManager type, currently only pm2 is supported
+  processManager: 'pm2'
   // if the worker runs local or remote
-  remote: boolean
+  origin: 'local' | 'remote'
   options?: BullmqQueueOptions
   env?: Record<string, string>
 }
