@@ -13,16 +13,16 @@ export default defineNuxtConfig({
       },
       queues: {
         CronQueue: {
-          origin: 'remote'
+          origin: 'remote',
         },
         DownloadQueue: {
-          origin: 'remote'
+          origin: 'remote',
         },
         ReindexQueue: {
-          origin: 'remote'
+          origin: 'remote',
         },
         SubscriptionQueue: {
-          origin: 'remote'
+          origin: 'remote',
         },
       },
     },
