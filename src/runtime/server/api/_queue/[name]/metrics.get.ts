@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
 
   const queue = getQueue(name)
 
-  const data = await queue.getMetrics('completed')
+  const data = await queue.getMetrics('completed', 0, 10)
 
   return data
 })

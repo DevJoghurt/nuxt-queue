@@ -38,6 +38,6 @@ export default defineEventHandler(async (event) => {
     stacktrace: job?.stacktrace || [],
     returnvalue: job?.returnvalue || null,
     options: job?.opts || {},
-    logs: logs,
+    logs: logs.logs,
   }
 })

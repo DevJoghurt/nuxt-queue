@@ -80,7 +80,6 @@ export default defineNuxtModule<ModuleOptions>({
       // add websocket support
       nitroConfig.experimental = defu(nitroConfig.experimental, {
         websocket: true,
-        tasks: true,
       })
     })
 
@@ -110,7 +109,7 @@ export default defineNuxtModule<ModuleOptions>({
       await buildWorker(rollupConfig)
     })
 
-    // ONLY IN DEV MODE
+    // BUILD WORKER ONLY IN DEV MODE
     if (nuxt.options.dev) {
       nuxt.hook('nitro:init', (nitro) => {
         if (!entryFiles) return // no building if no entry files
