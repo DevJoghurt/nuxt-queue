@@ -79,7 +79,7 @@ export const defineQueueWorker = (
   })
 
   worker.on('closing', (err) => {
-    sendMessage('error', err)
+    sendMessage('success', err)
   })
 
   worker.on('error', (err) => {
@@ -88,12 +88,7 @@ export const defineQueueWorker = (
 
   // TODO: implement graceful shutdown of worker -> worker.stop()
   process.on('SIGINT', async function () {
-    sendMessage('error', 'Worker closed')
-    console.log('close worker gracefully')
     await worker.close()
-    setTimeout(() => {
-      console.log('wait until shutdown')
-      process.exit(0)
-    }, 2000)
+    sendMessage('success', 'Worker closed')
   })
 }
