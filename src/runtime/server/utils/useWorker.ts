@@ -92,7 +92,7 @@ export function $useWorker() {
     }
     // BullMQ uses for windows file urls to run sandboxed scripts
     if (platform() === 'win32') {
-      return pathToFileURL(`${scriptPath}.js`)
+      return pathToFileURL(scriptPath)
     }
     return scriptPath
   }
