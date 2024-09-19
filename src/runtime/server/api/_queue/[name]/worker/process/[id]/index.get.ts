@@ -1,7 +1,7 @@
 import {
   defineEventHandler,
   getRouterParam,
-  $useWorker
+  $useWorker,
 } from '#imports'
 
 type WorkerData = {
@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
     id: worker.id,
     name: worker.name,
     paused: worker.isPaused(),
-    running: worker.isRunning()
+    running: worker.isRunning(),
   } as WorkerData
 
   return data

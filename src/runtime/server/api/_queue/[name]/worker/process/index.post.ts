@@ -23,6 +23,6 @@ export default defineEventHandler(async (event) => {
   createWorker(name, w.script)
 
   return {
-    status: 'success'
+    status: 'success',
   }
 })

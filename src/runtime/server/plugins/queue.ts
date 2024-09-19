@@ -11,7 +11,7 @@ export default defineNitroPlugin(async (nitro) => {
 
   const { initQueue, initQueueEvent, disconnect: disconnectQueues } = $useQueue()
 
-  //const { launchProcess, closeProcess } = $useWorkerProcess()
+  // const { launchProcess, closeProcess } = $useWorkerProcess()
   const { createWorker, closeWorker } = $useWorker()
 
   const { queues, workers } = useRuntimeConfig().queue
@@ -26,7 +26,7 @@ export default defineNitroPlugin(async (nitro) => {
 
   /**
    *  Initialize sandboxed worker
-  */
+   */
   for (const worker of workers) {
     createWorker(worker.name, worker.script)
   }

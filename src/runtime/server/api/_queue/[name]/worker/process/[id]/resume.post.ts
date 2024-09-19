@@ -1,7 +1,7 @@
 import {
   defineEventHandler,
   getRouterParam,
-  $useWorker
+  $useWorker,
 } from '#imports'
 
 export default defineEventHandler(async (event) => {
@@ -14,7 +14,6 @@ export default defineEventHandler(async (event) => {
   worker.resume()
 
   return {
-    status: 'success'
+    status: 'success',
   }
 })
-

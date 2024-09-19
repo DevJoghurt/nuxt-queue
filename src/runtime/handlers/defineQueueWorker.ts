@@ -6,8 +6,7 @@ type WorkerOptions = Omit<BullmqWorkerOptions, 'connection'>
 
 export const defineQueueWorker = (
   meta: string | WorkerOptions,
-  processor: Processor
+  processor: Processor,
 ) => {
-
   return processor
 }

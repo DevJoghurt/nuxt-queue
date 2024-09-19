@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   defineNuxtModule,
   createResolver,
@@ -39,7 +41,7 @@ export default defineNuxtModule<ModuleOptions>({
 
     addImportsDir(resolve('./runtime/composables'))
 
-    if(options.ui){
+    if (options.ui) {
       addComponentsDir({
         path: resolve('./runtime/components'),
         prefix: 'Queue',
@@ -62,6 +64,8 @@ export default defineNuxtModule<ModuleOptions>({
 
     // Alias for worker config with meta information
     nuxt.hook('nitro:config', (nitroConfig) => {
+      // TODO: better resolving of bullmq module by using nuxt resolver tools
+      nitroConfig.externals?.traceInclude?.push('node_modules/bullmq/dist/cjs/classes/main.js')
       // add websocket support
       nitroConfig.experimental = defu(nitroConfig.experimental, {
         websocket: true,
@@ -90,6 +94,11 @@ export default defineNuxtModule<ModuleOptions>({
     // BUILD WORKER for production
     nuxt.hook('nitro:build:public-assets', async (nitro) => {
       if (!entryFiles) return // no building if no entry files
+      // add worker directory
+      mkdirSync(join(nitro.options.output.dir, 'worker'), {
+        recursive: true,
+      })
+      // create build config
       rollupConfig = getRollupConfig(entryFiles, {
         buildDir: nitro.options.output.serverDir,
         nitro: nitro.options,
@@ -102,6 +111,10 @@ export default defineNuxtModule<ModuleOptions>({
     if (nuxt.options.dev) {
       nuxt.hook('nitro:init', (nitro) => {
         if (!entryFiles) return // no building if no entry files
+        // add worker directory
+        mkdirSync(join(nuxt.options.buildDir, 'worker'), {
+          recursive: true,
+        })
         rollupConfig = getRollupConfig(entryFiles, {
           buildDir: nuxt.options.buildDir,
           nitro: nitro.options,

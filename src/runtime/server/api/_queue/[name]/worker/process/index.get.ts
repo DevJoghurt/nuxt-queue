@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   const workerData = {} as WorkerData
   const workers = getWorkerInstances(name)
 
-  for(const w of workers) {
+  for (const w of workers) {
     workerData.id = w.id
     workerData.name = name
     workerData.paused = w.processor.isPaused()

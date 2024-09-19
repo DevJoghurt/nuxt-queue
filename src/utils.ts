@@ -61,7 +61,7 @@ export async function initializeWorker(options: InitializeWorkerOptions) {
       let meta = mod.exports.default?.$args[0] || ''
       if (typeof meta === 'string') {
         meta = {
-          name: meta
+          name: meta,
         }
       }
       if (typeof meta === 'object') {
@@ -101,7 +101,7 @@ export async function initializeWorker(options: InitializeWorkerOptions) {
         }))
         // create queue config
         queues[meta.name] = {
-          origin: 'local'
+          origin: 'local',
         }
       }
       else {

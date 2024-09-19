@@ -15,7 +15,6 @@ async function wait(job) {
 
 export default defineQueueWorker({
   name: 'test',
-  description: 'Read all data from Test db',
 }, async (job) => {
   job.log('Hello from test worker')
   await wait(job)

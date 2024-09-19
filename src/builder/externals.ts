@@ -84,8 +84,8 @@ export function externals(opts: NodeExternalsOptions): Plugin {
     if (
       inlineMatch
       && (!externalMatch
-      || (externalMatch
-      && (inlineMatch.score || 0) > (externalMatch.score || 0)))
+        || (externalMatch
+          && (inlineMatch.score || 0) > (externalMatch.score || 0)))
     ) {
       return true
     }
@@ -469,12 +469,12 @@ export function externals(opts: NodeExternalsOptions): Plugin {
             const parentPkgName = parentPkg.replace(/@[^@]+$/, '')
             await (multiVersionPkgs[parentPkgName]
               ? linkPackage(
-                  `.nitro/${pkgName}@${version}`,
-                  `.nitro/${parentPkg}/node_modules/${pkgName}`,
+                `.nitro/${pkgName}@${version}`,
+                `.nitro/${parentPkg}/node_modules/${pkgName}`,
               )
               : linkPackage(
-                  `.nitro/${pkgName}@${version}`,
-                  `${parentPkgName}/node_modules/${pkgName}`,
+                `.nitro/${pkgName}@${version}`,
+                `${parentPkgName}/node_modules/${pkgName}`,
               ))
           }
         }
