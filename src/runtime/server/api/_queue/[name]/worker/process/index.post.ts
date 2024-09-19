@@ -1,16 +1,14 @@
-import { randomUUID } from 'node:crypto'
-import { $usePM2 } from '../../../../../utils/usePM2'
 import {
   defineEventHandler,
   getRouterParam,
-  resolveWorkerRuntimePath,
   useRuntimeConfig,
+  $useWorker,
 } from '#imports'
 
 export default defineEventHandler(async (event) => {
   const name = getRouterParam(event, 'name')
 
-  const { runtimeDir, workers, redis, queues } = useRuntimeConfig().queue
+  const { workers, queues } = useRuntimeConfig().queue
 
   // @ts-ignore
   const w = workers.find(worker => worker.name === name)
@@ -20,22 +18,11 @@ export default defineEventHandler(async (event) => {
     throw `Worker with ${name} not found`
   }
 
-  const { start } = $usePM2()
+  const { createWorker } = $useWorker()
 
-  const env = q.env || {}
+  createWorker(name, w.script)
 
-  const process = await start({
-    name: `${w.name}-${randomUUID()}`,
-    watch: runtimeDir === 'build' ? false : true,
-    script: w.script,
-    cwd: resolveWorkerRuntimePath(runtimeDir),
-    namespace: w.name,
-    env: {
-      REDIS_PORT: redis.port.toString(),
-      REDIS_HOST: redis.host,
-      ...env,
-    },
-  })
-
-  return process
+  return {
+    status: 'success'
+  }
 })

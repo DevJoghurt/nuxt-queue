@@ -1,7 +1,7 @@
 import { consola } from 'consola'
 import {
   $useQueue,
-  $usePM2,
+  $useWorker,
   useRuntimeConfig,
   defineNitroPlugin,
 } from '#imports'
@@ -10,32 +10,31 @@ export default defineNitroPlugin(async (nitro) => {
   const logger = consola.create({}).withTag('QUEUE')
 
   const { initQueue, initQueueEvent, disconnect: disconnectQueues } = $useQueue()
-  const { initLaunchBus, disconnect: disconnectPM2 } = $usePM2()
 
-  const pm2EventBus = await initLaunchBus()
+  //const { launchProcess, closeProcess } = $useWorkerProcess()
+  const { createWorker, closeWorker } = $useWorker()
 
-  pm2EventBus.on('process:msg', function (processMsg) {
-    logger.info(`Process [${processMsg?.process?.namespace || ''}]`, processMsg?.data?.message)
-    if (processMsg?.data?.event === 'error') {
-      logger.error(`Process [${processMsg?.process?.namespace || ''}]`, processMsg?.data?.message)
-    }
-    if (processMsg?.data?.event === 'completed') {
-      logger.info(`Process [${processMsg?.process?.namespace || ''}]`, `Job #${processMsg?.data?.message?.id} finished successfully`)
-    }
-  })
+  const { queues, workers } = useRuntimeConfig().queue
 
-  const { queues, mode } = useRuntimeConfig().queue
-
+  /**
+   *  Initialize queues
+   */
   for (const queueName in queues) {
     initQueue(queueName, queues[queueName])
     initQueueEvent(queueName, queues[queueName])
   }
 
+  /**
+   *  Initialize sandboxed worker
+  */
+  for (const worker of workers) {
+    createWorker(worker.name, worker.script)
+  }
+
   nitro.hooks.hook('close', async () => {
-    // only disconnect pm2 in production mode
-    if (mode === 'prod') {
-      await disconnectPM2()
-    }
+    // close all running worker processes
+    await closeWorker()
+    // disconnect all queues
     await disconnectQueues()
     // Will run when nitro is being closed
     logger.info('Closed queue server plugin')

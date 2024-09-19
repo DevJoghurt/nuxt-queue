@@ -1,11 +1,9 @@
-import { _tasks } from 'node:process'
 import {
   defineNuxtModule,
   createResolver,
   addServerScanDir,
   addServerImportsDir,
   addImportsDir,
-  installModule,
   addComponent,
   addComponentsDir,
 } from '@nuxt/kit'
@@ -26,6 +24,7 @@ export default defineNuxtModule<ModuleOptions>({
   defaults: {
     dir: 'queues',
     runtimeDir: '',
+    ui: false,
     redis: {
       host: '127.0.0.1',
       port: 6379,
@@ -34,49 +33,35 @@ export default defineNuxtModule<ModuleOptions>({
   async setup(options, nuxt) {
     const { resolve } = createResolver(import.meta.url)
 
-    // check if @nuxt/ui is installed
-    await installModule('@nuxt/ui')
-
     addServerScanDir(resolve('./runtime/server'))
 
     addServerImportsDir(resolve('./runtime/handlers'))
 
     addImportsDir(resolve('./runtime/composables'))
 
-    addComponentsDir({
-      path: resolve('./runtime/components'),
-      prefix: 'Queue',
-    })
+    if(options.ui){
+      addComponentsDir({
+        path: resolve('./runtime/components'),
+        prefix: 'Queue',
+      })
 
-    addComponent({
-      name: 'QueueApp',
-      filePath: resolve('./runtime/app/index.vue'),
-      global: true,
-    })
-
-    const runtimeConfig = nuxt.options.runtimeConfig
-
-    runtimeConfig.queue = defu(runtimeConfig?.queue || {}, {
-      mode: nuxt.options.dev ? 'dev' : 'prod',
-      runtimeDir: nuxt.options.dev ? `${nuxt.options.buildDir}/worker` : 'build',
-      redis: options.redis,
-    })
+      addComponent({
+        name: 'QueueApp',
+        filePath: resolve('./runtime/app/index.vue'),
+        global: true,
+      })
+    }
 
     // add tailwindcss support
     nuxt.hook('tailwindcss:config', (tailwindConfig) => {
-      tailwindConfig.content = tailwindConfig.content || []
-      // @ts-ignore
-      tailwindConfig.content.files = tailwindConfig.content.files || []
-      // @ts-ignore
-      tailwindConfig.content.files.push(resolve('./runtime/app/**/*.{vue,js,ts}'))
-      // @ts-ignore
-      tailwindConfig.content.files.push(resolve('./runtime/components/**/*.{vue,js,ts}'))
+      if (!Array.isArray(tailwindConfig.content) && tailwindConfig.content?.files) {
+        tailwindConfig.content.files.push(resolve('./runtime/app/**/*.{vue,js,ts}'))
+        tailwindConfig.content.files.push(resolve('./runtime/components/**/*.{vue,js,ts}'))
+      }
     })
 
     // Alias for worker config with meta information
     nuxt.hook('nitro:config', (nitroConfig) => {
-      // add missing file to use pm2 in production build
-      nitroConfig.externals?.traceInclude?.push('node_modules/pm2/lib/ProcessContainerFork.js')
       // add websocket support
       nitroConfig.experimental = defu(nitroConfig.experimental, {
         websocket: true,
@@ -90,7 +75,11 @@ export default defineNuxtModule<ModuleOptions>({
       buildDir: nuxt.options.buildDir,
     })
 
-    nuxt.options.runtimeConfig.queue = defu(nuxt.options.runtimeConfig.queue || {}, {
+    const runtimeConfig = nuxt.options.runtimeConfig
+
+    runtimeConfig.queue = defu(runtimeConfig.queue || {}, {
+      runtimeDir: nuxt.options.dev ? `${nuxt.options.buildDir}/worker` : 'build',
+      redis: options.redis,
       queues: defu(queues, options.queues),
       workers,
     })

@@ -7,16 +7,13 @@ export type WorkerOptions = Omit<BullmqWorkerOptions, 'connection' | 'useWorkerT
 export type WorkerConfig = Record<string, WorkerOptions>
 
 export type RegisteredWorker = {
-  id: string
   name: string
   script: string
   options: WorkerOptions
 }
 
 type QueueOptions = {
-  // Queue processManager type, currently only pm2 is supported
-  processManager: 'pm2'
-  // if the worker runs local or remote
+  // if the worker runs locally or remote
   origin: 'local' | 'remote'
   options?: BullmqQueueOptions
   env?: Record<string, string>
@@ -25,6 +22,7 @@ type QueueOptions = {
 export interface ModuleOptions {
   dir: string
   runtimeDir: string
+  ui: boolean
   redis: {
     host: string
     port: number

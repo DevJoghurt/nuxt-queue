@@ -145,7 +145,7 @@ export const $useQueue = () => {
         eventInstance.queueEvents.on('waiting', ({ jobId, prev }) => {
           for (const peer of eventInstance.peers) {
             peer.send({
-              eventType: 'added',
+              eventType: 'waiting',
               job: {
                 id: jobId,
                 prev,
@@ -156,7 +156,7 @@ export const $useQueue = () => {
 
         eventInstance.queueEvents.on('failed', ({ jobId, failedReason, prev }) => {
           peer.send({
-            eventType: 'added',
+            eventType: 'failed',
             job: {
               id: jobId,
               prev,

@@ -1,15 +1,19 @@
-import { $usePM2 } from '../../../../../../utils/usePM2'
 import {
   defineEventHandler,
   getRouterParam,
+  $useWorker
 } from '#imports'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id') || ''
 
-  const { reload } = $usePM2()
+  const { getWorker } = $useWorker()
 
-  const process = await reload(id)
+  const worker = getWorker(id)
 
-  return process
+  await worker.pause()
+
+  return {
+    status: 'success'
+  }
 })

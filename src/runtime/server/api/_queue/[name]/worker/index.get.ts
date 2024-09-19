@@ -11,5 +11,5 @@ export default defineEventHandler(async (event) => {
 
   const queue = getQueue(name)
 
-  return await queue.getWorkers()
+  return await queue?.getWorkers() || null
 })

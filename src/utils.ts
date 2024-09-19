@@ -61,18 +61,17 @@ export async function initializeWorker(options: InitializeWorkerOptions) {
       let meta = mod.exports.default?.$args[0] || ''
       if (typeof meta === 'string') {
         meta = {
-          id: generatedID,
-          name: meta,
+          name: meta
         }
       }
       if (typeof meta === 'object') {
         meta = defu(meta, {
-          id: generatedID,
+          name: meta.name || generatedID,
         })
       }
-      const workerConfigArgs = mod.exports.default?.$args[2] || {} as WorkerConfig
-      if (typeof workerConfig[meta.id] === 'undefined') {
-        workerConfig[meta.id] = workerConfigArgs
+      const workerConfigArgs = meta as WorkerConfig
+      if (typeof workerConfig[meta.name] === 'undefined') {
+        workerConfig[meta.name] = workerConfigArgs
         const workerDefaults = {
           autorun: true,
           concurrency: 1,
@@ -87,12 +86,11 @@ export async function initializeWorker(options: InitializeWorkerOptions) {
         } as WorkerOptions
 
         entryFiles = entryFiles || {}
-        entryFiles[meta.id] = `${options.rootDir}/${file}`
+        entryFiles[meta.name] = `${options.rootDir}/${file}`
 
         registeredWorker.push(defu({
-          id: meta.id,
           name: meta.name,
-          script: `${meta.id}.mjs`,
+          script: `${meta.name}.mjs`,
           options: {
             ...workerConfigArgs,
           },
@@ -102,13 +100,12 @@ export async function initializeWorker(options: InitializeWorkerOptions) {
           },
         }))
         // create queue config
-        queues[meta.id] = {
-          processManager: 'pm2',
-          origin: 'local',
+        queues[meta.name] = {
+          origin: 'local'
         }
       }
       else {
-        logger.error(`Worker [${meta.name}]`, `Id ${meta.id} already taken. Please change the worker file name.`)
+        logger.error(`Worker [${meta.name}]`, `Worker already exists. Please change the worker file name.`)
       }
     }
     else {
@@ -116,7 +113,7 @@ export async function initializeWorker(options: InitializeWorkerOptions) {
     }
   }
 
-  logger.success('Initialized worker:', registeredWorker.map(w => w.id))
+  logger.success('Initialized worker:', registeredWorker.map(w => w.name))
 
   return {
     entryFiles,
