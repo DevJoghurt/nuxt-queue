@@ -90,7 +90,7 @@ export async function initializeWorker(options: InitializeWorkerOptions) {
 
         registeredWorker.push(defu({
           name: meta.name,
-          script: `${meta.name}.mjs`,
+          script: `${meta.name}`,
           options: {
             ...workerConfigArgs,
           },

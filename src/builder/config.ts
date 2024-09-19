@@ -43,7 +43,7 @@ export function getRollupConfig(entryFiles: EntryFiles, options: Options): Rollu
       inlineDynamicImports: false,
       format: 'esm',
       exports: 'auto',
-      entryFileNames: '[name].mjs',
+      entryFileNames: '[name].js',
       chunkFileNames: 'chunks/chunk_[hash].mjs',
       intro: '',
       outro: '',
