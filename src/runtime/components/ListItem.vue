@@ -47,7 +47,7 @@
         </div>
         <div class="flex-none">
           <div class="flex gap-2 items-center">
-            <UDropdown
+            <UDropdownMenu
               :items="dropdown"
               :popper="{ placement: 'bottom-start' }"
             >
@@ -56,14 +56,13 @@
                 color="gray"
                 variant="outline"
               />
-            </UDropdown>
+            </UDropdownMenu>
           </div>
         </div>
       </div>
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
 defineProps({
   title: {

@@ -53,8 +53,10 @@
         <!-- Filters -->
         <div class="flex items-center justify-end gap-3 px-4 py-3">
           <USelectMenu
+            :items="jobStates"
             v-model="filters"
-            :options="jobStates"
+            placeholder="Job Satus"
+            @change="updateJobStateFilter"
             multiple
             class="w-40"
           >
@@ -66,6 +68,15 @@
               <span v-else>Filter</span>
             </template>
           </USelectMenu>
+          <UButton
+              icon="i-heroicons-funnel"
+              color="gray"
+              size="xs"
+              :disabled="filters.length === 0"
+              @click="()=>{filters = []}"
+            >
+              Reset
+            </UButton>
         </div>
 
         <!-- Header and Action buttons -->
@@ -75,14 +86,14 @@
 
             <USelect
               v-model="limit"
-              :options="[10, 20, 30, 40, 50]"
+              :items="[10, 20, 30, 40, 50]"
               class="me-2 w-20"
               size="xs"
             />
           </div>
 
           <div class="flex gap-1.5 items-center">
-            <UDropdown
+            <UDropdownMenu
               v-if="selectedRows.length > 1"
               :items="actions"
               :ui="{ width: 'w-36' }"
@@ -95,38 +106,43 @@
               >
                 Action
               </UButton>
-            </UDropdown>
+            </UDropdownMenu>
 
-            <USelectMenu
-              v-model="selectedColumns"
-              :options="columns"
-              multiple
+            <UDropdownMenu
+              :items="
+                table?.tableApi
+                  ?.getAllColumns()
+                  .filter((column) => column.getCanHide())
+                  .map((column) => ({
+                    label: upperFirst(column.id),
+                    type: 'checkbox' as const,
+                    checked: column.getIsVisible(),
+                    onUpdateChecked(checked: boolean) {
+                      table?.tableApi?.getColumn(column.id)?.toggleVisibility(!!checked)
+                    },
+                    onSelect(e?: Event) {
+                      e?.preventDefault()
+                    }
+                  }))
+              "
+              :content="{ align: 'end' }"
             >
               <UButton
-                icon="i-heroicons-view-columns"
-                color="gray"
-                size="xs"
-              >
-                Columns
-              </UButton>
-            </USelectMenu>
-
-            <UButton
-              icon="i-heroicons-funnel"
-              color="gray"
-              size="xs"
-              :disabled="filters.length === 0"
-              @click="resetFilters"
-            >
-              Reset
-            </UButton>
+                label="Columns"
+                color="neutral"
+                variant="outline"
+                trailing-icon="i-lucide-chevron-down"
+              />
+            </UDropdownMenu>
           </div>
         </div>
 
         <UTable
+          ref="table"
           v-model="selectedRows"
+          v-model:column-visibility="columnVisibility"
           :columns="columnsTable"
-          :rows="data.jobs"
+          :data="data.jobs"
           :sort="{
             column: 'timestamp',
             direction: 'desc',
@@ -201,8 +217,8 @@
               </span>
             </div>
             <UPagination
-              v-model="page"
-              :page-count="data.limit"
+              v-model:page="page"
+              :itemsPerPage="data.limit"
               :total="data.total"
               :to="(page: number) => ({
                 query: {
@@ -221,6 +237,7 @@
 <script setup lang="ts">
 import type { Ref } from 'vue'
 import type { QueueData, Job } from '../../types'
+import type { TableColumn } from '@nuxt/ui'
 import {
   useRoute,
   navigateTo,
@@ -228,7 +245,10 @@ import {
   ref,
   useQueueSubscription,
   computed,
+  useRouter,
+  useTemplateRef
 } from '#imports'
+import { upperFirst } from 'scule'
 
 const route = useRoute()
 
@@ -239,8 +259,11 @@ const {
   method: 'GET',
 })
 
+const table = useTemplateRef('table')
+
 // Selected Rows
 const selectedRows = ref([]) as Ref<Job[]>
+
 function select(job: Job) {
   const { page, ...query } = route.query
   navigateTo({
@@ -256,9 +279,19 @@ const filters = ref([])
 const page = ref(Number.parseInt(route.query?.page) || 1)
 const limit = ref(Number.parseInt(route.query?.limit) || 20)
 
-const resetFilters = () => {
-  filters.value = []
+const router = useRouter()
+
+const updateJobStateFilter = (event, data) => {
+  page.value = 1
+  // set page to 1
+  router.replace({ 
+    query: { 
+      ...route.query,
+      page: 1 
+    } 
+  })
 }
+
 
 const {
   data,
@@ -272,29 +305,27 @@ const {
   },
 })
 
-const columns = [{
-  key: 'timestamp',
-  label: 'Created',
-  sortable: true,
+const columns: TableColumn<Job>[] = [{
+  accessorKey: 'timestamp',
+  header: 'Created'
 }, {
-  key: 'state',
-  label: 'State',
+  accessorKey: 'state',
+  header: 'State',
 }, {
-  key: 'id',
-  label: 'ID',
-  sortable: true,
+  accessorKey: 'id',
+  header: 'ID'
 }, {
-  key: 'name',
-  label: 'Name',
-  sortable: true,
+  accessorKey: 'name',
+  header: 'Name'
 }, {
-  key: 'progress',
-  label: 'Progress',
+  accessorKey: 'progress',
+  header: 'Progress'
 }, {
-  key: 'finishedOn',
-  label: 'Finished',
+  accessorKey: 'finishedOn',
+  header: 'Finished'
 }]
 
+const columnVisibility = ref({})
 const selectedColumns = ref(columns)
 const columnsTable = computed(() => columns.filter(column => selectedColumns.value.includes(column)))
 

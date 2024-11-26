@@ -23,7 +23,7 @@
           Job details
         </p>
       </div>
-      <UDropdown
+      <UDropdownMenu
         :items="[[
           {
             label: 'Re-create job',
@@ -39,7 +39,7 @@
           label="Options"
           trailing-icon="i-heroicons-chevron-down-20-solid"
         />
-      </UDropdown>
+      </UDropdownMenu>
     </section>
     <div class="flex flex-col lg:flex-row py-8 space-y-4 lg:space-y-0 lg:space-x-4">
       <div class="w-full lg:w-2/3">

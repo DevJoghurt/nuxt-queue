@@ -1,8 +1,9 @@
 <template>
   <div>
     <div>
-      <UHorizontalNavigation
-        :links="links"
+      <UNavigationMenu
+        :items="items"
+        orientation="horizontal"
         class="border-b border-gray-200 dark:border-gray-800 px-4"
       />
     </div>
@@ -26,7 +27,7 @@ const tab = ref(route.query?.tab || 'queue')
 const name = ref(route.query?.name || null)
 const job = ref(route.query?.job || null)
 
-const links = reactive([
+const items = reactive([
   [{
     label: 'Queue',
     tab: 'queue',
@@ -40,7 +41,7 @@ watch(() => route.query, (val) => {
   name.value = val?.name || null
   job.value = val?.job || null
 
-  for (const link of links[0]) {
+  for (const link of items[0]) {
     link.active = link.tab === tab.value
   }
 })

@@ -90,7 +90,7 @@ export function $useWorker() {
     if (runtimeDir === 'build') {
       scriptPath = join(process.cwd(), `/worker/${script}`)
     }
-    // BullMQ uses for windows file urls to run sandboxed scripts
+    // BullMQ uses urls file for windows to run sandboxed scripts
     if (platform() === 'win32') {
       return pathToFileURL(scriptPath)
     }
