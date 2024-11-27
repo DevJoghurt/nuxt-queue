@@ -6,7 +6,7 @@ import {
 } from '#imports'
 
 function getQueueId(peer: Peer) {
-  const query = getQuery(peer.url)
+  const query = getQuery(peer.request?.url || '')
   return query.id as string
 }
 
@@ -25,8 +25,8 @@ export default defineWebSocketHandler({
     console.log('[ws] message', peer, message)
   },
 
-  close(peer, event) {
-    console.log('[ws] close', peer, event)
+  close(peer) {
+    console.log('[ws] close', peer.id)
 
     const queueId = getQueueId(peer)
 

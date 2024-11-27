@@ -5,6 +5,7 @@
       'border-red-400': color === 'red',
       'border-green-400': color === 'green',
       'border-yellow-400': color === 'yellow',
+      'border-neutral-400': color === 'neutral',
       'border-orange-400': color === 'orange',
     }"
   >

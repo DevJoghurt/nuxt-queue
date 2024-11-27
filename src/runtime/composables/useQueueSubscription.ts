@@ -1,33 +1,33 @@
 import { onMounted, onBeforeUnmount } from '#imports'
 
 export type EventCompleted = {
-  id: string
+  jobId: string
   returnvalue: any
   prev?: any
 }
 
 export type EventActive = {
-  id: string
+  jobId: string
   prev?: any
 }
 
 export type EventWaiting = {
-  id: string
+  jobId: string
   prev?: any
 }
 
 export type EventProgress = {
-  id: string
-  progress: any
+  jobId: string
+  data: any
 }
 
 export type EventAdded = {
-  id: string
+  jobId: string
   name: string
 }
 
 export type EventFailed = {
-  id: string
+  jobId: string
   failedReason: any
   prev?: any
 }
@@ -53,14 +53,13 @@ export default function useQueueSubscription(id: string, events: {
     console.log('ws', 'Connecting to', url, '...')
     ws = new WebSocket(url)
     ws.addEventListener('message', (event) => {
-      const { eventType = '', job = {} } = JSON.parse(event.data)
-      if (eventType === 'completed' && events.onCompleted) events.onCompleted(job)
-      if (eventType === 'active' && events.onActive) events.onActive(job)
-      if (eventType === 'progress' && events.onProgress) events.onProgress(job)
-      if (eventType === 'added' && events.onAdded) events.onAdded(job)
-      if (eventType === 'failed' && events.onFailed) events.onFailed(job)
-      if (eventType === 'waiting' && events.onWaiting) events.onWaiting(job)
-      console.log(eventType, job)
+      const { eventType = '', message = {} } = JSON.parse(event.data)
+      if (eventType === 'completed' && events.onCompleted) events.onCompleted(message)
+      if (eventType === 'active' && events.onActive) events.onActive(message)
+      if (eventType === 'progress' && events.onProgress) events.onProgress(message)
+      if (eventType === 'added' && events.onAdded) events.onAdded(message)
+      if (eventType === 'failed' && events.onFailed) events.onFailed(message)
+      if (eventType === 'waiting' && events.onWaiting) events.onWaiting(message)
     })
     await new Promise(resolve => ws!.addEventListener('open', resolve))
   }

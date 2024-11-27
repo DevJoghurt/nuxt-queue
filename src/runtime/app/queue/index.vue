@@ -34,12 +34,12 @@
         >
           <QueueStatCounter
             name="Active"
-            color="orange"
+            color="yellow"
             :count="queue?.jobs.active"
           />
           <QueueStatCounter
             name="Waiting"
-            color="yellow"
+            color="neutral"
             :count="queue?.jobs.waiting"
           />
           <QueueStatCounter

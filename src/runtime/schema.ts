@@ -7,7 +7,7 @@ export const JobSchema = z.object({
   progress: z.number(),
   opts: z.object({
     attempts: z.number(),
-    delay: z.number(),
+    delay: z.number().optional(),
   }),
   state: z.any(),
   returnvalue: z.any(),

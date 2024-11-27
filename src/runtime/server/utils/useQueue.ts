@@ -1,10 +1,10 @@
 import { consola } from 'consola'
-import { Queue, QueueEvents } from 'bullmq'
+import { Queue, QueueEvents, QueueEventsListener } from 'bullmq'
 import type {
   ConnectionOptions,
   QueueEventsOptions,
   QueueOptions,
-  RedisOptions,
+  RedisOptions
 } from 'bullmq'
 import type { Peer } from 'crossws'
 import { useRuntimeConfig } from '#imports'
@@ -16,6 +16,21 @@ type EventInstance = {
 
 const queues: Queue[] = []
 const eventInstances: EventInstance[] = []
+type KeyOf<T extends object> = Extract<keyof T, string>;
+type QueueEventTypes = KeyOf<QueueEventsListener>[]
+
+function createEventListeners(events: QueueEventTypes, eventInstance: EventInstance){
+  for(const event of events) {
+    eventInstance.queueEvents.on(event, (msg: any) => {
+      for (const peer of eventInstance.peers) {
+        peer.send(JSON.stringify({
+          eventType: event,
+          message: msg
+        }))
+      }
+    })
+  }
+}
 
 export const $useQueue = () => {
   const { redis: {
@@ -93,77 +108,7 @@ export const $useQueue = () => {
     const eventInstance = eventInstances.find(eventInstance => eventInstance.queueEvents.name === queueId)
     if (eventInstance) {
       if (eventInstance.peers.length === 0) {
-        eventInstance.queueEvents.on('completed', ({ jobId, returnvalue, prev }) => {
-          for (const peer of eventInstance.peers) {
-            peer.send({
-              eventType: 'completed',
-              job: {
-                id: jobId,
-                returnvalue,
-                prev,
-              },
-            })
-          }
-        })
-
-        eventInstance.queueEvents.on('active', ({ jobId, prev }) => {
-          for (const peer of eventInstance.peers) {
-            peer.send({
-              eventType: 'active',
-              job: {
-                id: jobId,
-                prev,
-              },
-            })
-          }
-        })
-
-        eventInstance.queueEvents.on('progress', ({ jobId, data }) => {
-          for (const peer of eventInstance.peers) {
-            peer.send({
-              eventType: 'progress',
-              job: {
-                id: jobId,
-                progress: data,
-              },
-            })
-          }
-        })
-
-        eventInstance.queueEvents.on('added', ({ jobId, name }) => {
-          for (const peer of eventInstance.peers) {
-            peer.send({
-              eventType: 'added',
-              job: {
-                id: jobId,
-                name,
-              },
-            })
-          }
-        })
-
-        eventInstance.queueEvents.on('waiting', ({ jobId, prev }) => {
-          for (const peer of eventInstance.peers) {
-            peer.send({
-              eventType: 'waiting',
-              job: {
-                id: jobId,
-                prev,
-              },
-            })
-          }
-        })
-
-        eventInstance.queueEvents.on('failed', ({ jobId, failedReason, prev }) => {
-          peer.send({
-            eventType: 'failed',
-            job: {
-              id: jobId,
-              prev,
-              failedReason,
-            },
-          })
-        })
+        createEventListeners(['completed', 'active', 'progress', 'added'], eventInstance)
       }
 
       eventInstance.peers.push(peer)
@@ -176,6 +121,7 @@ export const $useQueue = () => {
       // find peer and remove it
       const index = eventInstance.peers.findIndex(p => p.id === peer.id)
       if (index > -1) eventInstance.peers.splice(index, 1)
+      // if there are no more event listeners, than remove all current
       if (eventInstance.peers.length === 0) eventInstance.queueEvents.removeAllListeners()
     }
   }

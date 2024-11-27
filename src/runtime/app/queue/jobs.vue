@@ -13,12 +13,12 @@
         <div class="flex flex-row gap-4 justify-end">
           <QueueStatCounter
             name="Active"
-            color="orange"
+            color="yellow"
             :count="queue?.jobs.active"
           />
           <QueueStatCounter
             name="Waiting"
-            color="yellow"
+            color="neutral"
             :count="queue?.jobs.waiting"
           />
           <QueueStatCounter
@@ -141,68 +141,14 @@
           ref="table"
           v-model="selectedRows"
           v-model:column-visibility="columnVisibility"
+          :sticky="true"
           :columns="columnsTable"
-          :data="data.jobs"
-          :sort="{
-            column: 'timestamp',
-            direction: 'desc',
-          }"
           :loading="pending"
-          class="w-full"
-          :ui="{
-            td: {
-              base: 'max-w-[0] truncate',
-            },
-          }"
+          :data="data.jobs"
+          class="w-full flex-1 max-h-[612px]"
           @select="select"
-        >
-          <template #timestamp-data="{ row }">
-            <span>{{ new Date(row.timestamp).toLocaleString() }}</span>
-          </template>
-          <template #state-data="{ row }">
-            <UBadge
-              v-if="row.state === 'completed'"
-              variant="subtle"
-              color="green"
-              size="sm"
-            >
-              {{ row.state }}
-            </UBadge>
-            <UBadge
-              v-if="row.state === 'waiting'"
-              variant="subtle"
-              color="yellow"
-              size="sm"
-            >
-              {{ row.state }}
-            </UBadge>
-            <UBadge
-              v-if="row.state === 'failed'"
-              variant="subtle"
-              color="red"
-              size="sm"
-            >
-              {{ row.state }}
-            </UBadge>
-            <UBadge
-              v-if="row.state === 'active'"
-              variant="subtle"
-              color="orange"
-              size="sm"
-            >
-              {{ row.state }}
-            </UBadge>
-          </template>
-          <template #progress-data="{ row }">
-            <UProgress
-              :value="row.progress"
-              indicator
-            />
-          </template>
-          <template #finishedOn-data="{ row }">
-            <span>{{ new Date(row.finishedOn).toLocaleString() }}</span>
-          </template>
-        </UTable>
+        />
+
         <template #footer>
           <div class="flex flex-wrap justify-between items-center">
             <div>
@@ -246,9 +192,11 @@ import {
   useQueueSubscription,
   computed,
   useRouter,
-  useTemplateRef
+  useTemplateRef,
+  h
 } from '#imports'
 import { upperFirst } from 'scule'
+import { UBadge, UProgress } from '#components'
 
 const route = useRoute()
 
@@ -307,10 +255,33 @@ const {
 
 const columns: TableColumn<Job>[] = [{
   accessorKey: 'timestamp',
-  header: 'Created'
+  header: 'Created',
+  cell: ({ row }) => {
+      return new Date(row.getValue('timestamp')).toLocaleString('de', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      })
+  }
 }, {
   accessorKey: 'state',
   header: 'State',
+  cell: ({ row }) => {
+      const color = {
+        completed: 'success' as const,
+        waiting: 'neutral' as const,
+        added: 'blue' as const,
+        active: 'yellow' as const,
+        failed: 'error' as const
+      }[row.getValue('state') as string]
+
+      return h(UBadge, { class: 'capitalize', variant: 'subtle', color }, () =>
+        row.getValue('state')
+      )
+  }
 }, {
   accessorKey: 'id',
   header: 'ID'
@@ -319,10 +290,26 @@ const columns: TableColumn<Job>[] = [{
   header: 'Name'
 }, {
   accessorKey: 'progress',
-  header: 'Progress'
+  header: 'Progress',
+  cell: ({ row }) => {
+    return h(UProgress, { 
+      indicator: true, 
+      modelValue: row.getValue('progress') 
+    })
+  }
 }, {
   accessorKey: 'finishedOn',
-  header: 'Finished'
+  header: 'Finished',
+  cell: ({ row }) => {
+      return new Date(row.getValue('finishedOn')).toLocaleString('de', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      })
+  }
 }]
 
 const columnVisibility = ref({})
@@ -359,7 +346,10 @@ useQueueSubscription(queueName.value, {
   },
   onProgress: (event) => {
     console.log(event)
-    updateJob(event.id, 'progress', event.progress)
+    refresh()
+    // Currently update job is not working because of shallowRef used by tanstack table -> check out new way for updating manually
+    //updateJob(event.jobId, 'progress', event?.data || 0)
+    refreshJobs()
   },
 })
 
