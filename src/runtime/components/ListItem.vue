@@ -25,18 +25,12 @@
               <span class="text-sm">Active</span>
             </div>
             <UBadge
-              v-if="origin && origin==='local'"
+              v-if="origin"
               size="sm"
-              color="blue"
+              color="neutral"
             >
-              Local
-            </UBadge>
-            <UBadge
-              v-if="origin && origin==='remote'"
-              size="sm"
-              color="yellow"
-            >
-              Remote
+              <span v-if="origin==='local'">Local</span>
+              <span v-if="origin==='remote'">Remote</span>
             </UBadge>
           </div>
         </div>

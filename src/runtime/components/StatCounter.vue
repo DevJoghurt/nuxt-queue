@@ -17,9 +17,7 @@
 </template>
 
 <script setup lang="ts">
-import type colors from '#ui-colors'
-
-export type Color = typeof colors[number]
+import type { Color } from '../types'
 
 defineProps<{
   name: string

@@ -36,6 +36,8 @@ export const $useQueue = () => {
   const { redis: {
     host,
     port,
+    password,
+    username
   } } = useRuntimeConfig().queue
   const logger = consola.create({}).withTag('QUEUE')
 
@@ -46,6 +48,8 @@ export const $useQueue = () => {
       return Math.max(Math.min(Math.exp(times), 20000), 1000)
     },
   }
+  if (password) redisOptions.password = password
+  if (username) redisOptions.username = username
 
   const connectionOptions: ConnectionOptions = {
     host,

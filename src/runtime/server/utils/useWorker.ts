@@ -2,7 +2,7 @@ import { platform } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import { join } from 'node:path'
 import { Worker, MetricsTime } from 'bullmq'
-import type { WorkerOptions as BullmqWorkerOptions, Processor } from 'bullmq'
+import type { WorkerOptions as BullmqWorkerOptions, Processor, RedisOptions } from 'bullmq'
 import { consola } from 'consola'
 import { useRuntimeConfig } from '#imports'
 
@@ -49,11 +49,19 @@ export function $useWorker() {
       runtype = options?.useWorkerThreads && options.useWorkerThreads === true ? 'worker' : 'spawn'
     }
 
+    const connection = {
+      host: redis.host,
+      port: redis.port
+    } as RedisOptions
+    if (redis?.password) {
+      connection.password = redis.password
+    }
+    if (redis?.username) {
+      connection.username = redis.username
+    }
+
     const worker = new Worker(name, processor, {
-      connection: {
-        host: redis.host,
-        port: redis.port,
-      },
+      connection,
       ...Object.assign(options || {}, {
         metrics: {
           maxDataPoints: MetricsTime.ONE_WEEK * 2,

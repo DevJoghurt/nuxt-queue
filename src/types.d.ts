@@ -26,6 +26,8 @@ export interface ModuleOptions {
   redis: {
     host: string
     port: number
+    password?: string
+    username?: string
   }
   queues?: Record<string, QueueOptions>
 }
