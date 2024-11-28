@@ -9,7 +9,7 @@ import {
   addComponent,
   addComponentsDir,
   installModule,
-  hasNuxtModule
+  hasNuxtModule,
 } from '@nuxt/kit'
 import defu from 'defu'
 import { getRollupConfig, type RollupConfig } from './builder/config'
@@ -57,10 +57,10 @@ export default defineNuxtModule<ModuleOptions>({
     }
 
     // add nuxt ui with tailwind support
-    if(!hasNuxtModule('@nuxt/ui')){
-			installModule('@nuxt/ui');
-      nuxt.options.css.push(resolve('./runtime/tailwind.css'));
-		}
+    if (!hasNuxtModule('@nuxt/ui')) {
+      installModule('@nuxt/ui')
+      nuxt.options.css.push(resolve('./runtime/tailwind.css'))
+    }
 
     // Alias for worker config with meta information
     nuxt.hook('nitro:config', (nitroConfig) => {
@@ -123,6 +123,5 @@ export default defineNuxtModule<ModuleOptions>({
       })
     }
     // ONLY IN DEV MODE
-
   },
 })

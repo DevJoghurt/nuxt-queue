@@ -5,12 +5,13 @@ export default defineNuxtConfig({
   devtools: {
     enabled: true,
   },
+  compatibilityDate: '2024-07-03',
   queue: {
     ui: true,
     redis: {
       host: '127.0.0.1',
       port: 6379,
-      password: "medplum"
+      password: 'medplum',
     },
     queues: {
       CronQueue: {
@@ -27,5 +28,4 @@ export default defineNuxtConfig({
       },
     },
   },
-  compatibilityDate: '2024-07-03',
 })

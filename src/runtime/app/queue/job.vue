@@ -2,7 +2,7 @@
   <div class="px-8 py-6">
     <UBreadcrumb
       divider="/"
-      :links="[
+      :items="[
         {
           label: 'Queue',
           to: '?tab=queue',
@@ -14,7 +14,7 @@
         },
       ]"
     />
-    <section class="flex justify-between py-4">
+    <section class="flex justify-between items-center py-4">
       <div>
         <h1 class="text-xl font-bold">
           Job - {{ job.name }}
@@ -28,14 +28,14 @@
           {
             label: 'Re-create job',
             icon: 'i-heroicons-arrow-path-rounded-square',
-            click: reCreateJob,
+            onSelect: reCreateJob,
           },
         ]]"
         :disabled="!job?.id"
-        :popper="{ placement: 'bottom-start' }"
       >
         <UButton
-          color="white"
+          variant="outline"
+          size="sm"
           label="Options"
           trailing-icon="i-heroicons-chevron-down-20-solid"
         />
@@ -46,9 +46,7 @@
         <UCard
           class="w-full"
           :ui=" {
-            body: {
-              base: 'bg-zinc-800 text-white text-xs font-thin rounded',
-            },
+            root: 'bg-zinc-800 text-white',
           }"
         >
           <template #header>
@@ -69,7 +67,7 @@
           :items="tabItems"
           class="w-full"
         >
-          <template #item="{ item }">
+          <template #content="{ item }">
             <UCard>
               <template #header>
                 <h2 class="text-lg font-bold">
@@ -87,7 +85,7 @@
                     </p>
                     <div class="text-sm font-bold">
                       <UProgress
-                        :value="progress"
+                        v-model="progress"
                         indicator
                       />
                     </div>
@@ -155,6 +153,7 @@
 </template>
 
 <script lang="ts" setup>
+import type { Ref } from '#imports'
 import {
   useRoute,
   navigateTo,
@@ -190,13 +189,13 @@ const jobId = ref(job.value.id || null)
 
 useQueueSubscription(queueName.value, {
   onCompleted: async (event) => {
-    if (event.id === route.query?.job) {
+    if (event.jobId === route.query?.job) {
       await refresh()
     }
   },
   onProgress: (event) => {
-    if (event.id === route.query?.job) {
-      progress.value = event.progress
+    if (event.jobId === route.query?.job) {
+      progress.value = event.data
     }
   },
 })

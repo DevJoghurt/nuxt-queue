@@ -1,11 +1,11 @@
 import { consola } from 'consola'
-import { Queue, QueueEvents, QueueEventsListener } from 'bullmq'
+import { Queue, QueueEvents } from 'bullmq'
 import type {
   ConnectionOptions,
   QueueEventsOptions,
   QueueOptions,
   RedisOptions
-} from 'bullmq'
+  , QueueEventsListener } from 'bullmq'
 import type { Peer } from 'crossws'
 import { useRuntimeConfig } from '#imports'
 
@@ -16,16 +16,16 @@ type EventInstance = {
 
 const queues: Queue[] = []
 const eventInstances: EventInstance[] = []
-type KeyOf<T extends object> = Extract<keyof T, string>;
+type KeyOf<T extends object> = Extract<keyof T, string>
 type QueueEventTypes = KeyOf<QueueEventsListener>[]
 
-function createEventListeners(events: QueueEventTypes, eventInstance: EventInstance){
-  for(const event of events) {
+function createEventListeners(events: QueueEventTypes, eventInstance: EventInstance) {
+  for (const event of events) {
     eventInstance.queueEvents.on(event, (msg: any) => {
       for (const peer of eventInstance.peers) {
         peer.send(JSON.stringify({
           eventType: event,
-          message: msg
+          message: msg,
         }))
       }
     })
@@ -37,7 +37,7 @@ export const $useQueue = () => {
     host,
     port,
     password,
-    username
+    username,
   } } = useRuntimeConfig().queue
   const logger = consola.create({}).withTag('QUEUE')
 

@@ -51,7 +51,7 @@ export function $useWorker() {
 
     const connection = {
       host: redis.host,
-      port: redis.port
+      port: redis.port,
     } as RedisOptions
     if (redis?.password) {
       connection.password = redis.password

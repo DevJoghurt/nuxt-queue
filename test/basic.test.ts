@@ -1,17 +1,15 @@
 import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
-import { setup } from '@nuxt/test-utils/e2e'
+import { setup, $fetch } from '@nuxt/test-utils/e2e'
 
-// TODO
-describe('todo', async () => {
+describe('ssr', async () => {
   await setup({
     rootDir: fileURLToPath(new URL('./fixtures/basic', import.meta.url)),
   })
 
-  it('test', async () => {
+  it('renders the index page', async () => {
     // Get response to a server-rendered page with `$fetch`.
-    // const html = await $fetch('/')
-    // expect(html).toContain('<div>basic</div>')
-    expect('test').toBe('test')
+    const html = await $fetch('/')
+    expect(html).toContain('<div>basic</div>')
   })
 })

@@ -42,41 +42,26 @@
     <section>
       <UCard
         class="w-full"
-        :ui="{
-          base: '',
-          divide: 'divide-y divide-gray-200 dark:divide-gray-700',
-          header: { padding: 'px-4 py-5' },
-          body: { padding: '', base: 'divide-y divide-gray-200 dark:divide-gray-700' },
-          footer: { padding: 'p-4' },
-        }"
       >
         <!-- Filters -->
         <div class="flex items-center justify-end gap-3 px-4 py-3">
           <USelectMenu
-            :items="jobStates"
             v-model="filters"
+            :items="jobStates"
             placeholder="Job Satus"
-            @change="updateJobStateFilter"
             multiple
             class="w-40"
-          >
-            <template #label>
-              <span
-                v-if="filters.length"
-                class="truncate"
-              >{{ filters.join(', ') }}</span>
-              <span v-else>Filter</span>
-            </template>
-          </USelectMenu>
+            @change="updateJobStateFilter"
+          />
           <UButton
-              icon="i-heroicons-funnel"
-              color="gray"
-              size="xs"
-              :disabled="filters.length === 0"
-              @click="()=>{filters = []}"
-            >
-              Reset
-            </UButton>
+            icon="i-heroicons-funnel"
+            color="neutral"
+            size="xs"
+            :disabled="filters.length === 0"
+            @click="() => { filters = [] }"
+          >
+            Reset
+          </UButton>
         </div>
 
         <!-- Header and Action buttons -->
@@ -96,12 +81,11 @@
             <UDropdownMenu
               v-if="selectedRows.length > 1"
               :items="actions"
-              :ui="{ width: 'w-36' }"
             >
               <UButton
                 icon="i-heroicons-chevron-down"
                 trailing
-                color="gray"
+                color="neutral"
                 size="xs"
               >
                 Action
@@ -122,7 +106,7 @@
                     },
                     onSelect(e?: Event) {
                       e?.preventDefault()
-                    }
+                    },
                   }))
               "
               :content="{ align: 'end' }"
@@ -139,7 +123,6 @@
 
         <UTable
           ref="table"
-          v-model="selectedRows"
           v-model:column-visibility="columnVisibility"
           :sticky="true"
           :columns="columnsTable"
@@ -164,7 +147,7 @@
             </div>
             <UPagination
               v-model:page="page"
-              :itemsPerPage="data.limit"
+              :items-per-page="data.limit"
               :total="data.total"
               :to="(page: number) => ({
                 query: {
@@ -182,8 +165,9 @@
 
 <script setup lang="ts">
 import type { Ref } from 'vue'
-import type { QueueData, Job } from '../../types'
 import type { TableColumn } from '@nuxt/ui'
+import { upperFirst } from 'scule'
+import type { QueueData, Job } from '../../types'
 import {
   useRoute,
   navigateTo,
@@ -193,10 +177,9 @@ import {
   computed,
   useRouter,
   useTemplateRef,
-  h
+  h,
 } from '#imports'
-import { upperFirst } from 'scule'
-import { UBadge, UProgress } from '#components'
+import { UBadge, UProgress, UDropdownMenu, UButton } from '#components'
 
 const route = useRoute()
 
@@ -212,34 +195,35 @@ const table = useTemplateRef('table')
 // Selected Rows
 const selectedRows = ref([]) as Ref<Job[]>
 
-function select(job: Job) {
+function select(id: string) {
   const { page, ...query } = route.query
   navigateTo({
     query: {
       ...query,
-      job: job.id,
+      job: id,
     },
   })
 }
 
 const jobStates = ['active', 'completed', 'delayed', 'failed', 'paused', 'prioritized', 'waiting', 'waiting-children']
 const filters = ref([])
+// @ts-ignore
 const page = ref(Number.parseInt(route.query?.page) || 1)
+// @ts-ignore
 const limit = ref(Number.parseInt(route.query?.limit) || 20)
 
 const router = useRouter()
 
-const updateJobStateFilter = (event, data) => {
+const updateJobStateFilter = () => {
   page.value = 1
   // set page to 1
-  router.replace({ 
-    query: { 
+  router.replace({
+    query: {
       ...route.query,
-      page: 1 
-    } 
+      page: 1,
+    },
   })
 }
-
 
 const {
   data,
@@ -257,59 +241,100 @@ const columns: TableColumn<Job>[] = [{
   accessorKey: 'timestamp',
   header: 'Created',
   cell: ({ row }) => {
-      return new Date(row.getValue('timestamp')).toLocaleString('de', {
-        day: 'numeric',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-      })
-  }
+    return new Date(row.getValue('timestamp')).toLocaleString('de', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+  },
 }, {
   accessorKey: 'state',
   header: 'State',
   cell: ({ row }) => {
-      const color = {
-        completed: 'success' as const,
-        waiting: 'neutral' as const,
-        added: 'blue' as const,
-        active: 'yellow' as const,
-        failed: 'error' as const
-      }[row.getValue('state') as string]
+    const color = {
+      completed: 'success' as const,
+      waiting: 'neutral' as const,
+      added: 'info' as const,
+      active: 'primary' as const,
+      failed: 'error' as const,
+    }[row.getValue('state') as string]
 
-      return h(UBadge, { class: 'capitalize', variant: 'subtle', color }, () =>
-        row.getValue('state')
-      )
-  }
+    return h(UBadge, { class: 'capitalize', variant: 'subtle', color }, () =>
+      row.getValue('state'),
+    )
+  },
 }, {
   accessorKey: 'id',
-  header: 'ID'
+  header: 'ID',
 }, {
   accessorKey: 'name',
-  header: 'Name'
+  header: 'Name',
 }, {
   accessorKey: 'progress',
   header: 'Progress',
   cell: ({ row }) => {
-    return h(UProgress, { 
-      indicator: true, 
-      modelValue: row.getValue('progress') 
+    return h(UProgress, {
+      indicator: true,
+      // @ts-ignore
+      modelValue: row.getValue('progress'),
     })
-  }
+  },
 }, {
   accessorKey: 'finishedOn',
   header: 'Finished',
   cell: ({ row }) => {
-      return new Date(row.getValue('finishedOn')).toLocaleString('de', {
+    return row.getValue('finishedOn')
+      ? new Date(row.getValue('finishedOn')).toLocaleString('de', {
         day: 'numeric',
         month: 'short',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: false
+        hour12: false,
       })
-  }
+      : '-'
+  },
+},
+{
+  id: 'actions',
+  cell: ({ row }) => {
+    return h(
+      'div',
+      { class: 'text-right' },
+      h(
+        UDropdownMenu,
+        {
+          content: {
+            align: 'end',
+          },
+          items: [{
+            label: 'Details',
+            onSelect: () => select(row.getValue('id')),
+          }, {
+            label: 'Retry',
+            onSelect: () => {
+
+            },
+          }, {
+            label: 'Remove',
+            onSelect: () => {
+
+            },
+          }],
+        },
+        () =>
+          h(UButton, {
+            icon: 'i-lucide-ellipsis-vertical',
+            color: 'neutral',
+            variant: 'ghost',
+            class: 'ml-auto',
+          }),
+      ),
+    )
+  },
 }]
 
 const columnVisibility = ref({})
@@ -327,17 +352,17 @@ useQueueSubscription(queueName.value, {
   onFailed: (event) => {
     console.log(event)
     refresh()
-    updateJob(event.id, 'state', 'failed')
+    updateJob(event.jobId, 'state', 'failed')
   },
   onWaiting: (event) => {
     console.log(event)
     refresh()
-    updateJob(event.id, 'state', 'waiting')
+    updateJob(event.jobId, 'state', 'waiting')
   },
   onActive: (event) => {
     console.log(event)
     refresh()
-    updateJob(event.id, 'state', 'active')
+    updateJob(event.jobId, 'state', 'active')
   },
   onAdded: (event) => {
     console.log(event)
@@ -348,7 +373,7 @@ useQueueSubscription(queueName.value, {
     console.log(event)
     refresh()
     // Currently update job is not working because of shallowRef used by tanstack table -> check out new way for updating manually
-    //updateJob(event.jobId, 'progress', event?.data || 0)
+    // updateJob(event.jobId, 'progress', event?.data || 0)
     refreshJobs()
   },
 })
