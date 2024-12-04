@@ -24,6 +24,7 @@ export type JobCounts = {
 
 export type QueueData = {
   name: string
+  origin: 'remote' | 'local'
   active: boolean
   jobs: JobCounts
   worker: number

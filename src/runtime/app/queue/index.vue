@@ -23,12 +23,12 @@
             [{
               label: 'New process',
               icon: 'i-heroicons-play',
-              click: async () => await startNewProcess(queue.name),
+              onSelect: async () => await startNewProcess(queue.name),
             }],
             [{
               label: 'Kill all process',
               icon: 'i-heroicons-x-circle',
-              click: async () => await killAllProcess(queue.name),
+              onSelect: async () => await killAllProcess(queue.name),
             }],
           ]"
         >

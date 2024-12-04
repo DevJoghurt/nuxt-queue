@@ -126,7 +126,7 @@
           v-model:column-visibility="columnVisibility"
           :sticky="true"
           :columns="columnsTable"
-          :loading="pending"
+          :loading="status === 'pending'"
           :data="data.jobs"
           class="w-full flex-1 max-h-[612px]"
           @select="select"
@@ -227,7 +227,7 @@ const updateJobStateFilter = () => {
 
 const {
   data,
-  pending,
+  status,
   refresh: refreshJobs,
 } = await useFetch(`/api/_queue/${route.query?.name}/job`, {
   query: {
@@ -238,18 +238,11 @@ const {
 })
 
 const columns: TableColumn<Job>[] = [{
-  accessorKey: 'timestamp',
-  header: 'Created',
-  cell: ({ row }) => {
-    return new Date(row.getValue('timestamp')).toLocaleString('de', {
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    })
-  },
+  accessorKey: 'id',
+  header: 'ID',
+}, {
+  accessorKey: 'name',
+  header: 'Name',
 }, {
   accessorKey: 'state',
   header: 'State',
@@ -267,12 +260,6 @@ const columns: TableColumn<Job>[] = [{
     )
   },
 }, {
-  accessorKey: 'id',
-  header: 'ID',
-}, {
-  accessorKey: 'name',
-  header: 'Name',
-}, {
   accessorKey: 'progress',
   header: 'Progress',
   cell: ({ row }) => {
@@ -280,6 +267,19 @@ const columns: TableColumn<Job>[] = [{
       indicator: true,
       // @ts-ignore
       modelValue: row.getValue('progress'),
+    })
+  },
+},{
+  accessorKey: 'timestamp',
+  header: 'Created',
+  cell: ({ row }) => {
+    return new Date(row.getValue('timestamp')).toLocaleString('de', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
     })
   },
 }, {

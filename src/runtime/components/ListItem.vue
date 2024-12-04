@@ -43,11 +43,10 @@
           <div class="flex gap-2 items-center">
             <UDropdownMenu
               :items="dropdown"
-              :popper="{ placement: 'bottom-start' }"
             >
               <UButton
                 icon="i-heroicons-ellipsis-vertical"
-                color="gray"
+                color="neutral"
                 variant="outline"
               />
             </UDropdownMenu>
@@ -59,6 +58,9 @@
 </template>
 
 <script setup lang="ts">
+import type { PropType } from 'vue'
+import type { DropdownMenuItem } from '@nuxt/ui'
+
 defineProps({
   title: {
     type: String,
@@ -72,8 +74,7 @@ defineProps({
     default: null,
   },
   dropdown: {
-    type: Array,
-    default: () => [],
+    type: Array as PropType<DropdownMenuItem[]>
   },
 })
 </script>
