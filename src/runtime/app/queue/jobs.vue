@@ -42,23 +42,23 @@
               variant="outline"
               class="cursor-pointer w-full"
               size="sm"
-              @click=""
+              @click="() => {}"
             >
               Worker {{ queue?.worker }}
             </UButton>
           </div>
           <USlideover
-              title="Job Scheduling"
-              >
+            title="Job Scheduling"
+          >
             <UButton
-                  icon="i-heroicons-arrow-path-rounded-square"
-                  color="neutral"
-                  variant="outline"
-                  class="cursor-pointer"
-                  size="sm"
-                  @click=""
-                >
-                Job Scheduling
+              icon="i-heroicons-arrow-path-rounded-square"
+              color="neutral"
+              variant="outline"
+              class="cursor-pointer"
+              size="sm"
+              @click="() => {}"
+            >
+              Job Scheduling
             </UButton>
 
             <template #body>
@@ -301,7 +301,7 @@ const columns: TableColumn<Job>[] = [{
       modelValue: row.getValue('progress'),
     })
   },
-},{
+}, {
   accessorKey: 'timestamp',
   header: 'Created',
   cell: ({ row }) => {

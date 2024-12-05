@@ -1,8 +1,7 @@
-import { $useQueue } from '#imports'
-import {
+import { $useQueue,
   defineEventHandler,
   getRouterParam,
-  useRuntimeConfig
+  useRuntimeConfig,
 } from '#imports'
 
 export default defineEventHandler(async (event) => {
@@ -12,7 +11,6 @@ export default defineEventHandler(async (event) => {
   if (!name || !id) {
     throw 'Queue name and id is required'
   }
-
 
   const { queues } = useRuntimeConfig().queue
 
@@ -24,14 +22,9 @@ export default defineEventHandler(async (event) => {
 
   const queue = getQueue(name)
 
-  try {
-	queue.removeJobScheduler(id)
-  } catch (error) {
-	throw error
-  }
+  queue.removeJobScheduler(id)
 
   return {
-	statusCode: 200
+    statusCode: 200,
   }
-
 })

@@ -74,7 +74,7 @@ defineProps({
     default: null,
   },
   dropdown: {
-    type: Array as PropType<DropdownMenuItem[]>
+    type: Array as PropType<DropdownMenuItem[]>,
   },
 })
 </script>

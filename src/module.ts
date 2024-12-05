@@ -25,14 +25,14 @@ const meta = {
 }
 
 declare module '@nuxt/schema' {
-	interface RuntimeConfig {
-		queue: {
-			runtimeDir: string;
-      redis: ModuleOptions['redis'];
-      queues: Record<string, QueueOptions>;
-      workers: RegisteredWorker[];
-		}
-	}
+  interface RuntimeConfig {
+    queue: {
+      runtimeDir: string
+      redis: ModuleOptions['redis']
+      queues: Record<string, QueueOptions>
+      workers: RegisteredWorker[]
+    }
+  }
 }
 
 export default defineNuxtModule<ModuleOptions>({

@@ -1,8 +1,7 @@
-import { $useQueue } from '#imports'
-import {
+import { $useQueue,
   defineEventHandler,
   getRouterParam,
-  useRuntimeConfig
+  useRuntimeConfig,
 } from '#imports'
 
 export default defineEventHandler(async (event) => {
@@ -11,7 +10,6 @@ export default defineEventHandler(async (event) => {
   if (!name) {
     throw 'Queue name is required'
   }
-
 
   const { queues } = useRuntimeConfig().queue
 

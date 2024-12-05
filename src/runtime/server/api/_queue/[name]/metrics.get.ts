@@ -8,7 +8,7 @@ import {
 export default defineEventHandler(async (event) => {
   const name = getRouterParam(event, 'name')
 
-  if(!name) {
+  if (!name) {
     throw 'Queue name is required'
   }
 

@@ -17,7 +17,7 @@ export type RedisOptions = {
   port?: number
   password?: string
   username?: string
-};
+}
 
 type QueueOptions = {
   // if the worker runs locally or remote
@@ -27,9 +27,9 @@ type QueueOptions = {
 }
 
 export interface ModuleOptions {
-  dir?: string;
-  runtimeDir?: string;
-  ui?: boolean;
-  redis?: RedisOptions;
-  queues?: Record<string, QueueOptions>;
+  dir?: string
+  runtimeDir?: string
+  ui?: boolean
+  redis?: RedisOptions
+  queues?: Record<string, QueueOptions>
 }

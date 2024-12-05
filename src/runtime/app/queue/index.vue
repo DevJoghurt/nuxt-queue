@@ -10,7 +10,10 @@
     </section>
     <div>
       <div class="py-4">
-        <UInput class="w-full md:w-72" placeholder="Search" />
+        <UInput
+          class="w-full md:w-72"
+          placeholder="Search"
+        />
       </div>
       <div class="space-y-4">
         <QueueListItem
