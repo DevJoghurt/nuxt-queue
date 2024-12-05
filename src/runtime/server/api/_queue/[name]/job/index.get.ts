@@ -22,6 +22,11 @@ const jobQuerySchema = z.object({
 
 export default defineEventHandler(async (event) => {
   const name = getRouterParam(event, 'name')
+
+  if (!name) {
+    throw 'Queue name is required'
+  }
+
   const parsedQuery = await getValidatedQuery(event, query => jobQuerySchema.safeParse(query))
 
   if (!parsedQuery.success)

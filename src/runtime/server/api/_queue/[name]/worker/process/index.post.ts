@@ -8,6 +8,10 @@ import {
 export default defineEventHandler(async (event) => {
   const name = getRouterParam(event, 'name')
 
+  if(!name) {
+    throw 'Worker name is required'
+  }
+
   const { workers, queues } = useRuntimeConfig().queue
 
   // @ts-ignore
