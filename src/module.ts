@@ -15,12 +15,24 @@ import defu from 'defu'
 import { getRollupConfig, type RollupConfig } from './builder/config'
 import { watchRollupEntry, buildWorker } from './builder/bundler'
 import { initializeWorker } from './utils'
-import type { ModuleOptions } from './types'
+import type { ModuleOptions, QueueOptions, RegisteredWorker } from './types'
+import type {} from '@nuxt/schema'
 
 const meta = {
   name: 'queue',
   version: '0.1',
   configKey: 'queue',
+}
+
+declare module '@nuxt/schema' {
+	interface RuntimeConfig {
+		queue: {
+			runtimeDir: string;
+      redis: ModuleOptions['redis'];
+      queues: Record<string, QueueOptions>;
+      workers: RegisteredWorker[];
+		}
+	}
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -75,7 +87,7 @@ export default defineNuxtModule<ModuleOptions>({
     // initialize worker and queues
     const { entryFiles, queues, workers } = await initializeWorker({
       rootDir: nuxt.options.rootDir,
-      workerDir: options.dir,
+      workerDir: options?.dir || 'queues',
       buildDir: nuxt.options.buildDir,
     })
 
