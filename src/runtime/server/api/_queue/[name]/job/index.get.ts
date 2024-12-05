@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { JobSchemaArray } from '../../../../../schema'
-import { $useQueue } from '../../../../utils/useQueue'
+import { $useQueue } from '#imports'
 import {
   defineEventHandler,
   getRouterParam,

@@ -4,7 +4,7 @@
     class="rounded-lg divide-y divide-gray-200 dark:divide-gray-800 ring-1 ring-gray-200 dark:ring-gray-800 shadow bg-white dark:bg-gray-900"
   >
     <div class="px-4 py-5 sm:p-6">
-      <div class="flex flex-row">
+      <div class="flex flex-col md:flex-row">
         <div class="flex-none flex flex-col justify-between space-y-2">
           <ULink
             :to="link"

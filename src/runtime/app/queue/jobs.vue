@@ -1,41 +1,70 @@
 <template>
   <div class="px-8 py-6">
-    <section class="flex justify-between py-4">
-      <div>
-        <h1 class="text-xl font-bold">
-          Queue - {{ queueName }}
-        </h1>
-        <p class="text-sm font-thin text-gray-500">
-          Overview of all Jobs
-        </p>
-      </div>
-      <div>
-        <div class="flex flex-row gap-4 justify-end">
-          <QueueStatCounter
-            name="Active"
-            color="yellow"
-            :count="queue?.jobs.active"
-          />
-          <QueueStatCounter
-            name="Waiting"
-            color="neutral"
-            :count="queue?.jobs.waiting"
-          />
-          <QueueStatCounter
-            name="Completed"
-            color="green"
-            :count="queue?.jobs.completed"
-          />
-          <QueueStatCounter
-            name="Failed"
-            color="red"
-            :count="queue?.jobs.failed"
-          />
-          <QueueStatCounter
-            name="Worker"
-            color="cyan"
-            :count="queue?.worker"
-          />
+    <section>
+      <div class="flex flex-col md:flex-row justify-between space-y-2 py-4">
+        <div class="space-y-2">
+          <div>
+            <h1 class="text-xl font-bold">
+              Queue - {{ queueName }}
+            </h1>
+            <p class="text-sm font-thin text-gray-500">
+              Overview of all Jobs
+            </p>
+          </div>
+          <div class="flex flex-row gap-2 md:justify-end">
+            <QueueStatCounter
+              name="Active"
+              color="yellow"
+              :count="queue?.jobs.active"
+            />
+            <QueueStatCounter
+              name="Waiting"
+              color="neutral"
+              :count="queue?.jobs.waiting"
+            />
+            <QueueStatCounter
+              name="Completed"
+              color="green"
+              :count="queue?.jobs.completed"
+            />
+            <QueueStatCounter
+              name="Failed"
+              color="red"
+              :count="queue?.jobs.failed"
+            />
+          </div>
+        </div>
+        <div class="flex flex-col justify-center space-y-2">
+          <div>
+            <UButton
+              icon="i-heroicons-play"
+              color="neutral"
+              variant="outline"
+              class="cursor-pointer w-full"
+              size="sm"
+              @click=""
+            >
+              Worker {{ queue?.worker }}
+            </UButton>
+          </div>
+          <USlideover
+              title="Job Scheduling"
+              >
+            <UButton
+                  icon="i-heroicons-arrow-path-rounded-square"
+                  color="neutral"
+                  variant="outline"
+                  class="cursor-pointer"
+                  size="sm"
+                  @click=""
+                >
+                Job Scheduling
+            </UButton>
+
+            <template #body>
+              <QueueJobScheduling :queue="queue?.name" />
+            </template>
+          </USlideover>
         </div>
       </div>
     </section>
@@ -56,6 +85,7 @@
           <UButton
             icon="i-heroicons-funnel"
             color="neutral"
+            class="cursor-pointer"
             size="xs"
             :disabled="filters.length === 0"
             @click="() => { filters = [] }"
@@ -85,6 +115,7 @@
               <UButton
                 icon="i-heroicons-chevron-down"
                 trailing
+                class="cursor-pointer"
                 color="neutral"
                 size="xs"
               >
@@ -114,6 +145,7 @@
               <UButton
                 label="Columns"
                 color="neutral"
+                class="cursor-pointer"
                 variant="outline"
                 trailing-icon="i-lucide-chevron-down"
               />
@@ -330,7 +362,7 @@ const columns: TableColumn<Job>[] = [{
             icon: 'i-lucide-ellipsis-vertical',
             color: 'neutral',
             variant: 'ghost',
-            class: 'ml-auto',
+            class: 'ml-auto cursor-pointer',
           }),
       ),
     )

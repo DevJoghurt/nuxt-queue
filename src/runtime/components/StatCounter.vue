@@ -1,6 +1,6 @@
 <template>
   <div
-    class="border rounded p-4 min-w-32"
+    class="border rounded p-1 min-w-20"
     :class="{
       'border-red-400': color === 'red',
       'border-green-400': color === 'green',
@@ -10,8 +10,8 @@
     }"
   >
     <div class="flex flex-col gap-1 text-center">
-      <span class="text-sm text-gray-500">{{ name }}</span>
-      <span class="text-lg font-semibold">{{ count || 0 }}</span>
+      <span class="text-xs text-gray-500">{{ name }}</span>
+      <span class="text-sm font-semibold">{{ count || 0 }}</span>
     </div>
   </div>
 </template>
