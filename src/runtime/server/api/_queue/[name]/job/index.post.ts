@@ -1,6 +1,5 @@
 import z from 'zod'
-import { $useQueue } from '../../../../utils/useQueue'
-import {
+import { $useQueue,
   defineEventHandler,
   getRouterParam,
   useRuntimeConfig,
@@ -16,6 +15,10 @@ const bodySchema = z.object({
 
 export default defineEventHandler(async (event) => {
   const name = getRouterParam(event, 'name')
+
+  if (!name) {
+    throw 'Queue name is required'
+  }
 
   const validatedResult = await readValidatedBody(event, bodySchema.safeParse)
   if (!validatedResult.success) {

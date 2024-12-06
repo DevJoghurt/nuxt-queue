@@ -1,5 +1,5 @@
 <template>
-  <div class="px-8 py-6">
+  <div class="px-4 md:px-8 py-6">
     <section>
       <h1 class="text-xl font-bold">
         Queue
@@ -10,7 +10,10 @@
     </section>
     <div>
       <div class="py-4">
-        <UInput placeholder="Search" />
+        <UInput
+          class="w-full md:w-72"
+          placeholder="Search"
+        />
       </div>
       <div class="space-y-4">
         <QueueListItem
@@ -51,11 +54,6 @@
             name="Failed"
             color="red"
             :count="queue?.jobs.failed"
-          />
-          <QueueStatCounter
-            name="Worker"
-            color="cyan"
-            :count="queue?.worker"
           />
         </QueueListItem>
       </div>

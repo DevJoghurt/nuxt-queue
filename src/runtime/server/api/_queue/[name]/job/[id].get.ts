@@ -1,5 +1,4 @@
-import { $useQueue } from '../../../../utils/useQueue'
-import {
+import { $useQueue,
   defineEventHandler,
   getRouterParam,
   useRuntimeConfig,

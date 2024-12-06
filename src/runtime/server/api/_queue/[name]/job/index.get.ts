@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { JobSchemaArray } from '../../../../../schema'
-import { $useQueue } from '../../../../utils/useQueue'
-import {
+import { $useQueue,
   defineEventHandler,
   getRouterParam,
   useRuntimeConfig,
@@ -22,6 +21,11 @@ const jobQuerySchema = z.object({
 
 export default defineEventHandler(async (event) => {
   const name = getRouterParam(event, 'name')
+
+  if (!name) {
+    throw 'Queue name is required'
+  }
+
   const parsedQuery = await getValidatedQuery(event, query => jobQuerySchema.safeParse(query))
 
   if (!parsedQuery.success)

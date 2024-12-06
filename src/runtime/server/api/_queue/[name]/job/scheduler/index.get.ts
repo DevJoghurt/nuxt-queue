@@ -1,5 +1,4 @@
-import { $useQueue } from '../../../utils/useQueue'
-import {
+import { $useQueue,
   defineEventHandler,
   getRouterParam,
   useRuntimeConfig,
@@ -22,7 +21,5 @@ export default defineEventHandler(async (event) => {
 
   const queue = getQueue(name)
 
-  const data = await queue.getMetrics('completed', 0, 10)
-
-  return data
+  return queue.getJobSchedulers()
 })

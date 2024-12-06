@@ -12,7 +12,14 @@ export type RegisteredWorker = {
   options: WorkerOptions
 }
 
-type QueueOptions = {
+export type RedisOptions = {
+  host?: string
+  port?: number
+  password?: string
+  username?: string
+}
+
+export type QueueOptions = {
   // if the worker runs locally or remote
   origin: 'local' | 'remote'
   options?: BullmqQueueOptions
@@ -20,14 +27,9 @@ type QueueOptions = {
 }
 
 export interface ModuleOptions {
-  dir: string
-  runtimeDir: string
-  ui: boolean
-  redis: {
-    host: string
-    port: number
-    password?: string
-    username?: string
-  }
+  dir?: string
+  runtimeDir?: string
+  ui?: boolean
+  redis?: RedisOptions
   queues?: Record<string, QueueOptions>
 }
