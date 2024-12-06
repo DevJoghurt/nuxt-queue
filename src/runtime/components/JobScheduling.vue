@@ -102,23 +102,38 @@
       </UCard>
     </UForm>
     <div>
-      <div v-if="scheduler && scheduler.length > 0">
+      <div
+        v-if="scheduler && scheduler.length > 0"
+        class="space-y-4"
+      >
         <div
           v-for="item of scheduler"
           :key="item.key"
-          class="flex justify-between rounded-sm ring-1 ring-gray-200 dark:ring-gray-800 shadow p-4"
+          class="flex flex-col rounded-sm ring-1 ring-gray-200 dark:ring-gray-800 shadow p-4"
         >
-          <div>{{ item.key }}</div>
-          <div>
+          <div class="flex justify-end">
             <UButton
               icon="i-heroicons-x-circle"
               color="error"
               variant="outline"
               class="cursor-pointer"
               @click="deleteScheduledJob(item.key)"
-            >
-              Delete
-            </UButton>
+            />
+          </div>
+          <div>
+            <span class="text-sm font-bold">Name:</span> {{ item.key }}
+          </div>
+          <div>
+            <span class="text-sm font-bold">Next schedule:</span> {{
+              new Date(item.next).toLocaleString('de', {
+                day: 'numeric',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+              })
+            }}
           </div>
         </div>
       </div>
@@ -168,10 +183,10 @@ const state = ref({
 })
 
 const schema = z.object({
-  name: z.string(),
+  name: z.string().regex(/^\S*$/gm, 'No spaces allowed'),
   scheduleType: z.enum(['every', 'cron']),
   scheduleValue: z.any(),
-  jobName: z.string(),
+  jobName: z.string().regex(/^\S*$/gm, 'No spaces allowed'),
   jobData: z.string().default('{}'),
 })
 

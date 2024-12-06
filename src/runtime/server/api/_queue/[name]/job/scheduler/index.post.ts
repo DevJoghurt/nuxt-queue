@@ -2,10 +2,10 @@ import z from 'zod'
 import { defineEventHandler, getRouterParam, readValidatedBody, $useQueue } from '#imports'
 
 const bodySchema = z.object({
-  name: z.string().default('default'),
+  name: z.string().regex(/^\S*$/gm).default('default'),
   scheduleType: z.enum(['every', 'cron']).default('every'),
   scheduleValue: z.any(),
-  jobName: z.string().default('default'),
+  jobName: z.string().regex(/^\S*$/gm).default('default'),
   jobData: z.string().default('{}').transform((data) => {
     return JSON.parse(data)
   }),

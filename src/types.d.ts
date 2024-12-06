@@ -19,7 +19,7 @@ export type RedisOptions = {
   username?: string
 }
 
-type QueueOptions = {
+export type QueueOptions = {
   // if the worker runs locally or remote
   origin: 'local' | 'remote'
   options?: BullmqQueueOptions
