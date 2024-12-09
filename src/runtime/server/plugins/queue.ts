@@ -20,15 +20,17 @@ export default defineNitroPlugin(async (nitro) => {
    *  Initialize queues
    */
   for (const queueName in queues) {
-    initQueue(queueName, queues[queueName])
-    initQueueEvent(queueName, queues[queueName])
+    initQueue(queueName, queues[queueName].options)
+    initQueueEvent(queueName, queues[queueName].options)
   }
 
   /**
    *  Initialize sandboxed worker
    */
   for (const worker of workers) {
-    createWorker(worker.name, worker.script)
+    if(worker.runtype === 'sandboxed'){
+      createWorker(worker.name, worker.processor)
+    }
   }
 
   nitro.hooks.hook('close', async () => {

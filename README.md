@@ -2,11 +2,11 @@
 
 BullMQ integration for Nuxt. Comes with an API for the programmatic management of queues and workers. Offers its own user interface based on `@nuxt/ui`, which can be integrated as a component.
 
-This module offers a dedicated build process for running and scaling workers in seperate processes on the server. Nethertheless it is deep integrated with the Nuxt framework to achive a great developer usability.
+This module offers a dedicated build process for running and scaling workers in separate processes on the server. Nevertheless, it is deeply integrated with the Nuxt framework to achieve great developer usability.
 
 ## ✅ Status
 
-Currently in developing mode, wip.
+Currently in development mode, work in progress.
 
 ## 🚀 Usage
 
@@ -40,18 +40,16 @@ The queue UI components can be enabled by setting config `queue.ui` to true.
 }
 ```
 
-As the UI components are based on `@nuxt/ui`, you have to install this module seperatley and add it to `nuxt.config`.
+As the UI components are based on `@nuxt/ui`, it will be installed alongside.
 
 ```ts
 {
   modules: [
     'nuxt-queue'
-    '@nuxt/ui',
   ],
 }
 ```
 
-Since this module uses the `tailwindcss:config` hook, it must be registered before `@nuxt/ui`.
 
 Use the component in your application:
 
@@ -64,10 +62,12 @@ Use the component in your application:
 ```
 
 ## ROADMAP
-
-- Add more features to UI
-- Save memory by not loading queue instances in memory
-- Flow support + UI ([Vue Flow](https://vueflow.dev/))
+- Better dev runtime support for worker (check new files for in-process and sandboxed worker)
+- Add support for nuxt layers
+- Dev types for external workers
+- Test if it saves memory by not loading queue instances in memory
+- Add queue steps as own worker handler -> Programmable with auto UI
+- Add programmable flows for worker as UI and API ([Vue Flow](https://vueflow.dev/))
 
 
 ## ©️ License

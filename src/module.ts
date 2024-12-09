@@ -29,7 +29,7 @@ declare module '@nuxt/schema' {
     queue: {
       runtimeDir: string
       redis: ModuleOptions['redis']
-      queues: Record<string, QueueOptions>
+      queues: Record<string, Omit<QueueOptions,'connection'>>
       workers: RegisteredWorker[]
     }
   }
@@ -85,8 +85,9 @@ export default defineNuxtModule<ModuleOptions>({
     })
 
     // initialize worker and queues
-    const { entryFiles, queues, workers } = await initializeWorker({
+    const { queues, workers } = await initializeWorker({
       rootDir: nuxt.options.rootDir,
+      serverDir: nuxt.options.serverDir,
       workerDir: options?.dir || 'queues',
       buildDir: nuxt.options.buildDir,
     })
@@ -103,15 +104,16 @@ export default defineNuxtModule<ModuleOptions>({
     // start build process
     let rollupConfig = null as null | RollupConfig
 
-    // BUILD WORKER for production
+    // BUILD SANDBOXED WORKER for production
     nuxt.hook('nitro:build:public-assets', async (nitro) => {
-      if (!entryFiles) return // no building if no entry files
+      if (workers.filter((w) => w.runtype === 'sandboxed').length === 0) return // no building if no entry files
       // add worker directory
       mkdirSync(join(nitro.options.output.dir, 'worker'), {
         recursive: true,
       })
       // create build config
-      rollupConfig = getRollupConfig(entryFiles, {
+      rollupConfig = getRollupConfig(workers, {
+        rootDir: nuxt.options.rootDir,
         buildDir: nitro.options.output.serverDir,
         nitro: nitro.options,
       })
@@ -119,15 +121,16 @@ export default defineNuxtModule<ModuleOptions>({
       await buildWorker(rollupConfig)
     })
 
-    // BUILD WORKER ONLY IN DEV MODE
+    // BUILD SANDBOXED WORKER ONLY IN DEV MODE
     if (nuxt.options.dev) {
       nuxt.hook('nitro:init', (nitro) => {
-        if (!entryFiles) return // no building if no entry files
+        if (workers.filter((w) => w.runtype === 'sandboxed').length === 0) return // no building if no entry files
         // add worker directory
         mkdirSync(join(nuxt.options.buildDir, 'worker'), {
           recursive: true,
         })
-        rollupConfig = getRollupConfig(entryFiles, {
+        rollupConfig = getRollupConfig(workers, {
+          rootDir: nuxt.options.rootDir,
           buildDir: nuxt.options.buildDir,
           nitro: nitro.options,
         })

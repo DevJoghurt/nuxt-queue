@@ -5,11 +5,13 @@ import type {
 import unimportPlugin from 'unimport/unplugin'
 import type { NitroOptions } from 'nitropack'
 import esbuild from 'rollup-plugin-esbuild'
+import { join } from 'node:path'
 import { nodeResolve } from '@rollup/plugin-node-resolve'
 import commonjs from '@rollup/plugin-commonjs'
 import json from '@rollup/plugin-json'
 import circularDependencies from 'rollup-plugin-circular-dependencies'
 import { externals, type NodeExternalsOptions } from './externals'
+import type { RegisteredWorker } from '../types'
 
 export type RollupConfig = RollupInputOptions & {
   output: RollupOutputOptions
@@ -18,12 +20,13 @@ export type RollupConfig = RollupInputOptions & {
 
 type Options = {
   buildDir: string
+  rootDir: string
   nitro: NitroOptions
 }
 
 type EntryFiles = Record<string, string>
 
-export function getRollupConfig(entryFiles: EntryFiles, options: Options): RollupConfig {
+export function getRollupConfig(registeredWorker: RegisteredWorker[], options: Options): RollupConfig {
   const extensions: string[] = [
     '.ts',
     '.mjs',
@@ -33,6 +36,14 @@ export function getRollupConfig(entryFiles: EntryFiles, options: Options): Rollu
     '.tsx',
     '.jsx',
   ]
+
+  const entryFiles = {} as EntryFiles
+  for (const worker of registeredWorker) {
+    if(worker.runtype === 'in-process') {
+      continue
+    }
+    entryFiles[worker.name] = `${options.rootDir}/${worker.file}`
+  }
 
   const outDir = options.nitro.dev ? options.buildDir : options.nitro.output.dir
 

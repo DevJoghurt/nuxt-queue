@@ -16,9 +16,9 @@ async function wait(job: Job) {
 }
 
 export default defineQueueWorker({
-  name: 'test',
+  name: 'inprocess',
 }, async (job) => {
-  job.log('Hello from test worker')
+  job.log('Hello from inprocess worker')
   await wait(job)
   return {
     status: 'success',

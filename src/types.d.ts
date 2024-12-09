@@ -2,13 +2,17 @@ import type {
   WorkerOptions as BullmqWorkerOptions,
   QueueOptions as BullmqQueueOptions } from 'bullmq'
 
-export type WorkerOptions = Omit<BullmqWorkerOptions, 'connection' | 'useWorkerThreads'>
+export type WorkerRuntype = 'sandboxed' | 'in-process'
+
+export type WorkerOptions = Omit<BullmqWorkerOptions, 'connection'>
 
 export type WorkerConfig = Record<string, WorkerOptions>
 
 export type RegisteredWorker = {
   name: string
-  script: string
+  processor: string
+  file: string
+  runtype: WorkerRuntype
   options: WorkerOptions
 }
 
