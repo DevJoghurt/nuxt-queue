@@ -18,7 +18,8 @@ async function wait(job: Job) {
 export default defineQueueWorker({
   name: 'inprocess',
 }, async (job) => {
-  job.log('Hello from inprocess worker')
+  const { runtimeDir } = useRuntimeConfig().queue
+  job.log('Hello from inprocess worker with runtime context: ' + runtimeDir)
   await wait(job)
   return {
     status: 'success',

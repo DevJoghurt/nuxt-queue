@@ -5,6 +5,7 @@ import {
   createResolver,
   addServerScanDir,
   addServerImportsDir,
+  addServerImports,
   addImportsDir,
   addComponent,
   addComponentsDir,
@@ -29,7 +30,7 @@ declare module '@nuxt/schema' {
     queue: {
       runtimeDir: string
       redis: ModuleOptions['redis']
-      queues: Record<string, Omit<QueueOptions,'connection'>>
+      queues: Record<string, Omit<QueueOptions, 'connection'>>
       workers: RegisteredWorker[]
     }
   }
@@ -92,6 +93,13 @@ export default defineNuxtModule<ModuleOptions>({
       buildDir: nuxt.options.buildDir,
     })
 
+    // add in-process worker composable
+    addServerImports([{
+      name: 'useWorkerProcessor',
+      as: '$useWorkerProcessor',
+      from: resolve(nuxt.options.buildDir, 'inprocess-worker-composable'),
+    }])
+
     const runtimeConfig = nuxt.options.runtimeConfig
 
     runtimeConfig.queue = defu(runtimeConfig.queue || {}, {
@@ -106,7 +114,7 @@ export default defineNuxtModule<ModuleOptions>({
 
     // BUILD SANDBOXED WORKER for production
     nuxt.hook('nitro:build:public-assets', async (nitro) => {
-      if (workers.filter((w) => w.runtype === 'sandboxed').length === 0) return // no building if no entry files
+      if (workers.filter(w => w.runtype === 'sandboxed').length === 0) return // no building if no entry files
       // add worker directory
       mkdirSync(join(nitro.options.output.dir, 'worker'), {
         recursive: true,
@@ -124,7 +132,7 @@ export default defineNuxtModule<ModuleOptions>({
     // BUILD SANDBOXED WORKER ONLY IN DEV MODE
     if (nuxt.options.dev) {
       nuxt.hook('nitro:init', (nitro) => {
-        if (workers.filter((w) => w.runtype === 'sandboxed').length === 0) return // no building if no entry files
+        if (workers.filter(w => w.runtype === 'sandboxed').length === 0) return // no building if no entry files
         // add worker directory
         mkdirSync(join(nuxt.options.buildDir, 'worker'), {
           recursive: true,

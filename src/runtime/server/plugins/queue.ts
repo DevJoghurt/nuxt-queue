@@ -4,6 +4,7 @@ import {
   $useWorker,
   useRuntimeConfig,
   defineNitroPlugin,
+  $useWorkerProcessor,
 } from '#imports'
 
 export default defineNitroPlugin(async (nitro) => {
@@ -11,7 +12,6 @@ export default defineNitroPlugin(async (nitro) => {
 
   const { initQueue, initQueueEvent, disconnect: disconnectQueues } = $useQueue()
 
-  // const { launchProcess, closeProcess } = $useWorkerProcess()
   const { createWorker, closeWorker } = $useWorker()
 
   const { queues, workers } = useRuntimeConfig().queue
@@ -25,11 +25,17 @@ export default defineNitroPlugin(async (nitro) => {
   }
 
   /**
-   *  Initialize sandboxed worker
+   *  Initialize worker
    */
   for (const worker of workers) {
-    if(worker.runtype === 'sandboxed'){
+    if (worker.runtype === 'sandboxed') {
       createWorker(worker.name, worker.processor)
+    }
+    if (worker.runtype === 'in-process') {
+      const processor = await $useWorkerProcessor(worker.name)
+      if (processor) {
+        createWorker(worker.name, processor)
+      }
     }
   }
 

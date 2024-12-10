@@ -66,7 +66,7 @@ Use the component in your application:
 - Add support for nuxt layers
 - Dev types for external workers
 - Test if it saves memory by not loading queue instances in memory
-- Add queue steps as own worker handler -> Programmable with auto UI
+- Add queue steps as own worker handler (Programmable with auto UI)
 - Add programmable flows for worker as UI and API ([Vue Flow](https://vueflow.dev/))
 
 

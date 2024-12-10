@@ -2,12 +2,13 @@ import { loadFile } from 'magicast'
 import { globby } from 'globby'
 import { useLogger } from '@nuxt/kit'
 import defu from 'defu'
-import type { WorkerConfig, WorkerOptions, RegisteredWorker } from './types'
+import { createInProcessWorkerComposable } from './templates'
+import type { WorkerConfig, RegisteredWorker } from './types'
 import type { QueueOptions, WorkerRuntype } from './types.js'
 
 type WorkerConfigOptions = {
-  cwd: string;
-  workerDir: string;
+  cwd: string
+  workerDir: string
 }
 
 /**
@@ -55,31 +56,31 @@ async function createWorkerConfig(file: string, runtype: WorkerRuntype, options:
         name: meta.name || generatedID,
       })
     }
-      const workerConfigArgs = meta as WorkerConfig
-      const workerConfig = defu({
-        name: meta.name,
-        processor: (runtype==='sandboxed') ? `${meta.name}.js` : 'function',
-        file,
-        runtype,
-        options: {
-          ...workerConfigArgs.options,
-        },
-      }, {
-        options: {
-          autorun: true,
-          concurrency: 1,
-          drainDelay: 5,
-          lockDuration: 30000,
-          maxStalledCount: 1,
-          runRetryDelay: 15000,
-          skipLockRenewal: false,
-          skipStalledCheck: false,
-          skipVersionCheck: false,
-          useWorkerThreads: false,
-          stalledInterval: 30000,
-        },
-      })
-      return workerConfig
+    const workerConfigArgs = meta as WorkerConfig
+    const workerConfig = defu({
+      name: meta.name,
+      processor: (runtype === 'sandboxed') ? `${meta.name}.js` : 'function',
+      file,
+      runtype,
+      options: {
+        ...workerConfigArgs.options,
+      },
+    }, {
+      options: {
+        autorun: true,
+        concurrency: 1,
+        drainDelay: 5,
+        lockDuration: 30000,
+        maxStalledCount: 1,
+        runRetryDelay: 15000,
+        skipLockRenewal: false,
+        skipStalledCheck: false,
+        skipVersionCheck: false,
+        useWorkerThreads: false,
+        stalledInterval: 30000,
+      },
+    })
+    return workerConfig
   }
   else {
     logger.error('Worker:', file, 'Found no default export. Please use export default defineWorker() syntax.')
@@ -87,10 +88,10 @@ async function createWorkerConfig(file: string, runtype: WorkerRuntype, options:
 }
 
 type WorkerInitializeOptions = {
-  workerDir: string;
-  serverDir: string;
-  rootDir: string;
-  buildDir: string;
+  workerDir: string
+  serverDir: string
+  rootDir: string
+  buildDir: string
 }
 
 /**
@@ -118,12 +119,8 @@ export async function initializeWorker(options: WorkerInitializeOptions) {
       cwd: options.rootDir,
       workerDir: options.workerDir,
     })
-    if(meta){
+    if (meta) {
       registeredWorker.push(meta)
-      // create minimal queue config
-      queues[meta.name] = {
-        origin: 'local',
-      }
     }
   }
 
@@ -137,14 +134,20 @@ export async function initializeWorker(options: WorkerInitializeOptions) {
       cwd: options.serverDir,
       workerDir: options.workerDir,
     })
-    if(meta){
+    if (meta) {
       registeredWorker.push(meta)
-      // create minimal queue config
-      queues[meta.name] = {
-        origin: 'local',
-      }
     }
   }
+
+  // create in-process worker loader composable
+  createInProcessWorkerComposable(registeredWorker, options.serverDir)
+
+  // create minimal queue config for each worker
+  registeredWorker.map((w) => {
+    queues[w.name] = {
+      origin: 'local',
+    }
+  })
 
   logger.success('Initialized worker:', registeredWorker.map(w => w.name))
 
