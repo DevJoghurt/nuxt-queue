@@ -10,7 +10,7 @@ type WorkerInstance = {
   id: string
   name: string
   processor: Worker
-  runtype: 'spawn' | 'worker' | 'intern'
+  runtype: 'spawn' | 'workerThreads' | 'intern'
 }
 
 export type WorkerOptions = Omit<BullmqWorkerOptions, 'connection' >
@@ -20,7 +20,7 @@ const workerInstances = [] as WorkerInstance[]
 export function $useWorker() {
   const logger = consola.create({}).withTag('QUEUE')
 
-  const getWorkerInstances = (identifier: string | null) => {
+  const getWorkerInstances = (identifier?: string) => {
     let resWorkerInstances = null
     if (typeof identifier === 'string') {
       resWorkerInstances = workerInstances.filter(w => w.name === identifier)
@@ -46,7 +46,7 @@ export function $useWorker() {
 
     if (typeof processor === 'string') {
       processor = resolveRuntimePath(processor)
-      runtype = options?.useWorkerThreads && options.useWorkerThreads === true ? 'worker' : 'spawn'
+      runtype = options?.useWorkerThreads && options.useWorkerThreads === true ? 'workerThreads' : 'spawn'
     }
 
     const connection = {
@@ -78,7 +78,7 @@ export function $useWorker() {
     logger.success(`Worker '${name}' with id '${worker.id}' started successfully`)
   }
 
-  const closeWorker = async (identifier: string | null) => {
+  const closeWorker = async (identifier?: string) => {
     const filteredWorkerInstances = getWorkerInstances(identifier)
     const cachedRemoveIndexes = [] as number[]
     for (const workerInstance of filteredWorkerInstances) {
