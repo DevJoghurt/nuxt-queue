@@ -1,5 +1,5 @@
 <template>
-  <div class="px-8 py-6">
+  <div>
     <UBreadcrumb
       divider="/"
       :items="[

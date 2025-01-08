@@ -1,5 +1,5 @@
 <template>
-  <div class="px-4 md:px-8 py-6">
+  <div>
     <section>
       <h1 class="text-xl font-bold">
         Queue

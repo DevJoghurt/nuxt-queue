@@ -469,13 +469,13 @@ export function externals(opts: NodeExternalsOptions): Plugin {
             const parentPkgName = parentPkg.replace(/@[^@]+$/, '')
             await (multiVersionPkgs[parentPkgName]
               ? linkPackage(
-                `.nitro/${pkgName}@${version}`,
-                `.nitro/${parentPkg}/node_modules/${pkgName}`,
-              )
+                  `.nitro/${pkgName}@${version}`,
+                  `.nitro/${parentPkg}/node_modules/${pkgName}`,
+                )
               : linkPackage(
-                `.nitro/${pkgName}@${version}`,
-                `${parentPkgName}/node_modules/${pkgName}`,
-              ))
+                  `.nitro/${pkgName}@${version}`,
+                  `${parentPkgName}/node_modules/${pkgName}`,
+                ))
           }
         }
       }

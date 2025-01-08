@@ -1,5 +1,12 @@
 <template>
-  <div class="px-8 py-6">
+  <div>
+    <div>
+      <UButton
+        label="Back"
+        icon="i-heroicons-arrow-left"
+        @click="back"
+      />
+    </div>
     <section>
       <div class="flex flex-col md:flex-row justify-between space-y-2 py-4">
         <div class="space-y-2">
@@ -227,6 +234,14 @@ const table = useTemplateRef('table')
 // Selected Rows
 const selectedRows = ref([]) as Ref<Job[]>
 
+function back() {
+  navigateTo({
+    query: {
+      tab: 'queue',
+    },
+  })
+}
+
 function select(id: string) {
   const { page, ...query } = route.query
   navigateTo({
@@ -320,13 +335,13 @@ const columns: TableColumn<Job>[] = [{
   cell: ({ row }) => {
     return row.getValue('finishedOn')
       ? new Date(row.getValue('finishedOn')).toLocaleString('de', {
-        day: 'numeric',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      })
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        })
       : '-'
   },
 },

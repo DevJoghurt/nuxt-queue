@@ -1,13 +1,10 @@
 <template>
-  <div>
+  <div class="px-4 md:px-8 py-6">
     <div>
-      <UButton label="Back" icon="i-heroicons-arrow-left" />
+      <Queue v-if="tab === 'queue' && !name" />
+      <QueueJobs v-if="tab === 'queue' && name && !job" />
+      <QueueJob v-if="tab === 'queue' && name && job" />
     </div>
-    <section>
-        <Queue v-if="tab === 'queue' && !name" />
-        <QueueJobs v-if="tab === 'queue' && name && !job" />
-        <QueueJob v-if="tab === 'queue' && name && job" />
-    </section>
   </div>
 </template>
 
