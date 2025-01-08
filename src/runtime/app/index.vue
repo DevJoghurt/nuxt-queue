@@ -1,16 +1,13 @@
 <template>
   <div>
-    <div class="border-b border-gray-200 dark:border-gray-800 px-4">
-      <UNavigationMenu
-        :items="items"
-        orientation="horizontal"
-      />
-    </div>
     <div>
-      <Queue v-if="tab === 'queue' && !name" />
-      <QueueJobs v-if="tab === 'queue' && name && !job" />
-      <QueueJob v-if="tab === 'queue' && name && job" />
+      <UButton label="Back" icon="i-heroicons-arrow-left" />
     </div>
+    <section>
+        <Queue v-if="tab === 'queue' && !name" />
+        <QueueJobs v-if="tab === 'queue' && name && !job" />
+        <QueueJob v-if="tab === 'queue' && name && job" />
+    </section>
   </div>
 </template>
 
