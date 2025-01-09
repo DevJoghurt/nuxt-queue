@@ -1,6 +1,6 @@
 {
   "name": "nuxt-queue",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Nuxt queue service based on Bullmq",
   "repository": "DevJoghurt/nuxt-queue",
   "license": "MIT",

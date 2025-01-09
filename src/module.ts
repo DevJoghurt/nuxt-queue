@@ -69,11 +69,18 @@ export default defineNuxtModule<ModuleOptions>({
       })
     }
 
+    // add jsoneditor to vite optimize -> for esm support
+    nuxt.options.vite.optimizeDeps = defu(nuxt.options.vite.optimizeDeps, {
+      include: ['vanilla-jsoneditor'],
+    })
+
     // add nuxt ui with tailwind support
     if (!hasNuxtModule('@nuxt/ui')) {
       installModule('@nuxt/ui')
       nuxt.options.css.push(resolve('./runtime/tailwind.css'))
     }
+    // add json-editor-vue module
+    installModule('json-editor-vue/nuxt')
 
     // Alias for worker config with meta information
     nuxt.hook('nitro:config', (nitroConfig) => {

@@ -152,7 +152,6 @@
 
 <script setup lang="ts">
 import { z } from 'zod'
-import JsonEditorVue from 'json-editor-vue'
 import { ref, useFetch } from '#imports'
 import type { FormSubmitEvent } from '#ui/types'
 
