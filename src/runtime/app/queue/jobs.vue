@@ -42,6 +42,62 @@
           </div>
         </div>
         <div class="flex flex-col justify-center space-y-2">
+          <UModal
+            title="Create new Job"
+          >
+            <UButton
+              icon="i-heroicons-plus"
+              color="neutral"
+              variant="outline"
+              class="cursor-pointer w-full"
+              size="sm"
+              @click="() => {}"
+            >
+              Create Job
+            </UButton>
+            <template #body>
+              <UForm
+                ref="jobForm"
+                :schema="jobFormSchema"
+                :state="newJobFormState"
+                @submit="createJob"
+              >
+                <UFormField
+                  label="Name"
+                  name="name"
+                >
+                  <UInput
+                    v-model="newJobFormState.name"
+                    placeholder="Job Name"
+                    class="w-full"
+                  />
+                </UFormField>
+                <UFormField
+                  label="Data"
+                  name="jobData"
+                >
+                  <JsonEditorVue
+                    v-model="newJobFormState.data"
+                    :main-menu-bar="false"
+                    mode="text"
+                  />
+                </UFormField>
+              </UForm>
+            </template>
+            <template #footer>
+              <div class="flex justify-end w-full">
+                <UButton
+                  type="submit"
+                  color="neutral"
+                  variant="outline"
+                  class="cursor-pointer"
+                  @click.prevent="handleCreateJob"
+                >
+                  Create
+                </UButton>
+              </div>
+            </template>
+          </UModal>
           <div>
             <UButton
               icon="i-heroicons-play"
@@ -203,10 +259,12 @@
 </template>
 
 <script setup lang="ts">
+import { z } from 'zod'
 import type { Ref } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import type { QueueData, Job } from '../../types'
+import type { Form, FormSubmitEvent } from '#ui/types'
 import {
   useRoute,
   navigateTo,
@@ -217,6 +275,7 @@ import {
   useRouter,
   useTemplateRef,
   h,
+  reactive,
 } from '#imports'
 import { UBadge, UProgress, UDropdownMenu, UButton } from '#components'
 
@@ -447,4 +506,35 @@ const actions = [
     icon: 'i-heroicons-arrow-path',
   }],
 ]
+
+// Create new Job
+const jobFormSchema = z.object({
+  name: z.string().regex(/^\S*$/gm, 'No spaces allowed'),
+  data: z.string().default('{}'),
+})
+const newJobFormState = reactive({
+  name: undefined,
+  data: undefined,
+})
+type JobFormSchema = z.output<typeof jobFormSchema>
+const jobForm = ref<Form<JobFormSchema>>()
+async function handleCreateJob() {
+  await jobForm.value?.submit()
+}
+const createJob = async (event: FormSubmitEvent<JobFormSchema>) => {
+  const resp = await $fetch<any>(`/api/_queue/${route.query?.name}/job`, {
+    method: 'POST',
+    body: {
+      name: event.data.name,
+      data: event.data.data,
+    },
+  })
+  const { page, ...query } = route.query
+  navigateTo({
+    query: {
+      ...query,
+      job: resp.id,
+    },
+  })
+}
 </script>

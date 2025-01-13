@@ -27,8 +27,6 @@ export default defineEventHandler(async (event) => {
 
   const newJob = validatedResult.data
 
-  console.log(newJob)
-
   const { queues } = useRuntimeConfig().queue
 
   if (!queues[name]) {
