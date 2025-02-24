@@ -144,7 +144,6 @@ export async function initializeWorker(options: WorkerInitializeOptions) {
         registeredWorker.push(meta)
       }
     }
-
   }
 
   // create in-process worker loader composable

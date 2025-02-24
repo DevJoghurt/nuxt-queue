@@ -10,7 +10,6 @@ import {
   addComponent,
   addComponentsDir,
   installModule,
-  hasNuxtModule,
 } from '@nuxt/kit'
 import defu from 'defu'
 import { getRollupConfig, type RollupConfig } from './builder/config'

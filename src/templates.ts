@@ -12,7 +12,7 @@ const importFiles = (workers: RegisteredWorker[]) =>
     ).join('\n')
 
 export const createInProcessWorkerComposable = (
-  workers: RegisteredWorker[]
+  workers: RegisteredWorker[],
 ) => {
   const inProcessWorkerComposable = `
 ${importFiles(workers)}

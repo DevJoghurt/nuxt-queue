@@ -1,7 +1,7 @@
 export default defineNuxtConfig({
   modules: [
     '@nuxt/ui',
-    '../src/module'
+    '../src/module',
   ],
 
   devtools: {
@@ -11,8 +11,10 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   colorMode: {
-    preference: 'light'
+    preference: 'light',
   },
+
+  compatibilityDate: '2025-02-24',
 
   queue: {
     ui: true,
@@ -36,6 +38,4 @@ export default defineNuxtConfig({
       },
     },
   },
-
-  compatibilityDate: '2025-02-24',
 })
