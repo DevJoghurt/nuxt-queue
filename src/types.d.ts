@@ -12,6 +12,7 @@ export type RegisteredWorker = {
   name: string
   processor: string
   file: string
+  cwd: string
   runtype: WorkerRuntype
   options: WorkerOptions
 }

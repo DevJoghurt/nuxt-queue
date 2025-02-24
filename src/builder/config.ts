@@ -19,7 +19,6 @@ export type RollupConfig = RollupInputOptions & {
 
 type Options = {
   buildDir: string
-  rootDir: string
   nitro: NitroOptions
 }
 
@@ -41,7 +40,7 @@ export function getRollupConfig(registeredWorker: RegisteredWorker[], options: O
     if (worker.runtype === 'in-process') {
       continue
     }
-    entryFiles[worker.name] = `${options.rootDir}/${worker.file}`
+    entryFiles[worker.name] = `${worker.cwd}/${worker.file}`
   }
 
   const outDir = options.nitro.dev ? options.buildDir : options.nitro.output.dir

@@ -15,7 +15,7 @@ import {
 import defu from 'defu'
 import { getRollupConfig, type RollupConfig } from './builder/config'
 import { watchRollupEntry, buildWorker } from './builder/bundler'
-import { initializeWorker } from './utils'
+import { initializeWorker, type WorkerLayerPaths } from './utils'
 import type { ModuleOptions, QueueOptions, RegisteredWorker } from './types'
 import type {} from '@nuxt/schema'
 
@@ -74,11 +74,6 @@ export default defineNuxtModule<ModuleOptions>({
       include: ['vanilla-jsoneditor'],
     })
 
-    // add nuxt ui with tailwind support
-    if (!hasNuxtModule('@nuxt/ui')) {
-      installModule('@nuxt/ui')
-      nuxt.options.css.push(resolve('./runtime/tailwind.css'))
-    }
     // add json-editor-vue module
     installModule('json-editor-vue/nuxt')
 
@@ -92,10 +87,18 @@ export default defineNuxtModule<ModuleOptions>({
       })
     })
 
+    const layers = [] as WorkerLayerPaths[]
+    for (const layer of nuxt.options._layers) {
+      // add server directories from layers
+      layers.push({
+        rootDir: layer.config.rootDir,
+        serverDir: layer.config?.serverDir || join(layer.config.rootDir, 'server'),
+      })
+    }
+
     // initialize worker and queues
     const { queues, workers } = await initializeWorker({
-      rootDir: nuxt.options.rootDir,
-      serverDir: nuxt.options.serverDir,
+      layers,
       workerDir: options?.dir || 'queues',
       buildDir: nuxt.options.buildDir,
     })
@@ -128,7 +131,6 @@ export default defineNuxtModule<ModuleOptions>({
       })
       // create build config
       rollupConfig = getRollupConfig(workers, {
-        rootDir: nuxt.options.rootDir,
         buildDir: nitro.options.output.serverDir,
         nitro: nitro.options,
       })
@@ -145,7 +147,6 @@ export default defineNuxtModule<ModuleOptions>({
           recursive: true,
         })
         rollupConfig = getRollupConfig(workers, {
-          rootDir: nuxt.options.rootDir,
           buildDir: nuxt.options.buildDir,
           nitro: nitro.options,
         })

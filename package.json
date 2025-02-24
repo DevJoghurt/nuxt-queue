@@ -1,6 +1,6 @@
 {
   "name": "nuxt-queue",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Nuxt queue service based on Bullmq",
   "repository": "DevJoghurt/nuxt-queue",
   "license": "MIT",
@@ -31,14 +31,9 @@
     "cleanup": "rimraf 'playground/node_modules' 'node_modules'",
     "bumpp": "bumpp"
   },
-  "resolutions": {
-    "string-width": "4.2.3"
-  },
   "dependencies": {
     "nuxt": "^3.15.4",
-    "nuxi": "^3.22.2",
     "@nuxt/kit": "^3.15.4",
-    "@nuxt/ui": "3.0.0-alpha.13",
     "rollup": "^4.34.8",
     "rollup-plugin-esbuild": "^6.2.0",
     "@rollup/plugin-node-resolve": "^15.3.0",
@@ -60,6 +55,7 @@
     "pathe": "^1.1.2"
   },
   "devDependencies": {
+    "nuxi": "^3.22.2",
     "@iconify-json/heroicons": "1.2.2",
     "@nuxt/devtools": "^2.1.0",
     "@nuxt/eslint-config": "^1.1.0",
@@ -72,6 +68,7 @@
     "typescript": "latest",
     "vitest": "^3.0.6",
     "vue-tsc": "^2.2.4",
-    "bumpp": "10.0.3"
+    "bumpp": "10.0.3",
+    "@nuxt/ui": "3.0.0-alpha.12"
   }
 }

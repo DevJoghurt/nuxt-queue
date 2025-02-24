@@ -60,6 +60,7 @@ async function createWorkerConfig(file: string, runtype: WorkerRuntype, options:
     const workerConfig = defu({
       name: meta.name,
       processor: (runtype === 'sandboxed') ? `${meta.name}.js` : 'function',
+      cwd: options.cwd,
       file,
       runtype,
       options: {
@@ -87,10 +88,14 @@ async function createWorkerConfig(file: string, runtype: WorkerRuntype, options:
   }
 }
 
-type WorkerInitializeOptions = {
-  workerDir: string
-  serverDir: string
+export type WorkerLayerPaths = {
   rootDir: string
+  serverDir: string
+}
+
+type WorkerInitializeOptions = {
+  layers: WorkerLayerPaths[]
+  workerDir: string
   buildDir: string
 }
 
@@ -108,39 +113,42 @@ export async function initializeWorker(options: WorkerInitializeOptions) {
   const queues = {} as Record<string, QueueOptions>
   const registeredWorker = [] as RegisteredWorker[]
 
-  // scan sandboxed worker files and find worker entry files
-  const sandboxedFiles = await globby(`${options.workerDir}/**/*.{ts,js,mjs}`, {
-    cwd: options.rootDir,
-    deep: 2,
-  })
-  // read worker configuration and write it as meta config file
-  for (const file of sandboxedFiles) {
-    const meta = await createWorkerConfig(file, 'sandboxed', {
-      cwd: options.rootDir,
-      workerDir: options.workerDir,
+  for (const layer of options.layers) {
+    // scan sandboxed worker files and find worker entry files
+    const sandboxedFiles = await globby(`${options.workerDir}/**/*.{ts,js,mjs}`, {
+      cwd: layer.rootDir,
+      deep: 2,
     })
-    if (meta) {
-      registeredWorker.push(meta)
+    // read worker configuration and write it as meta config file
+    for (const file of sandboxedFiles) {
+      const meta = await createWorkerConfig(file, 'sandboxed', {
+        cwd: layer.rootDir,
+        workerDir: options.workerDir,
+      })
+      if (meta) {
+        registeredWorker.push(meta)
+      }
     }
-  }
 
-  // scan in-process worker files and find worker entry files
-  const inProcessFiles = await globby(`${options.workerDir}/**/*.{ts,js,mjs}`, {
-    cwd: options.serverDir,
-    deep: 2,
-  })
-  for (const file of inProcessFiles) {
-    const meta = await createWorkerConfig(file, 'in-process', {
-      cwd: options.serverDir,
-      workerDir: options.workerDir,
+    // scan in-process worker files and find worker entry files
+    const inProcessFiles = await globby(`${options.workerDir}/**/*.{ts,js,mjs}`, {
+      cwd: layer.serverDir,
+      deep: 2,
     })
-    if (meta) {
-      registeredWorker.push(meta)
+    for (const file of inProcessFiles) {
+      const meta = await createWorkerConfig(file, 'in-process', {
+        cwd: layer.serverDir,
+        workerDir: options.workerDir,
+      })
+      if (meta) {
+        registeredWorker.push(meta)
+      }
     }
+
   }
 
   // create in-process worker loader composable
-  createInProcessWorkerComposable(registeredWorker, options.serverDir)
+  createInProcessWorkerComposable(registeredWorker)
 
   // create minimal queue config for each worker
   registeredWorker.map((w) => {
