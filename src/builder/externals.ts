@@ -182,7 +182,7 @@ export function externals(opts: NodeExternalsOptions): Plugin {
             = await lookupNodeModuleSubpath(id).catch(() => null)
           const resolvedGuess
             = guessedSubpath
-            && (await _resolve(join(pkgName, guessedSubpath)).catch(() => null))
+              && (await _resolve(join(pkgName, guessedSubpath)).catch(() => null))
           if (resolvedGuess === id) {
             trackedExternals.add(resolvedGuess)
             return {

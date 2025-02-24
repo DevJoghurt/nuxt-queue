@@ -4,8 +4,8 @@ import type {
   ConnectionOptions,
   QueueEventsOptions,
   QueueOptions,
-  RedisOptions
-  , QueueEventsListener } from 'bullmq'
+  RedisOptions,
+  QueueEventsListener } from 'bullmq'
 import type { Peer } from 'crossws'
 import { useRuntimeConfig } from '#imports'
 

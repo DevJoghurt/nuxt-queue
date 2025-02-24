@@ -13,7 +13,7 @@ type WorkerInstance = {
   runtype: 'spawn' | 'workerThreads' | 'intern'
 }
 
-export type WorkerOptions = Omit<BullmqWorkerOptions, 'connection' >
+export type WorkerOptions = Omit<BullmqWorkerOptions, 'connection'>
 
 const workerInstances = [] as WorkerInstance[]
 

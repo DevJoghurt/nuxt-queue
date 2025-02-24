@@ -16,13 +16,13 @@ export function formatRollupError(
       let path = isAbsolute(id) ? relative(process.cwd(), id) : id
       const location
         = (error as rollup.RollupError).loc
-        || (error as esbuild.PartialMessage).location
+          || (error as esbuild.PartialMessage).location
       if (location) {
         path += `:${location.line}:${location.column}`
       }
       const text
         = (error as esbuild.PartialMessage).text
-        || (error as rollup.RollupError).frame
+          || (error as rollup.RollupError).frame
       logs.push(
         `Rollup error while processing \`${path}\`` + text ? '\n\n' + text : '',
       )
