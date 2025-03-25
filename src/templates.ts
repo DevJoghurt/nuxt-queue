@@ -18,7 +18,7 @@ export const createInProcessWorkerComposable = (
 ${importFiles(workers)}
 const registeredWorkers = {${workers.filter(worker => worker.runtype === 'in-process').map(worker => worker.name).join(', ')}};
 
-export const useWorkerProcessor = async (worker: string) => {
+export const useWorkerProcessor = async (worker) => {
   return (typeof registeredWorkers[worker] === 'function') ? registeredWorkers[worker] : null;
 };
 `

@@ -44,6 +44,7 @@
         <div class="flex flex-col justify-center space-y-2">
           <UModal
             title="Create new Job"
+            key="create-job"
           >
             <UButton
               icon="i-heroicons-plus"
