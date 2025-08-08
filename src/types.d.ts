@@ -2,7 +2,7 @@ import type {
   WorkerOptions as BullmqWorkerOptions,
   QueueOptions as BullmqQueueOptions } from 'bullmq'
 
-export type WorkerRuntype = 'sandboxed' | 'in-process'
+export type WorkerRuntype = 'sandboxed' | 'in-process' | 'task'
 
 export type WorkerOptions = Omit<BullmqWorkerOptions, 'connection'>
 

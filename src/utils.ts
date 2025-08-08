@@ -5,10 +5,44 @@ import defu from 'defu'
 import { createInProcessWorkerComposable } from './templates'
 import type { WorkerConfig, RegisteredWorker } from './types'
 import type { QueueOptions, WorkerRuntype } from './types.js'
+import type { NitroOptions } from 'nitropack'
+import { ca } from 'zod/v4/locales'
 
 type WorkerConfigOptions = {
-  cwd: string
+  cwd?: string
   workerDir: string
+  generatedID?: string
+}
+
+/**
+ * Convert an AST node to a plain object
+ * @param node
+ * @returns
+ */
+function astToObject(node: any): any {
+  if (!node) return undefined;
+  if (node.type === 'ObjectExpression') {
+    const obj: any = {};
+    for (const prop of node.properties) {
+      let key;
+      if (prop.key.type === 'Identifier') key = prop.key.name;
+      else if (prop.key.type === 'Literal' || prop.key.type === 'StringLiteral' || prop.key.type === 'NumericLiteral') key = prop.key.value;
+      else continue;
+      obj[key] = astToObject(prop.value);
+    }
+    return obj;
+  }
+  if (node.type === 'ArrayExpression') {
+    return node.elements.map(astToObject);
+  }
+  if (node.type === 'Literal' || node.type === 'StringLiteral' || node.type === 'NumericLiteral' || node.type === 'BooleanLiteral') {
+    return node.value;
+  }
+  if (node.type === 'Identifier') {
+    return node.name;
+  }
+  // Add more cases as needed
+  return undefined;
 }
 
 /**
@@ -21,7 +55,7 @@ type WorkerConfigOptions = {
 async function createWorkerConfig(file: string, runtype: WorkerRuntype, options: WorkerConfigOptions) {
   const logger = useLogger()
 
-  let generatedID = file.replace(`${options.workerDir}/`, '').split('.').slice(0, -1).join('.')
+  let generatedID = options.generatedID || file.replace(`${options.workerDir}/`, '').split('.').slice(0, -1).join('.')
   // check if file path has a folder -> generatedID must be split
   if (generatedID.includes('/')) {
     const fileNameArray = generatedID.split('/')
@@ -37,7 +71,8 @@ async function createWorkerConfig(file: string, runtype: WorkerRuntype, options:
   let mod = null
 
   try {
-    mod = await loadFile(`${options.cwd}/${file}`)
+    const fullPathFile = options.cwd ? `${options.cwd}/${file}` : file
+    mod = await loadFile(fullPathFile)
   }
   catch (e) {
     logger.error('Worker', e)
@@ -46,6 +81,18 @@ async function createWorkerConfig(file: string, runtype: WorkerRuntype, options:
 
   if (mod.exports.default?.$type === 'function-call') {
     let meta = mod.exports.default?.$args[0] || ''
+    if(runtype === 'task'){
+      try {
+        const astNode = mod.exports.default?.$ast.arguments[0].properties[0].value
+        meta = astToObject(astNode)
+        if(!meta.runtype || meta.runtype !== 'queue'){
+          return null
+        }
+      } catch (e) {
+        logger.error('Worker', e)
+        return null
+      }
+    }
     if (typeof meta === 'string') {
       meta = {
         name: meta,
@@ -60,7 +107,7 @@ async function createWorkerConfig(file: string, runtype: WorkerRuntype, options:
     const workerConfig = defu({
       name: meta.name,
       processor: (runtype === 'sandboxed') ? `${meta.name}.js` : 'function',
-      cwd: options.cwd,
+      cwd: options?.cwd || '',
       file,
       runtype,
       options: {
@@ -97,6 +144,7 @@ type WorkerInitializeOptions = {
   layers: WorkerLayerPaths[]
   workerDir: string
   buildDir: string
+  tasks: NitroOptions['tasks']
 }
 
 /**
@@ -144,6 +192,25 @@ export async function initializeWorker(options: WorkerInitializeOptions) {
         registeredWorker.push(meta)
       }
     }
+  }
+
+  // add tasks
+  for(const task in options.tasks) {
+    if(!options.tasks[task]?.handler){
+      continue
+    }
+    const file = options.tasks[task]?.handler
+    // get filename to generate id: C:/Code/nuxt-queue/playground/server/tasks/task_testing.ts -> task_testing
+    const generatedID = file.split('/').pop()?.split('.').slice(0, -1).join('.')
+    const meta = await createWorkerConfig(file, 'task', {
+      generatedID,
+      workerDir: 'tasks'
+    })
+    if(!meta){
+      continue
+    }
+
+    console.log('Initialized task worker:', meta)
   }
 
   // create in-process worker loader composable

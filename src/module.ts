@@ -35,6 +35,7 @@ declare module '@nuxt/schema' {
   }
 }
 
+
 export default defineNuxtModule<ModuleOptions>({
   meta,
   defaults: {
@@ -83,6 +84,7 @@ export default defineNuxtModule<ModuleOptions>({
       // add websocket support
       nitroConfig.experimental = defu(nitroConfig.experimental, {
         websocket: true,
+        tasks: true
       })
     })
 
@@ -95,13 +97,6 @@ export default defineNuxtModule<ModuleOptions>({
       })
     }
 
-    // initialize worker and queues
-    const { queues, workers } = await initializeWorker({
-      layers,
-      workerDir: options?.dir || 'queues',
-      buildDir: nuxt.options.buildDir,
-    })
-
     // add in-process worker composable
     addServerImports([{
       name: 'useWorkerProcessor',
@@ -109,13 +104,12 @@ export default defineNuxtModule<ModuleOptions>({
       from: resolve(nuxt.options.buildDir, 'inprocess-worker-composable'),
     }])
 
+
     const runtimeConfig = nuxt.options.runtimeConfig
 
     runtimeConfig.queue = defu(runtimeConfig.queue || {}, {
       runtimeDir: nuxt.options.dev ? `${nuxt.options.buildDir}/worker` : 'build',
-      redis: options.redis,
-      queues: defu(queues, options.queues),
-      workers,
+      redis: options.redis
     })
 
     // start build process
@@ -123,6 +117,18 @@ export default defineNuxtModule<ModuleOptions>({
 
     // BUILD SANDBOXED WORKER for production
     nuxt.hook('nitro:build:public-assets', async (nitro) => {
+      const { queues, workers } = await initializeWorker({
+          layers,
+          workerDir: options?.dir || 'queues',
+          buildDir: nuxt.options.buildDir,
+          tasks: nitro.options.tasks,
+      })
+      // add queues and worker to runtime config
+      nitro.options.runtimeConfig.queue = defu(nitro.options.runtimeConfig.queue, {
+        queues: defu(queues, options.queues),
+        workers,
+      })
+
       if (workers.filter(w => w.runtype === 'sandboxed').length === 0) return // no building if no entry files
       // add worker directory
       mkdirSync(join(nitro.options.output.dir, 'worker'), {
@@ -139,7 +145,19 @@ export default defineNuxtModule<ModuleOptions>({
 
     // BUILD SANDBOXED WORKER ONLY IN DEV MODE
     if (nuxt.options.dev) {
-      nuxt.hook('nitro:init', (nitro) => {
+      nuxt.hook('nitro:init', async (nitro) => {
+        const { queues, workers } = await initializeWorker({
+            layers,
+            workerDir: options?.dir || 'queues',
+            buildDir: nuxt.options.buildDir,
+            tasks: nitro.options.tasks,
+        })
+        // add queues and worker to runtime config
+        nitro.options.runtimeConfig.queue = defu(nitro.options.runtimeConfig.queue, {
+          queues: defu(queues, options.queues),
+          workers,
+        })
+        // start build process for sandboxed workers
         if (workers.filter(w => w.runtype === 'sandboxed').length === 0) return // no building if no entry files
         // add worker directory
         mkdirSync(join(nuxt.options.buildDir, 'worker'), {
