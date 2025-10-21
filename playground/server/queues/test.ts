@@ -1,0 +1,25 @@
+export const config = defineQueueConfig({
+  queue: 'email',
+  flow: {
+    id: 'signup',
+    role: 'step',
+    step: 'sendEmail',
+    triggers: ['user.created'],
+  },
+})
+
+export default defineQueueWorker(
+  async (input, ctx) => {
+    await ctx.state.set('lastEmail', {
+      test: 'sdfdsf',
+    })
+    // Access Motia-style context
+    ctx.logger.log('info', `Sending mail for job ${ctx.jobId} on ${ctx.queue}`, { jobId: ctx.jobId, traceId: ctx.traceId })
+    // Enqueue next step in a flow if needed
+    await ctx.flow.handleTrigger('email.sent', { to: input.to })
+    // Use provider if you need to enqueue programmatically
+    // await ctx.provider.enqueue('someQueue', { name: 'someStep', data: {} })
+    return {
+      ok: true,
+    }
+  })

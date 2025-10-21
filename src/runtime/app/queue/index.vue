@@ -15,6 +15,52 @@
           placeholder="Search"
         />
       </div>
+      <UCard class="mb-4">
+        <template #header>
+          <div class="flex items-center justify-between">
+            <div class="font-semibold">
+              Metrics
+            </div>
+            <UButton
+              size="xs"
+              color="neutral"
+              variant="outline"
+              class="cursor-pointer"
+              @click="refreshMetrics()"
+            >
+              Refresh
+            </UButton>
+          </div>
+        </template>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div
+            v-for="q in queues"
+            :key="q.name"
+            class="p-3 rounded bg-gray-100/10"
+          >
+            <div class="text-sm font-semibold">
+              {{ q.name }}
+            </div>
+            <div class="text-xs text-gray-500">
+              {{ metrics?.[q.name]?.paused ? 'Paused' : 'Running' }}
+            </div>
+            <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+              <div>
+                Active: <span class="font-mono">{{ metrics?.[q.name]?.counts?.active || 0 }}</span>
+              </div>
+              <div>
+                Waiting: <span class="font-mono">{{ metrics?.[q.name]?.counts?.waiting || 0 }}</span>
+              </div>
+              <div>
+                Completed: <span class="font-mono">{{ metrics?.[q.name]?.counts?.completed || 0 }}</span>
+              </div>
+              <div>
+                Failed: <span class="font-mono">{{ metrics?.[q.name]?.counts?.failed || 0 }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </UCard>
       <div class="space-y-4">
         <QueueListItem
           v-for="queue of queues"
@@ -24,36 +70,31 @@
           :link="`?tab=queue&name=${queue.name}`"
           :dropdown="[
             [{
-              label: 'New process',
-              icon: 'i-heroicons-play',
-              onSelect: async () => await startNewProcess(queue.name),
-            }],
-            [{
-              label: 'Kill all process',
-              icon: 'i-heroicons-x-circle',
-              onSelect: async () => await killAllProcess(queue.name),
+              label: (metrics?.[queue.name]?.paused ? 'Resume queue' : 'Pause queue'),
+              icon: (metrics?.[queue.name]?.paused ? 'i-heroicons-play' : 'i-heroicons-pause'),
+              onSelect: async () => await togglePause(queue.name, !!metrics?.[queue.name]?.paused),
             }],
           ]"
         >
           <QueueStatCounter
             name="Active"
             color="yellow"
-            :count="queue?.jobs.active"
+            :count="metrics?.[queue.name]?.counts?.active || 0"
           />
           <QueueStatCounter
             name="Waiting"
             color="neutral"
-            :count="queue?.jobs.waiting"
+            :count="metrics?.[queue.name]?.counts?.waiting || 0"
           />
           <QueueStatCounter
             name="Completed"
             color="green"
-            :count="queue?.jobs.completed"
+            :count="metrics?.[queue.name]?.counts?.completed || 0"
           />
           <QueueStatCounter
             name="Failed"
             color="red"
-            :count="queue?.jobs.failed"
+            :count="metrics?.[queue.name]?.counts?.failed || 0"
           />
         </QueueListItem>
       </div>
@@ -62,7 +103,6 @@
 </template>
 
 <script setup lang="ts">
-import type { QueueData } from '../../types'
 import { useFetch, onMounted, onBeforeUnmount, ref } from '#imports'
 
 const intval = ref<ReturnType<typeof setInterval> | null>(null)
@@ -70,26 +110,24 @@ const intval = ref<ReturnType<typeof setInterval> | null>(null)
 const {
   data: queues,
   refresh,
-} = await useFetch<QueueData[]>('/api/_queue', {
+} = await useFetch('/api/_queue', {
   method: 'GET',
 })
 
-const startNewProcess = async (name: string) => {
-  await fetch(`/api/_queue/${name}/worker/process`, {
-    method: 'POST',
-  })
-}
+// Metrics map: { [queueName]: { counts?: {..}, paused?: boolean } }
+const { data: metrics, refresh: refreshMetrics } = await useFetch('/api/_queue/metrics', { method: 'GET' })
 
-const killAllProcess = async (name: string) => {
-  await fetch(`/api/_queue/${name}/worker/process`, {
-    method: 'DELETE',
-  })
+const togglePause = async (name: string, currentlyPaused: boolean) => {
+  const action = currentlyPaused ? 'resume' : 'pause'
+  await $fetch(`/api/_queue/${name}/${action}`, { method: 'POST' })
+  await refreshMetrics()
 }
 
 onMounted(() => {
   intval.value = setInterval(() => {
     console.log('Refreshing queue data')
     refresh()
+    refreshMetrics()
   }, 2000)
 })
 

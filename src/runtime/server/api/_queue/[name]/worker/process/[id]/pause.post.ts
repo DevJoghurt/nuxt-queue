@@ -1,19 +1,5 @@
-import {
-  defineEventHandler,
-  getRouterParam,
-  $useWorker,
-} from '#imports'
+import { defineEventHandler, createError } from '#imports'
 
-export default defineEventHandler(async (event) => {
-  const id = getRouterParam(event, 'id') || ''
-
-  const { getWorker } = $useWorker()
-
-  const worker = getWorker(id)
-
-  await worker.pause()
-
-  return {
-    status: 'success',
-  }
+export default defineEventHandler(async (_event) => {
+  throw createError({ statusCode: 501, statusMessage: 'Pausing individual workers is not supported. Control at queue level via provider if needed.' })
 })

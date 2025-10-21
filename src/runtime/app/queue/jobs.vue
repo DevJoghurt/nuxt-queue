@@ -19,25 +19,57 @@
             </p>
           </div>
           <div class="flex flex-row gap-2 md:justify-end">
+            <div class="flex flex-row gap-2 md:justify-start">
+              <UBadge
+                variant="subtle"
+                color="neutral"
+              >
+                State: {{ metrics?.paused ? 'Paused' : 'Running' }}
+              </UBadge>
+              <UBadge
+                variant="subtle"
+                color="warning"
+              >
+                Active: {{ metrics?.counts?.active || 0 }}
+              </UBadge>
+              <UBadge
+                variant="subtle"
+                color="neutral"
+              >
+                Waiting: {{ metrics?.counts?.waiting || 0 }}
+              </UBadge>
+              <UBadge
+                variant="subtle"
+                color="success"
+              >
+                Completed: {{ metrics?.counts?.completed || 0 }}
+              </UBadge>
+              <UBadge
+                variant="subtle"
+                color="error"
+              >
+                Failed: {{ metrics?.counts?.failed || 0 }}
+              </UBadge>
+            </div>
             <QueueStatCounter
               name="Active"
               color="yellow"
-              :count="queue?.jobs.active"
+              :count="metrics?.counts?.active || 0"
             />
             <QueueStatCounter
               name="Waiting"
               color="neutral"
-              :count="queue?.jobs.waiting"
+              :count="metrics?.counts?.waiting || 0"
             />
             <QueueStatCounter
               name="Completed"
               color="green"
-              :count="queue?.jobs.completed"
+              :count="metrics?.counts?.completed || 0"
             />
             <QueueStatCounter
               name="Failed"
               color="red"
-              :count="queue?.jobs.failed"
+              :count="metrics?.counts?.failed || 0"
             />
           </div>
         </div>
@@ -101,14 +133,36 @@
           </UModal>
           <div>
             <UButton
-              icon="i-heroicons-play"
+              :icon="metrics?.paused ? 'i-heroicons-play' : 'i-heroicons-pause'"
               color="neutral"
               variant="outline"
               class="cursor-pointer w-full"
               size="sm"
-              @click="() => {}"
+              @click="togglePause()"
             >
-              Worker {{ queue?.worker }}
+              {{ metrics?.paused ? 'Resume queue' : 'Pause queue' }}
+            </UButton>
+          </div>
+          <div class="flex gap-2">
+            <UButton
+              icon="i-heroicons-arrow-path"
+              color="neutral"
+              variant="outline"
+              class="cursor-pointer"
+              size="sm"
+              @click="refreshMetrics()"
+            >
+              Refresh metrics
+            </UButton>
+            <UButton
+              icon="i-heroicons-bolt"
+              color="neutral"
+              variant="outline"
+              class="cursor-pointer"
+              size="sm"
+              @click="refreshJobs()"
+            >
+              Refresh jobs
             </UButton>
           </div>
           <USlideover
@@ -126,7 +180,7 @@
             </UButton>
 
             <template #body>
-              <QueueJobScheduling :queue="queue?.name" />
+              <QueueJobScheduling :queue="queueName" />
             </template>
           </USlideover>
         </div>
@@ -159,18 +213,7 @@
         </div>
 
         <!-- Header and Action buttons -->
-        <div class="flex justify-between items-center w-full px-4 py-3">
-          <div class="flex items-center gap-1.5">
-            <span class="text-sm leading-5">Rows per page:</span>
-
-            <USelect
-              v-model="limit"
-              :items="[10, 20, 30, 40, 50]"
-              class="me-2 w-20"
-              size="xs"
-            />
-          </div>
-
+        <div class="flex justify-end items-center w-full px-4 py-3">
           <div class="flex gap-1.5 items-center">
             <UDropdownMenu
               v-if="selectedRows.length > 1"
@@ -225,33 +268,16 @@
           :loading="status === 'pending'"
           :data="data.jobs"
           class="w-full flex-1 max-h-[612px]"
-          @select="select"
+          @select="onSelectRow"
         />
 
         <template #footer>
           <div class="flex flex-wrap justify-between items-center">
             <div>
               <span class="text-sm leading-5">
-                Showing
-                <span class="font-medium">{{ page }}</span>
-                to
-                <span class="font-medium">{{ data.pageCount }}</span>
-                of
-                <span class="font-medium">{{ data.total }}</span>
-                results
+                {{ data?.jobs?.length || 0 }} job(s)
               </span>
             </div>
-            <UPagination
-              v-model:page="page"
-              :items-per-page="data.limit"
-              :total="data.total"
-              :to="(page: number) => ({
-                query: {
-                  ...route.query,
-                  page,
-                },
-              })"
-            />
           </div>
         </template>
       </UCard>
@@ -264,7 +290,7 @@ import { z } from 'zod'
 import type { Ref } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
-import type { QueueData, Job } from '../../types'
+import type { Job } from '../../types'
 import type { Form, FormSubmitEvent } from '#ui/types'
 import {
   useRoute,
@@ -273,7 +299,6 @@ import {
   ref,
   useQueueSubscription,
   computed,
-  useRouter,
   useTemplateRef,
   h,
   reactive,
@@ -282,10 +307,12 @@ import { UBadge, UProgress, UDropdownMenu, UButton } from '#components'
 
 const route = useRoute()
 
-const {
-  data: queue,
-  refresh,
-} = await useFetch<QueueData>(`/api/_queue/${route.query?.name}`, {
+const { refresh } = await useFetch(`/api/_queue/${route.query?.name}`, {
+  method: 'GET',
+})
+
+// Per-queue metrics
+const { data: metrics, refresh: refreshMetrics } = await useFetch(`/api/_queue/${route.query?.name}/metrics`, {
   method: 'GET',
 })
 
@@ -312,24 +339,18 @@ function select(id: string) {
   })
 }
 
+function onSelectRow(row: any) {
+  const id = typeof row?.getValue === 'function' ? row.getValue('id') : (row?.original?.id || row?.id)
+  if (id) select(id)
+}
+
 const jobStates = ['active', 'completed', 'delayed', 'failed', 'paused', 'prioritized', 'waiting', 'waiting-children']
 const filters = ref([])
-// @ts-ignore
-const page = ref(Number.parseInt(route.query?.page) || 1)
-// @ts-ignore
-const limit = ref(Number.parseInt(route.query?.limit) || 20)
-
-const router = useRouter()
+// Pagination currently not supported server-side; keep client defaults if needed
 
 const updateJobStateFilter = () => {
-  page.value = 1
-  // set page to 1
-  router.replace({
-    query: {
-      ...route.query,
-      page: 1,
-    },
-  })
+  // No server-side pagination; trigger refresh if needed
+  refreshJobs()
 }
 
 const {
@@ -338,8 +359,7 @@ const {
   refresh: refreshJobs,
 } = await useFetch(`/api/_queue/${route.query?.name}/job`, {
   query: {
-    limit: limit,
-    page: page,
+    // limit, page are currently ignored by the API
     filter: filters,
   },
 })
@@ -412,7 +432,7 @@ const columns: TableColumn<Job>[] = [{
       'div',
       { class: 'text-right' },
       h(
-        UDropdownMenu,
+        (UDropdownMenu as any),
         {
           content: {
             align: 'end',
@@ -455,26 +475,31 @@ useQueueSubscription(queueName.value, {
     console.log(event)
     refresh()
     refreshJobs()
+    refreshMetrics()
   },
   onFailed: (event) => {
     console.log(event)
     refresh()
     updateJob(event.jobId, 'state', 'failed')
+    refreshMetrics()
   },
   onWaiting: (event) => {
     console.log(event)
     refresh()
     updateJob(event.jobId, 'state', 'waiting')
+    refreshMetrics()
   },
   onActive: (event) => {
     console.log(event)
     refresh()
     updateJob(event.jobId, 'state', 'active')
+    refreshMetrics()
   },
   onAdded: (event) => {
     console.log(event)
     refresh()
     refreshJobs()
+    refreshMetrics()
   },
   onProgress: (event) => {
     console.log(event)
@@ -482,6 +507,7 @@ useQueueSubscription(queueName.value, {
     // Currently update job is not working because of shallowRef used by tanstack table -> check out new way for updating manually
     // updateJob(event.jobId, 'progress', event?.data || 0)
     refreshJobs()
+    refreshMetrics()
   },
 })
 
@@ -537,5 +563,12 @@ const createJob = async (event: FormSubmitEvent<JobFormSchema>) => {
       job: resp.id,
     },
   })
+}
+
+const togglePause = async () => {
+  const paused = !!metrics.value?.paused
+  const action = paused ? 'resume' : 'pause'
+  await $fetch(`/api/_queue/${route.query?.name}/${action}`, { method: 'POST' })
+  await refreshMetrics()
 }
 </script>

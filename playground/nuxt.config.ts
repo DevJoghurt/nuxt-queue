@@ -1,7 +1,8 @@
 export default defineNuxtConfig({
   modules: [
     '@nuxt/ui',
-    '../src/module'
+    'nuxt-mcp',
+    '../src/module',
   ],
 
   devtools: {

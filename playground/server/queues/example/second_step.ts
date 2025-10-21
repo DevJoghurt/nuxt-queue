@@ -1,0 +1,33 @@
+export const config = defineQueueConfig({
+  // Optional: let queue name default to file name ("second_step")
+  flow: {
+    // Must match the flow id from first_step
+    id: 'example-flow',
+    role: 'step',
+    // This worker handles the "second_step" job name
+    step: 'second_step',
+    // Must match the emit from first_step
+    triggers: ['first_step.completed'],
+  },
+})
+
+// wait function
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+export default defineQueueWorker(
+  async (input, ctx) => {
+    await ctx.state.set('second_step', {
+      test: 'step 2',
+    })
+    // Access Motia-style context
+    ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, { jobId: ctx.jobId, traceId: ctx.traceId })
+
+    for (let i = 0; i < 5; i++) {
+      ctx.logger.log('info', `Second step progress ${i + 1}/5`, { progress: i + 1 })
+      await wait(500)
+    }
+
+    return {
+      ok: true,
+    }
+  })

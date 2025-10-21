@@ -1,17 +1,5 @@
-import {
-  defineEventHandler,
-  getRouterParam,
-  $useWorker,
-} from '#imports'
+import { defineEventHandler, createError } from '#imports'
 
-export default defineEventHandler(async (event) => {
-  const id = getRouterParam(event, 'id') || ''
-
-  const { closeWorker } = $useWorker()
-
-  await closeWorker(id)
-
-  return {
-    success: true,
-  }
+export default defineEventHandler(async (_event) => {
+  throw createError({ statusCode: 501, statusMessage: 'Stopping workers manually is not supported. Worker lifecycle is managed by the module.' })
 })

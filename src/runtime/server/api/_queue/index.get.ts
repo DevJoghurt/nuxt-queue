@@ -1,28 +1,17 @@
-import type { JobCounts, QueueData } from '../../../types'
-import { $useQueue } from '../../utils/useQueue'
-import {
-  defineEventHandler,
-  useRuntimeConfig,
-} from '#imports'
+import { defineEventHandler, useRuntimeConfig, $useQueueRegistry } from '#imports'
 
 export default defineEventHandler(async () => {
-  const { getQueues } = $useQueue()
-  const { queues } = useRuntimeConfig().queue
-
-  const registeredQueues = getQueues()
-
-  const data = [] as QueueData[]
-
-  for (const queue of registeredQueues) {
-    const jobs = await queue.getJobCounts() as JobCounts
-    data.push({
-      name: queue.name,
-      active: await queue.isPaused() ? false : true,
-      jobs,
-      origin: queues[queue.name]?.origin,
-      worker: await queue.getWorkersCount(),
-    })
+  const rc: any = useRuntimeConfig()
+  const cfgQueues = (rc?.queue?.queues || {}) as Record<string, any>
+  const registry = $useQueueRegistry() as any
+  const names = new Set<string>()
+  for (const q in cfgQueues) names.add(q)
+  if (registry?.workers?.length) {
+    for (const w of registry.workers as Array<{ queue: string }>) names.add(w.queue)
   }
-
-  return data
+  // Minimal, provider-agnostic response
+  return Array.from(names).map(name => ({
+    name,
+    origin: cfgQueues[name]?.origin,
+  }))
 })

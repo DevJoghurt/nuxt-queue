@@ -1,21 +1,18 @@
-import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   defineNuxtModule,
   createResolver,
   addServerScanDir,
-  addServerImportsDir,
   addServerImports,
+  addTemplate,
   addImportsDir,
   addComponent,
   addComponentsDir,
-  installModule,
 } from '@nuxt/kit'
 import defu from 'defu'
-import { getRollupConfig, type RollupConfig } from './builder/config'
-import { watchRollupEntry, buildWorker } from './builder/bundler'
-import { initializeWorker, type WorkerLayerPaths } from './utils'
+import { compileRegistryFromServerWorkers, type LayerInfo } from './registry'
 import type { ModuleOptions, QueueOptions, RegisteredWorker } from './types'
+import { debounce } from 'perfect-debounce'
 import type {} from '@nuxt/schema'
 
 const meta = {
@@ -31,6 +28,22 @@ declare module '@nuxt/schema' {
       redis: ModuleOptions['redis']
       queues: Record<string, Omit<QueueOptions, 'connection'>>
       workers: RegisteredWorker[]
+      // compiled registry snapshot (JSON-safe)
+      registry?: any
+      state?: {
+        name?: 'redis' | 'postgres'
+        namespace?: string
+        autoScope?: 'always' | 'flow' | 'never'
+        cleanup?: {
+          strategy?: 'never' | 'immediate' | 'ttl' | 'on-complete'
+          ttlMs?: number
+        }
+      }
+      eventStore?: {
+        name?: 'redis' | 'postgres' | 'memory'
+        mode?: 'streams' | 'fallback'
+        streams?: any
+      }
     }
   }
 }
@@ -46,12 +59,15 @@ export default defineNuxtModule<ModuleOptions>({
       port: 6379,
     },
   },
+  moduleDependencies: {
+    'json-editor-vue/nuxt': {
+      version: '0.18.1',
+    },
+  },
   async setup(options, nuxt) {
     const { resolve } = createResolver(import.meta.url)
 
     addServerScanDir(resolve('./runtime/server'))
-
-    addServerImportsDir(resolve('./runtime/handlers'))
 
     addImportsDir(resolve('./runtime/composables'))
 
@@ -66,6 +82,19 @@ export default defineNuxtModule<ModuleOptions>({
         filePath: resolve('./runtime/app/index.vue'),
         global: true,
       })
+
+      // Register additional UI pages as components to avoid local TS imports
+      addComponent({
+        name: 'QueueEvents',
+        filePath: resolve('./runtime/app/events/index.vue'),
+        global: true,
+      })
+
+      addComponent({
+        name: 'QueueFlows',
+        filePath: resolve('./runtime/app/flows/index.vue'),
+        global: true,
+      })
     }
 
     // add jsoneditor to vite optimize -> for esm support
@@ -73,85 +102,207 @@ export default defineNuxtModule<ModuleOptions>({
       include: ['vanilla-jsoneditor'],
     })
 
-    // add json-editor-vue module
-    installModule('json-editor-vue/nuxt')
-
-    // Alias for worker config with meta information
-    nuxt.hook('nitro:config', (nitroConfig) => {
-      // TODO: better resolving of bullmq module by using nuxt resolver tools
-      nitroConfig.externals?.traceInclude?.push('node_modules/bullmq/dist/cjs/classes/main.js')
-      // add websocket support
-      nitroConfig.experimental = defu(nitroConfig.experimental, {
-        websocket: true,
+    nuxt.hook('nitro:config', (nitro) => {
+      // Ensure Redis storage is configured for unstorage so StateProvider persists to Redis.
+      nitro.storage = defu(nitro.storage || {}, {
+        redis: {
+          driver: 'redis',
+          host: options.redis?.host,
+          port: options.redis?.port,
+          username: options.redis?.username,
+          password: options.redis?.password,
+          // base namespace handled in provider; keep storage base default
+        },
       })
     })
-
-    const layers = [] as WorkerLayerPaths[]
-    for (const layer of nuxt.options._layers) {
-      // add server directories from layers
-      layers.push({
-        rootDir: layer.config.rootDir,
-        serverDir: layer.config?.serverDir || join(layer.config.rootDir, 'server'),
-      })
-    }
-
-    // initialize worker and queues
-    const { queues, workers } = await initializeWorker({
-      layers,
-      workerDir: options?.dir || 'queues',
-      buildDir: nuxt.options.buildDir,
-    })
-
-    // add in-process worker composable
-    addServerImports([{
-      name: 'useWorkerProcessor',
-      as: '$useWorkerProcessor',
-      from: resolve(nuxt.options.buildDir, 'inprocess-worker-composable'),
-    }])
 
     const runtimeConfig = nuxt.options.runtimeConfig
 
     runtimeConfig.queue = defu(runtimeConfig.queue || {}, {
-      runtimeDir: nuxt.options.dev ? `${nuxt.options.buildDir}/worker` : 'build',
       redis: options.redis,
-      queues: defu(queues, options.queues),
-      workers,
+      queues: {},
+      workers: [],
+      state: { name: 'redis', namespace: 'nq', autoScope: 'always', cleanup: { strategy: 'never' } },
+      eventStore: { name: 'redis' },
+    }) as any
+
+    // Build real registry snapshot from disk
+    const layerInfos: LayerInfo[] = nuxt.options._layers.map(l => ({
+      rootDir: l.config.rootDir,
+      serverDir: l.config?.serverDir || join(l.config.rootDir, 'server'),
+    }))
+    const compiledRegistry = await compileRegistryFromServerWorkers(layerInfos, options?.dir || 'queues')
+    // augment with defaults and metadata
+    const compiledWithMeta = defu(compiledRegistry, {
+      version: 1,
+      compiledAt: new Date().toISOString(),
+      provider: { name: 'bullmq' },
+      logger: { name: 'console', level: 'info' },
+      state: { name: 'redis', namespace: 'nq', autoScope: 'always', cleanup: { strategy: 'never' } },
+      eventStore: { name: 'redis' },
+      runner: { ts: { isolate: 'inprocess' }, py: { enabled: false, cmd: 'python3', importMode: 'file' } },
+      workers: [],
+      flows: {},
+      eventIndex: {},
+    })
+    // Ensure plain JSON snapshot to avoid readonly/proxy issues in Nitro normalization
+    const compiledSnapshot = JSON.parse(JSON.stringify(compiledWithMeta))
+    // Keep a mutable reference for dev updates
+    let lastCompiledRegistry = compiledSnapshot
+
+    // Emit a template so changes trigger HMR/rebuilds even if only runtimeConfig changes
+    addTemplate({
+      filename: 'queue-registry.ts',
+      write: true,
+      getContents: () => `// auto-generated by nuxt-queue
+  export const registry = ${JSON.stringify(lastCompiledRegistry, null, 2)} as const;
+
+  export type QueueRegistry = typeof registry;
+
+  export const useQueueRegistry = (): QueueRegistry => registry;
+
+  export default useQueueRegistry;
+  `,
     })
 
-    // start build process
-    let rollupConfig = null as null | RollupConfig
+    // Template: bundle worker handlers into Nitro context so imports work at runtime
+    addTemplate({
+      filename: 'worker-handlers.ts',
+      write: true,
+      getContents: () => {
+        // Build imports for discovered in-process workers from the compiled registry
+        const regWorkers = (lastCompiledRegistry?.workers || []) as any[]
+        const lines: string[] = []
+        const mappings: string[] = []
+        // Keep handlers for TS in-process (and anything not explicitly marked as task)
+        // Python entries are ignored here; they use a different runner.
+        regWorkers
+          .filter((w: any) => w?.kind === 'ts' && (w?.runtype ? w.runtype !== 'task' : (lastCompiledRegistry?.runner?.ts?.isolate !== 'task')))
+          .forEach((w: any, i: number) => {
+            const varName = `h${i}`
+            const src = (w && (w.absPath || w.abs || (w.cwd && w.file && join(w.cwd, w.file)) || w.entry || w.path)) || ''
+            if (!src) return
+            // Import using the real absolute path including extension to avoid resolution issues
+            const importPath = String(src)
+            lines.push(`import ${varName} from '${importPath}'`)
+            const key = String(w?.name || w?.queue || `w${i}`)
+            mappings.push(`'${key}': ${varName}`)
+          })
+        return `// auto-generated by nuxt-queue
+${lines.join('\n')}
 
-    // BUILD SANDBOXED WORKER for production
-    nuxt.hook('nitro:build:public-assets', async (nitro) => {
-      if (workers.filter(w => w.runtype === 'sandboxed').length === 0) return // no building if no entry files
-      // add worker directory
-      mkdirSync(join(nitro.options.output.dir, 'worker'), {
-        recursive: true,
-      })
-      // create build config
-      rollupConfig = getRollupConfig(workers, {
-        buildDir: nitro.options.output.serverDir,
-        nitro: nitro.options,
-      })
+export const handlers = {
+  ${mappings.join(',\n  ')}
+} as const
 
-      await buildWorker(rollupConfig)
+export type WorkerHandlers = typeof handlers;
+
+export const useWorkerHandlers = (): WorkerHandlers => handlers;
+
+export default useWorkerHandlers;
+`
+      },
     })
 
-    // BUILD SANDBOXED WORKER ONLY IN DEV MODE
+    // add composables
+    addServerImports([{
+      name: 'useQueueRegistry',
+      as: '$useQueueRegistry',
+      from: resolve(nuxt.options.buildDir, 'queue-registry'),
+    }, {
+      name: 'useLoggerProvider',
+      as: '$useLoggerProvider',
+      from: resolve('./runtime/server/providers/logger/index'),
+    }, {
+      name: 'setLoggerProvider',
+      as: '$setLoggerProvider',
+      from: resolve('./runtime/server/providers/logger/index'),
+    }, {
+      name: 'useQueueProvider',
+      as: '$useQueueProvider',
+      from: resolve('./runtime/server/providers/queue/index'),
+    }, {
+      name: 'setQueueProvider',
+      as: '$setQueueProvider',
+      from: resolve('./runtime/server/providers/queue/index'),
+    }, {
+      name: 'useStateProvider',
+      as: '$useStateProvider',
+      from: resolve('./runtime/server/providers/state/index'),
+    }, {
+      name: 'setStateProvider',
+      as: '$setStateProvider',
+      from: resolve('./runtime/server/providers/state/index'),
+    }, {
+      name: 'useWorkerHandlers',
+      as: '$useWorkerHandlers',
+      from: resolve(nuxt.options.buildDir, 'worker-handlers'),
+    }, {
+      name: 'useEventStoreProvider',
+      as: '$useEventStoreProvider',
+      from: resolve('./runtime/server/providers/events/index'),
+    }, {
+      name: 'setEventStoreProvider',
+      as: '$setEventStoreProvider',
+      from: resolve('./runtime/server/providers/events/index'),
+    }, {
+      name: 'useEventBus',
+      as: '$useEventBus',
+      from: resolve('./runtime/server/providers/events/bus'),
+    }, {
+      name: 'useStreamNames',
+      as: '$useStreamNames',
+      from: resolve('./runtime/server/providers/events/streams'),
+    }])
+
+    // Small helper to refresh registry and re-generate app (dev)
+    const refreshRegistry = async (reason: string, changedPath?: string) => {
+      const queuesRel = options?.dir || 'queues'
+      const updatedRegistry = await compileRegistryFromServerWorkers(layerInfos, queuesRel)
+      // No merging: the compiled registry is the single source of truth
+      lastCompiledRegistry = JSON.parse(JSON.stringify(defu(updatedRegistry, {
+        version: 1,
+        compiledAt: new Date().toISOString(),
+        provider: { name: 'bullmq' },
+        logger: { name: 'console', level: 'info' },
+        state: { name: 'redis', namespace: 'nq' },
+        eventStore: { name: 'redis' },
+        runner: { ts: { isolate: 'inprocess' }, py: { enabled: false, cmd: 'python3', importMode: 'file' } },
+        workers: [],
+        flows: {},
+        eventIndex: {},
+      })))
+      console.log(`[nuxt-queue] registry refreshed (${reason})`, changedPath || '')
+      await nuxt.callHook('builder:generateApp')
+    }
+
     if (nuxt.options.dev) {
-      nuxt.hook('nitro:init', (nitro) => {
-        if (workers.filter(w => w.runtype === 'sandboxed').length === 0) return // no building if no entry files
-        // add worker directory
-        mkdirSync(join(nuxt.options.buildDir, 'worker'), {
-          recursive: true,
+      // Watch for changes in queues and rebuild registry to keep runtime config fresh
+      const queuesRel = options?.dir || 'queues'
+      const jobFilter = (p: string) => {
+        const norm = p.replace(/\\/g, '/')
+        return norm.includes(`/server/${queuesRel}/`)
+      }
+
+      // Add a Vite dev-server watcher to ensure changes are caught even if builder:watch doesn't fire
+      nuxt.hook('vite:serverCreated', (server) => {
+        const watchDirs: string[] = []
+        for (const layer of nuxt.options._layers) {
+          const serverDir = layer.config?.serverDir || join(layer.config.rootDir, 'server')
+          watchDirs.push(join(serverDir, queuesRel))
+        }
+        // Start watching directories
+        server.watcher.add(watchDirs)
+        const debouncedRefresh = debounce(async (event: string, file: string) => {
+          const norm = file.replace(/\\/g, '/')
+          if (!jobFilter(norm)) return
+          await refreshRegistry(`vite:${event}`, file)
+        }, 100)
+        server.watcher.on('all', async (event, file) => {
+          debouncedRefresh(event, file)
         })
-        rollupConfig = getRollupConfig(workers, {
-          buildDir: nuxt.options.buildDir,
-          nitro: nitro.options,
-        })
-        watchRollupEntry(rollupConfig)
+        console.log('[nuxt-queue] vite watcher attached for', watchDirs)
       })
     }
-    // ONLY IN DEV MODE
   },
 })

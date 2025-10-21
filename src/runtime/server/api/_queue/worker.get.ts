@@ -1,18 +1,13 @@
-import { $useQueue } from '../../utils/useQueue'
-import { defineEventHandler } from '#imports'
+import { defineEventHandler, $useQueueRegistry } from '#imports'
 
 export default defineEventHandler(async () => {
-  const workerList = []
-
-  const { getQueues } = $useQueue()
-
-  const queues = getQueues()
-
-  // count active processes
-  for (const q of queues) {
-    const worker = await q.getWorkers()
-    workerList.push(...worker)
-  }
-
-  return workerList
+  const registry = $useQueueRegistry() as any
+  const workers = (registry?.workers || []).map((w: any) => ({
+    id: w.id,
+    queue: w.queue,
+    kind: w.kind,
+    runtype: w.runtype || 'inprocess',
+    filePath: w.filePath,
+  }))
+  return workers
 })

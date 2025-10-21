@@ -1,32 +1,5 @@
-import {
-  defineEventHandler,
-  getRouterParam,
-  useRuntimeConfig,
-  $useWorker,
-} from '#imports'
+import { defineEventHandler, createError } from '#imports'
 
-export default defineEventHandler(async (event) => {
-  const name = getRouterParam(event, 'name')
-
-  if (!name) {
-    throw 'Worker name is required'
-  }
-
-  const { workers, queues } = useRuntimeConfig().queue
-
-  // @ts-ignore
-  const w = workers.find(worker => worker.name === name)
-  const q = queues[name] || {}
-
-  if (!w || !q) {
-    throw `Worker with ${name} not found`
-  }
-
-  const { createWorker } = $useWorker()
-
-  createWorker(name, w.script)
-
-  return {
-    status: 'success',
-  }
+export default defineEventHandler(async (_event) => {
+  throw createError({ statusCode: 501, statusMessage: 'Worker process control is managed by the module; manual start is not supported.' })
 })

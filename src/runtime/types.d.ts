@@ -29,3 +29,8 @@ export type QueueData = {
   jobs: JobCounts
   worker: number
 }
+
+// Declarations for worker authoring helpers available via auto-imports at runtime
+// These declarations make TS happy in worker files and tests.
+export declare function defineQueueWorker(processor: (...args: any[]) => any): any
+export declare function defineQueueConfig(cfg: any): any

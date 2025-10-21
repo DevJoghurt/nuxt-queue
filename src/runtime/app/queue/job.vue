@@ -7,17 +7,17 @@
           label: 'Queue',
           to: '?tab=queue',
         }, {
-          label: job.queue,
-          to: `?tab=queue&name=${job.queue}`,
+          label: job?.queue || '',
+          to: `?tab=queue&name=${job?.queue || ''}`,
         }, {
-          label: job.id,
+          label: job?.id || '',
         },
       ]"
     />
     <section class="flex justify-between items-center py-4">
       <div>
         <h1 class="text-xl font-bold">
-          Job - {{ job.name }}
+          Job - {{ job?.name || '' }}
         </h1>
         <p class="text-sm font-thin text-gray-500">
           Job details
@@ -43,23 +43,47 @@
     </section>
     <div class="flex flex-col lg:flex-row py-8 space-y-4 lg:space-y-0 lg:space-x-4">
       <div class="w-full lg:w-2/3">
-        <UCard
-          class="w-full"
-          :ui=" {
-            root: 'bg-zinc-800 text-white',
-          }"
-        >
+        <UCard class="w-full">
           <template #header>
-            <h2 class="text-lg font-bold">
-              Logs
-            </h2>
+            <div class="flex items-center justify-between">
+              <h2 class="text-lg font-bold">
+                Logs
+              </h2>
+              <div class="flex gap-2 items-center">
+                <UInput
+                  v-model="limitStr"
+                  class="w-24"
+                  placeholder="limit"
+                />
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="outline"
+                  class="cursor-pointer"
+                  @click="loadMore"
+                >
+                  More
+                </UButton>
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="outline"
+                  class="cursor-pointer"
+                  @click="toggleTail"
+                >
+                  {{ open ? 'Stop tail' : 'Tail' }}
+                </UButton>
+                <span
+                  v-if="reconnecting"
+                  class="text-xs text-amber-500"
+                >Reconnecting…</span>
+              </div>
+            </div>
           </template>
-          <div class="h-96 overflow-y-auto">
-            <pre
-              v-for="log of job?.logs"
-              :key="log"
-            >{{ log }}</pre>
-          </div>
+          <TimelineList
+            :items="logEvents"
+            height-class="h-96"
+          />
         </UCard>
       </div>
       <div class="w-full lg:w-1/3">
@@ -135,13 +159,13 @@
                   v-if="item.key === 'data'"
                   class="overflow-x-auto"
                 >
-                  <pre>{{ job.data }}</pre>
+                  <pre>{{ job?.data }}</pre>
                 </div>
                 <div
                   v-if="item.key === 'return'"
                   class="overflow-x-auto"
                 >
-                  <pre>{{ job.returnvalue }}</pre>
+                  <pre>{{ job?.returnvalue }}</pre>
                 </div>
               </div>
             </UCard>
@@ -154,13 +178,17 @@
 
 <script lang="ts" setup>
 import type { Ref } from '#imports'
+import type { Job } from '../../types'
 import {
   useRoute,
   navigateTo,
   useFetch,
   ref,
   useQueueSubscription,
+  onMounted,
 } from '#imports'
+import useEventSSE from '../../composables/useEventSSE'
+import TimelineList from '../../components/TimelineList.vue'
 
 const tabItems = [{
   key: 'status',
@@ -178,14 +206,47 @@ const route = useRoute()
 const {
   data: job,
   refresh,
-} = await useFetch<QueueData>(`/api/_queue/${route.query?.name}/job/${route.query?.job}`, {
+} = await useFetch<Job & { queue: string }>(`/api/_queue/${route.query?.name}/job/${route.query?.job}`, {
   method: 'GET',
 })
 
 const queueName = ref(route.query?.name) as Ref<string>
 
-const progress = ref(job.value.progress || 0)
-const jobId = ref(job.value.id || null)
+const progress = ref((job.value as any)?.progress || 0)
+const jobId = ref((job.value as any)?.id || null)
+
+// Logs timeline state
+const logEvents = ref<any[]>([])
+const lastLogId = ref<string | undefined>(undefined)
+const limitStr = ref<string>('100')
+const { start: startSSE, stop: stopSSE, open, reconnecting } = useEventSSE()
+
+const loadMore = async () => {
+  if (!queueName.value || !jobId.value) return
+  const limit = Number(limitStr.value || '100')
+  const url = `/api/_queue/${encodeURIComponent(queueName.value)}/job/${encodeURIComponent(String(jobId.value))}/logs?limit=${limit}${lastLogId.value ? `&fromId=${encodeURIComponent(lastLogId.value)}` : ''}`
+  const recs = await $fetch<any[]>(url)
+  if (recs && recs.length) {
+    logEvents.value.push(...recs)
+    lastLogId.value = recs[recs.length - 1].id
+  }
+}
+
+const toggleTail = async () => {
+  if (open.value) return stopSSE()
+  if (!queueName.value || !jobId.value) return
+  const url = `/api/_queue/${encodeURIComponent(queueName.value)}/job/${encodeURIComponent(String(jobId.value))}/logs/tail`
+  startSSE(url, (msg) => {
+    if (msg?.record) {
+      logEvents.value.push(msg.record)
+      lastLogId.value = msg.record.id
+    }
+  }, { autoReconnect: true, maxRetries: 30, baseDelayMs: 500, maxDelayMs: 10000 })
+}
+
+onMounted(async () => {
+  await loadMore()
+})
 
 useQueueSubscription(queueName.value, {
   onCompleted: async (event) => {
@@ -201,21 +262,21 @@ useQueueSubscription(queueName.value, {
 })
 
 const reCreateJob = async () => {
-  job.value = await $fetch<QueueData>(`/api/_queue/${route.query?.name}/job`, {
+  const created = await $fetch<{ id: string }>(`/api/_queue/${route.query?.name}/job`, {
     method: 'POST',
     body: {
-      name: job.value.name,
-      data: JSON.stringify(job.value.data),
-      options: job.value.options,
+      name: job.value?.name,
+      data: JSON.stringify(job.value?.data),
+      options: (job.value as any)?.options,
     },
   })
-  jobId.value = job.value.id
+  jobId.value = created.id
   progress.value = 0
   await navigateTo({
     query: {
       tab: 'queue',
       name: route.query?.name,
-      job: job.value.id,
+      job: created.id,
     },
   })
 }

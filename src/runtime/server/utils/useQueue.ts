@@ -33,12 +33,11 @@ function createEventListeners(events: QueueEventTypes, eventInstance: EventInsta
 }
 
 export const $useQueue = () => {
-  const { redis: {
-    host,
-    port,
-    password,
-    username,
-  } } = useRuntimeConfig().queue
+  const runtime = useRuntimeConfig().queue as any
+  const host: string = runtime?.redis?.host
+  const port: number = runtime?.redis?.port
+  const password: string | undefined = runtime?.redis?.password
+  const username: string | undefined = runtime?.redis?.username
   const logger = consola.create({}).withTag('QUEUE')
 
   const redisOptions: RedisOptions = {

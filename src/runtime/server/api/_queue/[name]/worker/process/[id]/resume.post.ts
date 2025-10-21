@@ -1,19 +1,5 @@
-import {
-  defineEventHandler,
-  getRouterParam,
-  $useWorker,
-} from '#imports'
+import { defineEventHandler, createError } from '#imports'
 
-export default defineEventHandler(async (event) => {
-  const id = getRouterParam(event, 'id') || ''
-
-  const { getWorker } = $useWorker()
-
-  const worker = getWorker(id)
-
-  worker.resume()
-
-  return {
-    status: 'success',
-  }
+export default defineEventHandler(async (_event) => {
+  throw createError({ statusCode: 501, statusMessage: 'Resuming individual workers is not supported. Worker lifecycle is managed by the module.' })
 })
