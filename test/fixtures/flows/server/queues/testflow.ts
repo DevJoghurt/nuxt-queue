@@ -1,14 +1,17 @@
+// Local stub for tests: registry stubs defineQueueWorker at runtime
+// but TypeScript needs a declaration here.
+declare const defineQueueWorker: any
 export const config = {
   flow: {
-    id: 'sample-flow',
-    role: 'main',
+    name: ['sample-flow'],
+    role: 'entry',
     step: 'start',
-    // triggers/emits optional for main
+    // triggers/emits optional for entry
   },
 }
 
 export default defineQueueWorker(
-  async (input, ctx) => {
+  async (input: any, ctx: any) => {
     await ctx.state.set('lastEmail', {
       test: 'sdfdsf',
     })

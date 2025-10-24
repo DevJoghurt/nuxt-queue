@@ -1,4 +1,4 @@
-import { $useEventBus, defineWebSocketHandler } from '#imports'
+import { useEventManager, defineWebSocketHandler } from '#imports'
 
 const unsubMap = new WeakMap<any, () => void>()
 
@@ -9,7 +9,7 @@ export default defineWebSocketHandler({
   async message(peer, message) {
     try {
       const payload = JSON.parse(String(message)) as any
-      const { subscribeStream } = $useEventBus()
+      const { subscribeStream } = useEventManager()
       if (payload?.type === 'subscribe' && typeof payload.stream === 'string') {
         const unsub = subscribeStream(payload.stream, (e) => {
           peer.send(JSON.stringify({ v: 1, stream: payload.stream, event: e.kind, record: e }))

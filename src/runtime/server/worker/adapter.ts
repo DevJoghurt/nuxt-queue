@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq'
-import { createBullMQProcessor, type NodeHandler } from '../runner/node'
+import { createBullMQProcessor, type NodeHandler } from './runner/node'
 import { useRuntimeConfig } from '#imports'
 
 // Adapter registers TS handlers as provider-native workers (BullMQ for now)

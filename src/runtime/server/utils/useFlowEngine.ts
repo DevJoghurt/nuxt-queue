@@ -1,25 +1,22 @@
-import { $useQueueRegistry, $useStateProvider, $useQueueProvider } from '#imports'
+import { $useQueueRegistry, useQueue, useEventManager } from '#imports'
 
-export const $useFlowEngine = () => {
+export const useFlowEngine = () => {
   const registry = $useQueueRegistry()
-  const provider = $useQueueProvider()
-  const state = $useStateProvider()
+  const queueAdapter = useQueue()
+  const eventsManager = useEventManager()
 
-  const startFlow = async (flowId: string, payload: any = {}) => {
-    const flow = (registry?.flows as Record<string, any>)?.[flowId]
-    if (!flow || !flow.main) throw new Error('Flow not found')
-    const id = await provider.enqueue(flow.main.queue, { name: flow.main.step, data: payload })
+  const startFlow = async (flowName: string, payload: any = {}) => {
+    const flow = (registry?.flows as Record<string, any>)?.[flowName]
+    if (!flow || !flow.entry) throw new Error('Flow not found')
+    const id = await queueAdapter.enqueue(flow.entry.queue, { name: flow.entry.step, data: payload })
     // Record a run index for this flow for quick listing and timeline lookup (use job id as correlationId)
     const corr = String(id)
-    const runKey = `flowrun:${flowId}:${corr}`
-    const meta = { id: corr, flowId, queue: flow.main.queue, step: flow.main.step, createdAt: new Date().toISOString() }
+    // Emit a flow.start event (derivable for timelines/projections without state)
     try {
-      await state.set(runKey, meta)
+      await eventsManager.publish({ kind: 'flow.start', data: { flowName } }, { flowId: corr, queue: flow.entry.queue, jobId: id })
     }
-    catch {
-      // best effort; runs listing will just be empty if storage fails
-    }
-    return { id, queue: flow.main.queue, step: flow.main.step, correlationId: corr }
+    catch { /* best-effort */ }
+    return { id, queue: flow.entry.queue, step: flow.entry.step, correlationId: corr }
   }
 
   const handleTrigger = async (trigger: string, payload: any = {}) => {
@@ -32,22 +29,25 @@ export const $useFlowEngine = () => {
       const corr = (payload && (payload.correlationId || payload.traceId)) || undefined
       if (corr) jobId = `${String(corr)}__${t.step}`
       const opts = jobId ? { jobId } : undefined
-      const id = await provider.enqueue(t.queue, { name: t.step, data: payload, opts })
+      const id = await queueAdapter.enqueue(t.queue, { name: t.step, data: payload, opts })
       enqueued.push({ ...t, id })
     }
     return enqueued
   }
 
-  const hasTriggered = async (correlationId: string, step: string) => {
-    const key = `flow:${correlationId}:step:${step}`
-    const done = await state.get<boolean>(key)
-    return !!done
+  // Idempotency via jobId uniqueness: <correlationId>__<step>
+  // Check by querying the QueueProvider for existence of such a job on the target queue.
+  const hasTriggered = async (correlationId: string, step: string, queue: string) => {
+    const jobId = `${String(correlationId)}__${step}`
+    try {
+      const job = await queueAdapter.getJob(queue, jobId)
+      return !!job
+    }
+    catch { return false }
   }
 
-  const markTriggered = async (correlationId: string, step: string) => {
-    const key = `flow:${correlationId}:step:${step}`
-    await state.set(key, true)
-  }
+  // No-op: jobId uniqueness ensures idempotency; projections can infer from events.
+  const markTriggered = async (_correlationId: string, _step: string, _queue?: string) => {}
 
   return { startFlow, handleTrigger, hasTriggered, markTriggered }
 }

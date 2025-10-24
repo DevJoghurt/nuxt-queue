@@ -1,10 +1,10 @@
 export const config = defineQueueConfig({
-  queue: 'email',
+  queue: { name: 'email' },
   flow: {
-    id: 'signup',
+    name: ['signup'],
     role: 'step',
     step: 'sendEmail',
-    triggers: ['user.created'],
+    subscribes: ['user.created'],
   },
 })
 

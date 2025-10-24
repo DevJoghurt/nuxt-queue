@@ -1,10 +1,10 @@
 export const config = defineQueueConfig({
   flow: {
-    id: 'resize2',
-    role: 'main',
+    name: ['resize2'],
+    role: 'entry',
     step: 'resize',
     emits: ['resize.completed'],
-    triggers: 'thumbnail',
+    subscribes: ['thumbnail'],
   },
 })
 

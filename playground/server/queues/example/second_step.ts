@@ -1,13 +1,16 @@
 export const config = defineQueueConfig({
+  queue: {
+    name: 'example_queue',
+  },
   // Optional: let queue name default to file name ("second_step")
   flow: {
-    // Must match the flow id from first_step
-    id: 'example-flow',
+    // Must include the flow name(s) this step participates in
+    name: ['example-flow'],
     role: 'step',
     // This worker handles the "second_step" job name
     step: 'second_step',
     // Must match the emit from first_step
-    triggers: ['first_step.completed'],
+    subscribes: ['first_step.completed'],
   },
 })
 
@@ -24,7 +27,7 @@ export default defineQueueWorker(
 
     for (let i = 0; i < 5; i++) {
       ctx.logger.log('info', `Second step progress ${i + 1}/5`, { progress: i + 1 })
-      await wait(500)
+      await wait(2000)
     }
 
     return {

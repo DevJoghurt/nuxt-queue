@@ -1,9 +1,12 @@
 export const config = defineQueueConfig({
+  queue: {
+    name: 'example_queue',
+  },
   // Optional: let queue name default to file name ("first_step")
   flow: {
-    // Use a single flow id shared by all steps in this flow
-    id: 'example-flow',
-    role: 'main',
+    // Declare one or more flow names this step belongs to
+    name: ['example-flow'],
+    role: 'entry',
     // The job name (step) that will be enqueued when starting the flow
     step: 'first_step',
     // The event(s) this step will emit on completion (used by downstream triggers)
@@ -24,7 +27,7 @@ export default defineQueueWorker(
 
     for (let i = 0; i < 5; i++) {
       ctx.logger.log('info', `First step progress ${i + 1}/5`, { progress: i + 1 })
-      await wait(1000)
+      await wait(2000)
     }
 
     // Enqueue the next step in the flow after finishing this one.

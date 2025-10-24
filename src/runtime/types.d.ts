@@ -13,15 +13,6 @@ export type WorkerOptions = Omit<BullmqWorkerOptions, 'connection' | 'useWorkerT
 
 export type WorkerConfig = Record<string, WorkerOptions>
 
-export type JobCounts = {
-  active: number
-  completed: number
-  failed: number
-  delayed: number
-  waiting: number
-  paused: number
-}
-
 export type QueueData = {
   name: string
   origin: 'remote' | 'local'
