@@ -14,6 +14,7 @@ export default defineEventHandler(async (event) => {
   setHeader(event, 'Cache-Control', 'no-cache')
   setHeader(event, 'Connection', 'keep-alive')
   setHeader(event, 'Content-Type', 'text/event-stream; charset=utf-8')
+
   const unsub = flow.onFlow(String(runId), (e: any) => {
     if (DEBUG) console.log('[nq][sse][events] recv', { stream: e?.stream, id: e?.id, kind: e?.kind })
     void eventStream.push(JSON.stringify({ v: 1, stream: e?.stream, event: e.kind, record: e }))

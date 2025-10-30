@@ -1,6 +1,4 @@
-import {
-  defineEventHandler,
-  getRouterParam, createEventStream, setHeader, useRuntimeConfig, useStreamStore } from '#imports'
+import { defineEventHandler, getRouterParam, createEventStream, setHeader, useRuntimeConfig, useStreamStore } from '#imports'
 
 export default defineEventHandler(async (event) => {
   const rc: any = useRuntimeConfig()
@@ -8,11 +6,11 @@ export default defineEventHandler(async (event) => {
   const runId = getRouterParam(event, 'id')
   if (!runId) return 'missing run id'
 
+  // Projection stream: per-run steps patches
+  const stepsStream = `nq:proj:flow-steps:${String(runId)}`
   const store = useStreamStore()
-  // Hard-code the flow stream name to avoid depending on deprecated getters
-  const flowStream = `nq:flow:${String(runId)}`
 
-  if (DEBUG) console.log('[nq][sse][flow-run] subscribing', { runId, stream: flowStream })
+  if (DEBUG) console.log('[nq][sse][flow-steps] subscribing', { runId, stream: stepsStream })
 
   const eventStream = createEventStream(event)
   // Defensive headers for SSE / proxies
@@ -21,9 +19,9 @@ export default defineEventHandler(async (event) => {
   setHeader(event, 'Connection', 'keep-alive')
   setHeader(event, 'Content-Type', 'text/event-stream; charset=utf-8')
 
-  const unsub = store.subscribe(flowStream, (e) => {
-    if (DEBUG) console.log('[nq][sse][flow-run] recv', { id: e?.id, kind: e?.kind })
-    void eventStream.push(JSON.stringify({ v: 1, stream: flowStream, event: e.kind, record: e }))
+  const unsub = store.subscribe(stepsStream, (e) => {
+    if (DEBUG) console.log('[nq][sse][flow-steps] recv', { id: e?.id, kind: e?.kind })
+    void eventStream.push(JSON.stringify({ v: 1, stream: stepsStream, event: e.kind, record: e }))
   })
 
   eventStream.onClosed(async () => {

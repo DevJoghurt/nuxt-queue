@@ -19,20 +19,16 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 export default defineQueueWorker(
   async (input, ctx) => {
-    await ctx.state.set('first_step', {
-      test: 'step',
-    })
-    // Access Motia-style context
-    ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, { jobId: ctx.jobId, traceId: ctx.traceId })
+    // v0.4: Use flowId and flowName from context
+    ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, { jobId: ctx.jobId, flowId: ctx.flowId, flowName: ctx.flowName })
 
     for (let i = 0; i < 5; i++) {
       ctx.logger.log('info', `First step progress ${i + 1}/5`, { progress: i + 1 })
       await wait(2000)
     }
 
-    // Enqueue the next step in the flow after finishing this one.
-    // Pass correlationId so the engine can tie steps together and ensure idempotency.
-    await ctx.flow.handleTrigger('first_step.completed', { test: 'data from first step', correlationId: ctx.traceId })
+    // v0.4: Trigger next steps using flowId (no need to pass it explicitly, context provides it)
+    await ctx.flow.handleTrigger('first_step.completed', { test: 'data from first step' })
 
     return {
       ok: true,

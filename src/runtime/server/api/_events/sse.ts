@@ -1,8 +1,9 @@
-import { defineEventHandler, getQuery, createEventStream, useEventManager, setHeader, useRuntimeConfig } from '#imports'
+import { defineEventHandler, getQuery, createEventStream, useStreamStore, setHeader, useRuntimeConfig } from '#imports'
 
 export default defineEventHandler(async (event) => {
   const rc: any = useRuntimeConfig()
-  const { subscribeStream, getStreamNames } = useEventManager()
+  const store = useStreamStore()
+  const { names: getStreamNames } = store
   const DEBUG = rc?.queue?.debug?.events || process.env.NQ_DEBUG_EVENTS === '1'
   const eventStream = createEventStream(event)
   const q = getQuery(event)
@@ -15,7 +16,7 @@ export default defineEventHandler(async (event) => {
   setHeader(event, 'Content-Type', 'text/event-stream; charset=utf-8')
 
   // Bus subscription to forward events into SSE
-  const unsub = subscribeStream(stream, (e) => {
+  const unsub = store.subscribe(stream, (e) => {
     if (DEBUG) console.log('[nq][sse][events] recv', { stream, id: e?.id, kind: e?.kind })
     void eventStream.push(JSON.stringify({ v: 1, stream, event: e.kind, record: e }))
   })

@@ -8,6 +8,13 @@
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "run vitest",
+			"type": "shell",
+			"command": "yarn test",
+			"isBackground": false,
+			"group": "build"
 		}
 	]
 }

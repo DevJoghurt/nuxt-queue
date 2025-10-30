@@ -1,12 +1,13 @@
-import type { StreamAdapter, EventRecord, EventReadOptions, EventSubscription } from '../types'
+import type { StreamAdapter, EventReadOptions, EventSubscription } from '../types'
+import type { EventRecord } from '../../../types'
 
 export function createMemoryStreamAdapter(): StreamAdapter {
   const events = new Map<string, EventRecord[]>()
   const listeners = new Map<string, Set<(e: EventRecord) => void>>()
   return {
-    async append<T = any>(stream: string, e: Omit<EventRecord<T>, 'id' | 'ts' | 'stream'>): Promise<EventRecord<T>> {
+    async append(stream: string, e: Omit<EventRecord, 'id' | 'ts'>): Promise<EventRecord> {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`
-      const rec: EventRecord<T> = { ...(e as any), id, ts: new Date().toISOString(), stream }
+      const rec: any = { ...(e as any), id, ts: new Date().toISOString() }
       const list = events.get(stream) || []
       list.push(rec)
       events.set(stream, list)

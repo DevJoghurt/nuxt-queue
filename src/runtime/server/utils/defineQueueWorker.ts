@@ -14,7 +14,8 @@ export const defineQueueWorker: DefineQueueWorker = (handler) => {
   const wrapped: NodeHandler = async (input, ctx) => {
     // Lazily resolve provider and helpers at run time to avoid early init ordering issues
     const provider = useQueue()
-    const flow = useFlowEngine()
+    // Use ctx.flow if already provided (it has context-aware wrapper), otherwise create new
+    const flow = ctx.flow || useFlowEngine()
     const registry = $useQueueRegistry() as any
     const extended: ExtendedRunContext = {
       ...ctx,

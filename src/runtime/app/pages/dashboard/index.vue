@@ -143,7 +143,7 @@ const loadingMetrics = ref(false)
 const refreshMetrics = async () => {
   try {
     loadingMetrics.value = true
-    const m = await $fetch<Record<string, any>>('/api/_queue/metrics')
+    const m = await $fetch<Record<string, any>>('/api/_queues/metrics')
     metrics.value = m || {}
   }
   finally {

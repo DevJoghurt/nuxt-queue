@@ -1,9 +1,10 @@
-import { defineNitroPlugin, useMetrics, useEventManager, $useQueueRegistry, useFlowEngine, useQueue } from '#imports'
+import { defineNitroPlugin, useMetrics, useEventManager, $useQueueRegistry, useQueue } from '#imports'
 
 export default defineNitroPlugin(() => {
-  const { onKind, publish } = useEventManager()
+  const { onType, publishBus } = useEventManager()
   const registry = $useQueueRegistry() as any
   const unsubs: Array<() => void> = []
+
   // Cache for flowId -> flowName resolution
   const flowIdToName = new Map<string, string>()
   const getFlowNameById = (id: string): string | undefined => {
@@ -24,44 +25,63 @@ export default defineNitroPlugin(() => {
     return undefined
   }
 
-  // Subscribe to all trigger kinds present in registry.eventIndex
-  const kinds = Object.keys(registry?.eventIndex || {})
-  for (const kind of kinds) {
-    unsubs.push(onKind(kind, async (e: any) => {
-      const { hasTriggered, markTriggered } = useFlowEngine()
-      const { enqueue } = useQueue()
-      const { incCounter } = useMetrics()
-      const corr = e.correlationId || e.meta?.correlationId || e.data?.correlationId
-      const targets = (registry?.eventIndex as Record<string, Array<{ flowId: string, step: string, queue: string }>>)[kind] || []
-      for (const t of targets) {
-        let skip = false
-        if (corr) {
-          const already = await hasTriggered(corr, t.step, t.queue)
-          if (already) skip = true
-        }
-        if (skip) continue
-        const payload = { ...e.data, correlationId: corr || e.correlationId }
-        // Idempotent job id: <correlationId>__<step> (':' not allowed by BullMQ)
-        const jobId = corr ? `${String(corr)}__${t.step}` : undefined
+  // Subscribe to 'emit' type events to handle all triggers
+  unsubs.push(onType('emit', async (e: any) => {
+    // v0.4: Extract trigger name from emit event data
+    const emitName = (e.data as any)?.name
+    if (!emitName) return
+
+    // Check if this emit matches any registered trigger
+    const triggers = Object.keys(registry?.eventIndex || {})
+    if (!triggers.includes(emitName)) return
+
+    const { enqueue } = useQueue()
+    const { incCounter } = useMetrics()
+
+    // v0.4: Extract runId and flowName from event
+    const runId = e.runId
+    const flowName = e.flowName
+
+    const targets = (registry?.eventIndex as Record<string, Array<{ flowId: string, step: string, queue: string }>>)[emitName] || []
+
+    for (const t of targets) {
+      const payload = { ...e.data, flowId: runId, flowName }
+      // Idempotent job id: <runId>__<step> (':' not allowed by BullMQ)
+      const jobId = runId ? `${runId}__${t.step}` : undefined
+
+      try {
         const id = await enqueue(t.queue, { name: t.step, data: payload, opts: jobId ? { jobId } : undefined })
+
         try {
           incCounter('flow_enqueues_total', { flowId: t.flowId || 'unknown', step: t.step })
         }
         catch {
-          // ignore
+          // ignore metrics errors
         }
-        // Emit flow.start for trigger-originated runs to align with streams-first derivations
-        try {
-          const flowName = getFlowNameById(String(t.flowId)) || String(t.flowId)
-          await publish({ kind: 'flow.start', data: { flowName } }, { flowId: String(id), queue: t.queue, jobId: id })
+
+        // Emit flow.start ONLY for trigger-originated NEW runs (no existing runId)
+        // If runId already exists, this is a continuation, not a start
+        if (!runId) {
+          try {
+            const targetFlowName = getFlowNameById(String(t.flowId)) || String(t.flowId)
+            // Publish flow.start annotated to the run trace
+            const newRunId = String(id)
+            await publishBus({ type: 'flow.start', runId: newRunId, flowName: targetFlowName, data: { input: payload } })
+          }
+          catch {
+            // best-effort
+          }
         }
-        catch {
-          // best-effort
-        }
-        if (corr) await markTriggered(corr, t.step, t.queue)
       }
-    }))
-  }
+      catch (err) {
+        // Enqueue failed - likely duplicate jobId (idempotency working correctly)
+        // Silently skip; this is expected when same trigger fires multiple times
+        if (process.env.NQ_DEBUG_EVENTS === '1') {
+          console.log('[flows] enqueue skipped (likely duplicate):', { step: t.step, jobId, error: (err as any)?.message })
+        }
+      }
+    }
+  }))
 
   return {
     hooks: {

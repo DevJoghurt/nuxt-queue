@@ -1,4 +1,6 @@
 import { useEventManager } from '#imports'
+import { getStreamNames } from '../streamStore/streamNames'
+import { useStreamStore } from './useStreamStore'
 
 export interface LogReadOptions {
   fromId?: string
@@ -7,36 +9,20 @@ export interface LogReadOptions {
 
 export function useLogs() {
   const eventManager = useEventManager()
-  const streams = eventManager.getStreamNames()
+  const streams = getStreamNames()
+  const store = useStreamStore()
 
-  async function readJobLogs(jobId: string, opts?: LogReadOptions) {
-    const s = typeof streams.job === 'function' ? streams.job(String(jobId)) : String(streams.job) + String(jobId)
-    const recs = await eventManager.read({ stream: s, limit: opts?.limit, fromId: opts?.fromId, filter: (r: any) => r?.kind === 'runner.log' })
-    return Array.isArray(recs) ? recs : recs.items
-  }
-
-  async function readFlowRunLogs(runId: string, opts?: LogReadOptions) {
-    const s = typeof streams.flow === 'function' ? streams.flow(String(runId)) : String(streams.flow) + String(runId)
-    const recs = await eventManager.read({ stream: s, limit: opts?.limit, fromId: opts?.fromId, filter: (r: any) => r?.kind === 'runner.log' })
-    return Array.isArray(recs) ? recs : recs.items
-  }
+  // Note: direct read helpers removed; prefer paged getters below or live subscriptions.
 
   /**
    * Unified logs reader for a job stream.
    * - When opts.paged is true, returns { items, nextFromId }
    * - Otherwise returns an array of events
    */
-  async function getJobLogs(jobId: string, opts?: { limit?: number, fromId?: string, direction?: 'forward' | 'backward', paged?: boolean }) {
-    const s = typeof streams.job === 'function' ? streams.job(String(jobId)) : String(streams.job) + String(jobId)
-    const res = await eventManager.read({
-      stream: s,
-      limit: opts?.limit ?? 200,
-      fromId: opts?.fromId,
-      direction: opts?.direction || 'backward',
-      filter: (r: any) => r?.kind === 'runner.log',
-      paged: !!opts?.paged,
-    }) as any
-    return res
+  async function getJobLogs(_jobId: string, _opts?: { limit?: number, fromId?: string, direction?: 'forward' | 'backward', paged?: boolean }) {
+    // Queue-related logs are not stored in the stream store.
+    // They should be retrieved via the Queue adapter/provider directly.
+    return { items: [], nextFromId: undefined } as any
   }
 
   /**
@@ -44,44 +30,66 @@ export function useLogs() {
    * - When opts.paged is true, returns { items, nextFromId }
    * - Otherwise returns an array of events
    */
-  async function getFlowRunLogs(runId: string, opts?: { limit?: number, fromId?: string, direction?: 'forward' | 'backward', paged?: boolean }) {
-    const s = typeof streams.flow === 'function' ? streams.flow(String(runId)) : String(streams.flow) + String(runId)
-    const res = await eventManager.read({
-      stream: s,
-      limit: opts?.limit ?? 200,
-      fromId: opts?.fromId,
-      direction: opts?.direction || 'backward',
-      filter: (r: any) => r?.kind === 'runner.log',
-      paged: !!opts?.paged,
-    }) as any
-    return res
+  async function getFlowRunLogs(flowId: string, opts?: { limit?: number, fromId?: string, direction?: 'forward' | 'backward', paged?: boolean }) {
+    const s = typeof streams.flow === 'function' ? streams.flow(String(flowId)) : String(streams.flow) + String(flowId)
+    const limit = opts?.limit ?? 200
+    const direction = opts?.direction || 'backward'
+    if (opts?.paged) {
+      const page = await store.read(s, { limit: limit * 5, fromId: opts?.fromId, direction })
+      const filtered = page.filter((r: any) => r?.kind === 'runner.log')
+      const items = filtered.slice(0, limit)
+      const nextFromId = page.length >= limit * 5 ? page[page.length - 1]?.id : undefined
+      return { items, nextFromId }
+    }
+    const page = await store.read(s, { limit, fromId: opts?.fromId, direction })
+    return page.filter((r: any) => r?.kind === 'runner.log').slice(0, limit)
   }
 
   async function publishLog(level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any, ctx?: { queue?: string, jobId?: string, flowId?: string }) {
-    await eventManager.publish({ kind: 'runner.log', data: { level, msg, meta } }, ctx)
+    // Split envelope meta (reserved) vs data.meta (free-form)
+    const reserved = new Set(['flowId', 'flowName', 'stepName', 'stepRunId', 'stepId', 'attempt', 'jobId', 'queue', 'tags'])
+    const envMeta: any = {}
+    const dataMeta: any = {}
+    const src = meta || {}
+    for (const k of Object.keys(src)) {
+      if (reserved.has(k)) envMeta[k] = src[k]
+      else dataMeta[k] = src[k]
+    }
+    if (ctx?.flowId && envMeta.flowId == null) envMeta.flowId = ctx.flowId
+    // v0.4: Emit log event with new schema
+    const runId = ctx?.flowId || 'unknown'
+    const flowName = envMeta.flowName || 'unknown'
+    const stepName = envMeta.stepName
+    const stepId = envMeta.stepId || envMeta.stepRunId
+    const attempt = envMeta.attempt
+    await eventManager.publishBus({
+      type: 'log',
+      runId,
+      flowName,
+      stepName,
+      stepId,
+      attempt,
+      data: { level, message: msg, ...dataMeta },
+    })
   }
 
   function onLog(handler: (e: { level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any, raw: any }) => void) {
-    return eventManager.onKind('runner.log', (evt: any) => {
+    return eventManager.onType('log', (evt: any) => {
       const d = (evt?.data || {}) as any
-      handler({ level: d.level, msg: d.msg, meta: d.meta, raw: evt })
+      handler({ level: d.level, msg: d.message || d.msg, meta: d.meta, raw: evt })
     })
   }
 
   /** Subscribe to logs on a specific job stream via the adapter-backed event manager. */
-  function onJobLog(jobId: string, handler: (e: { level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any, raw: any }) => void) {
-    const s = typeof streams.job === 'function' ? streams.job(String(jobId)) : String(streams.job) + String(jobId)
-    return eventManager.subscribeStream(s, (evt: any) => {
-      if (evt?.kind !== 'runner.log') return
-      const d = (evt?.data || {}) as any
-      handler({ level: d.level, msg: d.msg, meta: d.meta, raw: evt })
-    })
+  function onJobLog(_jobId: string, _handler: (e: { level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any, raw: any }) => void) {
+    // No-op: job logs are not streamed via the stream store.
+    return () => {}
   }
 
-  /** Subscribe to logs on a specific flow run stream via the adapter-backed event manager. */
-  function onFlowLog(runId: string, handler: (e: { level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any, raw: any }) => void) {
-    const s = typeof streams.flow === 'function' ? streams.flow(String(runId)) : String(streams.flow) + String(runId)
-    return eventManager.subscribeStream(s, (evt: any) => {
+  /** Subscribe to logs on a specific flow run stream via the store adapter (canonical). */
+  function onFlowLog(flowId: string, handler: (e: { level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any, raw: any }) => void) {
+    const s = typeof streams.flow === 'function' ? streams.flow(String(flowId)) : String(streams.flow) + String(flowId)
+    return store.subscribe(s, (evt: any) => {
       if (evt?.kind !== 'runner.log') return
       const d = (evt?.data || {}) as any
       handler({ level: d.level, msg: d.msg, meta: d.meta, raw: evt })
@@ -89,8 +97,6 @@ export function useLogs() {
   }
 
   return {
-    readJobLogs,
-    readFlowRunLogs,
     getJobLogs,
     getFlowRunLogs,
     publishLog,

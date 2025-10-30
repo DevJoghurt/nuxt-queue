@@ -19,8 +19,8 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 export default defineQueueWorker(
   async (input, ctx) => {
-    // Access Motia-style context
-    ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, { jobId: ctx.jobId, traceId: ctx.traceId })
+    // v0.4: Use flowId and flowName from context
+    ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, { jobId: ctx.jobId, flowId: ctx.flowId, flowName: ctx.flowName })
 
     for (let i = 0; i < 5; i++) {
       ctx.logger.log('info', `Parallel step progress ${i + 1}/5`, { progress: i + 1 })

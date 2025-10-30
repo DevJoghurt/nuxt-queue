@@ -1,0 +1,220 @@
+import type { StreamAdapter, EventReadOptions, EventSubscription } from '../types'
+import type { EventRecord } from '../../../types'
+import { useRuntimeConfig } from '#imports'
+import IORedis from 'ioredis'
+
+function nowIso() {
+  return new Date().toISOString()
+}
+
+export function createRedisStreamsAdapter(): StreamAdapter {
+  const rc: any = useRuntimeConfig()
+  const conn = rc?.queue?.redis || {}
+  const rsOpts = (rc?.queue?.eventStore?.options?.redisStreams || {}) as {
+    group?: string
+    consumer?: string
+    blockMs?: number
+    count?: number
+    createGroupIfMissing?: boolean
+    trim?: { maxLen?: number, approx?: boolean }
+    minIdleMs?: number
+    autoClaimIntervalMs?: number
+    claimBatch?: number
+  }
+  const redis = new IORedis({
+    host: conn.host,
+    port: conn.port,
+    username: conn.username,
+    password: conn.password,
+    lazyConnect: true,
+  })
+
+  // Separate connection for Pub/Sub (v0.4 real-time)
+  const pubsub = new IORedis({
+    host: conn.host,
+    port: conn.port,
+    username: conn.username,
+    password: conn.password,
+    lazyConnect: true,
+  })
+
+  function buildFields(e: any) {
+    // v0.4: Store type, runId, flowName, and optional step fields
+    const dataStr = e.data !== undefined ? JSON.stringify(e.data) : ''
+    const fields: Array<string> = [
+      'type', String(e.type || ''),
+      'runId', String(e.runId || ''),
+      'flowName', String(e.flowName || ''),
+      'data', dataStr,
+      'ts', e.ts || nowIso(),
+    ]
+
+    // Add optional step fields only if present
+    if (e.stepName) {
+      fields.push('stepName', String(e.stepName))
+    }
+    if (e.stepId) {
+      fields.push('stepId', String(e.stepId))
+    }
+    if (e.attempt !== undefined) {
+      fields.push('attempt', String(e.attempt))
+    }
+
+    return fields
+  }
+
+  function parseFieldsToRecord(id: string, arr: any[]): EventRecord {
+    // arr is [field, value, field, value, ...]
+    const obj: Record<string, string> = {}
+    for (let i = 0; i < arr.length; i += 2) {
+      const k = String(arr[i])
+      const v = String(arr[i + 1] ?? '')
+      obj[k] = v
+    }
+    let data: any
+    try {
+      data = obj.data ? JSON.parse(obj.data) : undefined
+    }
+    catch {
+      data = undefined
+    }
+
+    // v0.4: Build clean event record with required fields
+    const rec: any = {
+      id,
+      ts: obj.ts || nowIso(),
+      type: obj.type || 'event',
+      runId: obj.runId || '',
+      flowName: obj.flowName || '',
+      data,
+    }
+
+    // Add optional step fields if present
+    if (obj.stepName) rec.stepName = obj.stepName
+    if (obj.stepId) rec.stepId = obj.stepId
+    if (obj.attempt) rec.attempt = Number.parseInt(obj.attempt, 10)
+
+    return rec
+  }
+
+  return {
+    async append(subject: string, e: Omit<EventRecord, 'id' | 'ts'>): Promise<EventRecord> {
+      if (!redis.status || redis.status === 'end') await redis.connect()
+      if (!pubsub.status || pubsub.status === 'end') await pubsub.connect()
+
+      const ts = nowIso()
+      const payloadFields = buildFields({ ...(e as any), ts })
+
+      // Stream name: nq:<type>:<id> (e.g., nq:flow:run-123, nq:trigger:webhook-abc)
+      const stream = subject
+
+      let id: string
+      if (rsOpts?.trim?.maxLen && rsOpts.trim.maxLen > 0) {
+        const approx = rsOpts?.trim?.approx !== false
+        const args = approx ? ['MAXLEN', '~', String(rsOpts.trim.maxLen)] : ['MAXLEN', String(rsOpts.trim.maxLen)]
+        id = await (redis as any).xadd(stream, ...args, '*', ...payloadFields)
+      }
+      else {
+        id = await (redis as any).xadd(stream, '*', ...payloadFields)
+      }
+
+      // v0.4: PUBLISH to channel after XADD for real-time notifications
+      const channel = `nq:events:${subject}`
+      await pubsub.publish(channel, id)
+
+      if (process.env.NQ_DEBUG_EVENTS === '1') {
+        console.log('[redis-streams] appended and published', { stream, id, channel, type: (e as any).type })
+      }
+
+      const rec = { ...(e as any), id, ts, subject }
+      return rec
+    },
+    async read(subject: string, opts?: EventReadOptions): Promise<EventRecord[]> {
+      if (!redis.status || redis.status === 'end') await redis.connect()
+      const from = opts?.fromId ? opts.fromId : '0-0'
+      const count = opts?.limit || 100
+      const dir = opts?.direction || 'forward'
+
+      const stream = subject
+      let resp: any[] = []
+      if (dir === 'backward') {
+        resp = await (redis as any).xrevrange(stream, from === '0-0' ? '+' : `(${from}`, '-', 'COUNT', count)
+      }
+      else {
+        resp = await (redis as any).xrange(stream, from === '0-0' ? '-' : `(${from}`, '+', 'COUNT', count)
+      }
+      const out: EventRecord[] = []
+      for (const [id, arr] of resp as any[]) {
+        try {
+          const rec = parseFieldsToRecord(id, arr)
+          out.push(rec)
+        }
+        catch {
+          // ignore
+        }
+      }
+      return out
+    },
+    async subscribe(subject: string, onEvent: (e: EventRecord) => void): Promise<EventSubscription> {
+      // v0.3: Use Redis Pub/Sub for real-time events instead of XREAD polling
+      const stream = subject
+      const channel = `nq:events:${subject}`
+
+      if (!pubsub.status || pubsub.status === 'end') await pubsub.connect()
+      if (!redis.status || redis.status === 'end') await redis.connect()
+
+      let running = true
+
+      if (process.env.NQ_DEBUG_EVENTS === '1') {
+        console.log('[redis-streams] subscribing via Pub/Sub', { stream, channel })
+      }
+
+      // Handle incoming Pub/Sub messages
+      const messageHandler = async (ch: string, messageId: string) => {
+        if (ch !== channel || !running) return
+
+        try {
+          // Fetch the event from the stream using the message ID
+          const entries = await (redis as any).xrange(stream, messageId, messageId, 'COUNT', 1)
+          if (entries && entries.length > 0) {
+            const [id, arr] = entries[0]
+            const rec = parseFieldsToRecord(id, arr)
+
+            if (process.env.NQ_DEBUG_EVENTS === '1') {
+              console.log('[redis-streams] received event via Pub/Sub', { stream, id, type: rec.type })
+            }
+
+            onEvent(rec)
+          }
+        }
+        catch (err) {
+          if (process.env.NQ_DEBUG_EVENTS === '1') {
+            console.error('[redis-streams] Pub/Sub message handling error:', err)
+          }
+        }
+      }
+
+      pubsub.on('message', messageHandler)
+      await pubsub.subscribe(channel)
+
+      return {
+        unsubscribe() {
+          running = false
+          pubsub.off('message', messageHandler)
+          pubsub.unsubscribe(channel).catch(() => {
+            // ignore
+          })
+        },
+      }
+    },
+    async close(): Promise<void> {
+      try {
+        await redis.quit()
+        await pubsub.quit()
+      }
+      catch {
+        // ignore
+      }
+    },
+  }
+}

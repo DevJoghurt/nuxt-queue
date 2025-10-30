@@ -1,10 +1,7 @@
 import { Queue, QueueEvents } from 'bullmq'
 import type { JobsOptions, Job as BullJob } from 'bullmq'
 import defu from 'defu'
-import { useRuntimeConfig, useMetrics, $useQueueRegistry } from '#imports'
-import { getEventBus } from '../../streams/eventBus'
-import { getStreamFactory } from '../../streams/streamFactory'
-import { getStreamNames } from '../../streams/streamNames'
+import { useRuntimeConfig, useMetrics, $useQueueRegistry, useEventManager } from '#imports'
 import type { QueueProvider, JobInput, Job, JobsQuery, ScheduleOptions, QueueEvent, JobCounts } from '../types'
 
 interface QueueCache {
@@ -24,7 +21,7 @@ export class BullMQProvider implements QueueProvider {
   private ensureQueue(name: string): QueueCache {
     let cached = this.queues.get(name)
     if (cached) return cached
-    const { publish: publishEvent } = getEventBus()
+    const { publishBus } = useEventManager()
     const { incCounter } = useMetrics()
     const rc = useRuntimeConfig() as any
     const connection = rc.queue?.redis
@@ -58,25 +55,16 @@ export class BullMQProvider implements QueueProvider {
         catch {
           // ignore
         }
+        // Publish ONLY to the in-proc bus. Do NOT persist queue/job/global events in the stream store.
+        // v0.4: Use type instead of kind, runId from job data if available
+        const jobId = (payload as any)?.jobId || 'unknown'
         const rec = {
-          id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          ts: new Date().toISOString(),
-          kind: `job.${kind}`,
-          subject: name,
-          data: payload,
-          v: 1,
+          type: `job.${kind}`,
+          runId: '', // Job events are transient, not part of flow streams
+          data: { ...payload, queue: name, jobId },
         }
-        const streamsCfg = getStreamNames()
-        const streams = [
-          streamsCfg.global,
-          typeof (streamsCfg as any).queue === 'function' ? (streamsCfg as any).queue(name) : String((streamsCfg as any).queue) + String(name),
-          payload?.jobId ? (typeof (streamsCfg as any).job === 'function' ? (streamsCfg as any).job(payload.jobId) : String((streamsCfg as any).job) + String(payload.jobId)) : undefined,
-        ].filter(Boolean) as string[]
-        const factory = getStreamFactory()
-        for (const s of streams) {
-          const saved = await factory.adapter.append(s, rec as any)
-          publishEvent(saved)
-        }
+        // Publish directly to the in-proc bus via EventManager abstraction
+        await publishBus(rec as any)
       }
       for (const ev of ['waiting', 'active', 'progress', 'completed', 'failed', 'delayed'] as const) {
         events.on(ev as any, (p: any) => {

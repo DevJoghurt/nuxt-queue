@@ -9,7 +9,8 @@ export function useFlowsConfig() {
   const eventManager = useEventManager()
 
   async function publishConfig(flowId: string, config: any, ctx?: { queue?: string }) {
-    await eventManager.publish({ kind: 'flow.config', data: { flowId, config } }, { flowId, ...ctx })
+    // Publish as transient bus-only event (not persisted) so onKind consumers receive it by default
+    await eventManager.publishBus({ kind: 'flow.config', subject: ctx?.queue, data: { flowId, config } })
   }
 
   function onConfig(handler: (update: FlowConfigUpdate & { raw: any }) => void) {

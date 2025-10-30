@@ -1,5 +1,6 @@
 import { useStorage } from '#imports'
-import type { StreamAdapter, EventRecord, EventReadOptions, EventSubscription } from '../types'
+import type { StreamAdapter, EventReadOptions, EventSubscription } from '../types'
+import type { EventRecord } from '../../../types'
 
 const listeners = new Map<string, Set<(e: EventRecord) => void>>()
 
@@ -11,11 +12,11 @@ export function createRedisFallbackStreamAdapter(): StreamAdapter {
   const storage = useStorage('redis')
 
   return {
-    async append<T = any>(stream: string, e: Omit<EventRecord<T>, 'id' | 'ts' | 'stream'>): Promise<EventRecord<T>> {
+    async append(stream: string, e: Omit<EventRecord, 'id' | 'ts'>): Promise<EventRecord> {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`
-      const rec: EventRecord<T> = { ...e, id, ts: nowIso(), stream }
+      const rec: any = { ...(e as any), id, ts: nowIso() }
       const key = `events:${stream}`
-      const curr = (await storage.getItem<EventRecord<T>[]>(key)) || []
+      const curr = (await storage.getItem<any[]>(key)) || []
       curr.push(rec)
       await storage.setItem(key, curr)
       const set = listeners.get(stream)

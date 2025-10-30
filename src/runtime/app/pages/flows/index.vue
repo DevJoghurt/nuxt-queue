@@ -38,17 +38,10 @@
             <div class="font-semibold">
               Runs
             </div>
-            <div class="flex gap-2 items-center">
-              <UButton
-                size="xs"
-                color="neutral"
-                variant="outline"
-                class="cursor-pointer"
-                :disabled="!selectedFlow"
-                @click="refreshRuns"
-              >
-                Refresh
-              </UButton>
+            <div class="flex gap-2 items-center text-xs text-gray-500">
+              <span v-if="runsReconnecting">Runs reconnecting…</span>
+              <span v-else-if="runsOpen">Runs live</span>
+              <span v-else>Runs idle</span>
             </div>
           </div>
         </template>
@@ -111,6 +104,80 @@
     >
       <template #body>
         <div class="space-y-2">
+          <UCard>
+            <template #header>
+              <div class="flex items-center justify-between">
+                <div class="font-semibold">
+                  Run snapshot
+                </div>
+                <div class="text-xs text-gray-500">
+                  {{ timelineRunId }}
+                </div>
+              </div>
+            </template>
+            <div
+              v-if="runSnapshot"
+              class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm"
+            >
+              <div><span class="text-gray-500">Status:</span> {{ runSnapshot.status || 'unknown' }}</div>
+              <div><span class="text-gray-500">Started:</span> {{ runSnapshot.startedAt ? new Date(runSnapshot.startedAt).toLocaleString() : '—' }}</div>
+              <div><span class="text-gray-500">Completed:</span> {{ runSnapshot.completedAt ? new Date(runSnapshot.completedAt).toLocaleString() : '—' }}</div>
+              <div><span class="text-gray-500">Logs:</span> {{ runSnapshot.logsCount ?? 0 }}</div>
+              <div><span class="text-gray-500">Last level:</span> {{ runSnapshot.lastLogLevel || '—' }}</div>
+            </div>
+            <div
+              v-else
+              class="text-xs text-gray-500"
+            >
+              Loading snapshot…
+            </div>
+          </UCard>
+          <UCard>
+            <template #header>
+              <div class="flex items-center justify-between">
+                <div class="font-semibold">
+                  Steps
+                </div>
+                <div class="text-xs text-gray-500">
+                  {{ flowState.stepList.value.length }} total
+                </div>
+              </div>
+            </template>
+            <div class="text-sm">
+              <div
+                v-if="flowState.stepList.value.length === 0"
+                class="text-xs text-gray-500"
+              >
+                No steps yet…
+              </div>
+              <ul
+                v-else
+                class="divide-y divide-gray-100"
+              >
+                <li
+                  v-for="s in flowState.stepList.value"
+                  :key="s.key"
+                  class="py-1 flex items-center justify-between"
+                >
+                  <div>
+                    <div class="font-mono">
+                      {{ s.key }}
+                    </div>
+                    <div class="text-xs text-gray-500">
+                      <span>Status: {{ s.status || 'pending' }}</span>
+                      <span v-if="s.startedAt"> · Started: {{ new Date(s.startedAt).toLocaleString() }}</span>
+                      <span v-if="s.completedAt"> · Completed: {{ new Date(s.completedAt).toLocaleString() }}</span>
+                      <span v-if="s.awaitType"> · Waiting: {{ s.awaitType }}</span>
+                    </div>
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    <span>Attempt: {{ s.attempt || 1 }}</span>
+                    <span v-if="s.error"> · Error: {{ s.error.substring(0, 50) }}</span>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </UCard>
           <div class="flex gap-2 items-center">
             <UInput
               v-model="limitStr"
@@ -128,15 +195,11 @@
             >
               More
             </UButton>
-            <UButton
-              size="xs"
-              color="neutral"
-              variant="outline"
-              class="cursor-pointer"
-              @click="toggleTail"
-            >
-              {{ open ? 'Stop tail' : 'Tail' }}
-            </UButton>
+            <span class="text-xs text-gray-500">
+              <template v-if="timelineReconnecting">Timeline reconnecting…</template>
+              <template v-else-if="timelineOpenSSE">Timeline live</template>
+              <template v-else>Timeline idle</template>
+            </span>
             <UButton
               size="xs"
               color="neutral"
@@ -152,13 +215,13 @@
               color="neutral"
               variant="outline"
               class="cursor-pointer"
-              :disabled="timeline.length === 0 && !open"
+              :disabled="timeline.length === 0 && !timelineOpenSSE"
               @click="clearTimeline"
             >
               Clear
             </UButton>
             <span
-              v-if="reconnecting"
+              v-if="timelineReconnecting"
               class="text-xs text-amber-500"
             >Reconnecting…</span>
           </div>
@@ -173,10 +236,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from '#imports'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from '#imports'
 import TimelineList from '../../components/TimelineList.vue'
 import FlowDiagram from '../../components/FlowDiagram.vue'
 import useEventSSE from '../../composables/useEventSSE'
+import { useFlowState } from '../../composables/useFlowState'
 
 const flows = ref<any[]>([])
 const runs = ref<any[]>([])
@@ -184,12 +248,33 @@ const selectedFlow = ref<string>('')
 
 const timelineOpen = ref<boolean>(false)
 const timelineRunId = ref<string>('')
-const timeline = ref<any[]>([])
-const lastTimelineId = ref<string | undefined>(undefined)
 const limitStr = ref<string>('100')
 const loadingTimeline = ref<boolean>(false)
 
-const { start: startSSE, stop: stopSSE, open, reconnecting } = useEventSSE()
+// v0.3: Use client-side reducer for flow state
+const flowState = useFlowState()
+
+// Separate SSE channels for runs list and timeline
+const runsSSE = useEventSSE()
+const timelineSSE = useEventSSE()
+const runsOpen = runsSSE.open
+const runsReconnecting = runsSSE.reconnecting
+const timelineOpenSSE = timelineSSE.open
+const timelineReconnecting = timelineSSE.reconnecting
+
+// Computed state from reducer
+const runSnapshot = computed(() => {
+  const state = flowState.state.value
+  return {
+    status: state.status,
+    startedAt: state.startedAt,
+    completedAt: state.completedAt,
+    logsCount: state.logs.length,
+    lastLogLevel: state.logs.length > 0 ? state.logs[state.logs.length - 1]?.level : undefined,
+  }
+})
+
+const timeline = computed(() => flowState.events.value)
 
 const selectFlow = async (id: string) => {
   selectedFlow.value = id
@@ -204,29 +289,41 @@ const selectedFlowMeta = computed(() => {
 
 const refreshRuns = async () => {
   if (!selectedFlow.value) return
-  const res = await $fetch<{ items: any[], nextFromId?: string }>(`/api/_flows/${encodeURIComponent(selectedFlow.value)}/runs`)
+  // v0.3: Use generic list endpoint
+  const res = await $fetch<{ items: any[] }>(`/api/_events/flow/list?name=${encodeURIComponent(selectedFlow.value)}`)
   runs.value = res?.items || []
 }
 
 const openRun = async (runId: string) => {
   timelineOpen.value = true
   timelineRunId.value = runId
-  timeline.value = []
-  lastTimelineId.value = undefined
-  await pageTimeline()
+  
+  // v0.3: Reset flow state and load events
+  flowState.reset()
+  
+  // Load initial events
+  await loadMoreEvents()
+  
+  // Start SSE stream for live updates
+  startTimelineTail()
 }
 
-const pageTimeline = async () => {
-  if (!selectedFlow.value || !timelineRunId.value) return
+const loadMoreEvents = async () => {
+  if (!timelineRunId.value) return
   try {
     loadingTimeline.value = true
     const limit = Number(limitStr.value || '100')
-    const url = `/api/_flows/${encodeURIComponent(selectedFlow.value)}/runs/${encodeURIComponent(timelineRunId.value)}/timeline?limit=${limit}${lastTimelineId.value ? `&fromId=${encodeURIComponent(lastTimelineId.value)}` : ''}`
-    const res = await $fetch<{ items: any[], nextFromId?: string }>(url)
-    const recs = res?.items || []
-    if (recs.length) {
-      timeline.value.push(...recs)
-      lastTimelineId.value = res?.nextFromId || recs[recs.length - 1].id
+    const lastId = flowState.events.value.length > 0
+      ? flowState.events.value[flowState.events.value.length - 1]?.id
+      : undefined
+
+    // v0.3: Use generic state endpoint
+    const url = `/api/_events/flow/${encodeURIComponent(timelineRunId.value)}${lastId ? `?fromId=${encodeURIComponent(lastId)}&limit=${limit}` : `?limit=${limit}`}`
+    const res = await $fetch<{ events: any[] }>(url)
+    const events = res?.events || []
+
+    if (events.length) {
+      flowState.addEvents(events)
     }
   }
   finally {
@@ -234,22 +331,30 @@ const pageTimeline = async () => {
   }
 }
 
-const toggleTail = async () => {
-  if (open.value) return stopSSE()
-  if (!selectedFlow.value || !timelineRunId.value) return
-  const url = `/api/_flows/${encodeURIComponent(selectedFlow.value)}/runs/${encodeURIComponent(timelineRunId.value)}/tail`
-  console.log('Starting tail with URL', url)
-  startSSE(url, (msg) => {
-    console.log('Received tail message', msg)
+const pageTimeline = async () => {
+  await loadMoreEvents()
+}
+
+const startTimelineTail = () => {
+  if (!timelineRunId.value) return
+  // v0.3: Use generic SSE stream endpoint
+  const url = `/api/_events/flow/${encodeURIComponent(timelineRunId.value)}/stream`
+  timelineSSE.start(url, (msg) => {
+    console.log('Timeline SSE message', msg)
     if (msg?.record) {
-      timeline.value.push(msg.record)
-      lastTimelineId.value = msg.record.id
+      console.log('Timeline SSE received event', msg.record)
+      flowState.addEvent(msg.record)
     }
-  }, { autoReconnect: true, maxRetries: 30, baseDelayMs: 500, maxDelayMs: 10000 })
+  }, {
+    autoReconnect: true,
+    maxRetries: 30,
+    baseDelayMs: 500,
+    maxDelayMs: 10000,
+  })
 }
 
 const exportTimelineJson = () => {
-  const blob = new Blob([JSON.stringify(timeline.value, null, 2)], { type: 'application/json' })
+  const blob = new Blob([JSON.stringify(flowState.events.value, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -261,11 +366,63 @@ const exportTimelineJson = () => {
 }
 
 const clearTimeline = () => {
-  timeline.value = []
-  lastTimelineId.value = undefined
+  flowState.reset()
 }
 
 onMounted(async () => {
   flows.value = await $fetch<any[]>('/api/_flows')
+})
+
+// Auto-manage runs SSE when selectedFlow changes
+watch(selectedFlow, async (name, _prev) => {
+  try {
+    runsSSE.stop()
+  }
+  catch {
+    // ignore
+  }
+  runs.value = []
+  if (name) {
+    await refreshRuns()
+    // Start polling for new runs every 5 seconds
+    startRunsPolling()
+  }
+  else {
+    stopRunsPolling()
+  }
+})
+
+let pollInterval: ReturnType<typeof setInterval> | null = null
+
+const startRunsPolling = () => {
+  stopRunsPolling()
+  pollInterval = setInterval(async () => {
+    if (selectedFlow.value && !timelineOpen.value) {
+      await refreshRuns()
+    }
+  }, 5000)
+}
+
+const stopRunsPolling = () => {
+  if (pollInterval) {
+    clearInterval(pollInterval)
+    pollInterval = null
+  }
+}
+
+onBeforeUnmount(() => {
+  stopRunsPolling()
+})
+
+// Stop timeline SSE when the slideover closes
+watch(timelineOpen, (isOpen) => {
+  if (!isOpen) {
+    try {
+      timelineSSE.stop()
+    }
+    catch {
+      // ignore
+    }
+  }
 })
 </script>
