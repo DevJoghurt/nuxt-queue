@@ -1,6 +1,13 @@
 export const config = defineQueueConfig({
   queue: {
     name: 'example_queue',
+    defaultJobOptions: {
+      attempts: 3, // Retry up to 3 times
+      backoff: {
+        type: 'exponential',
+        delay: 1000, // Start with 1 second delay, doubles each retry
+      },
+    },
   },
   // Optional: let queue name default to file name ("first_step")
   flow: {
@@ -20,7 +27,19 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 export default defineQueueWorker(
   async (input, ctx) => {
     // v0.4: Use flowId and flowName from context
-    ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, { jobId: ctx.jobId, flowId: ctx.flowId, flowName: ctx.flowName })
+    ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue} (attempt ${ctx.attempt})`, {
+      jobId: ctx.jobId,
+      flowId: ctx.flowId,
+      flowName: ctx.flowName,
+      attempt: ctx.attempt,
+    })
+
+    // Test retry mechanism: fail on first 2 attempts
+    const shouldFail = input?.testRetry && ctx.attempt && ctx.attempt < 3
+    if (shouldFail) {
+      ctx.logger.log('warn', `Simulating failure on attempt ${ctx.attempt}`, { attempt: ctx.attempt })
+      throw new Error(`Simulated failure for testing retry (attempt ${ctx.attempt})`)
+    }
 
     for (let i = 0; i < 5; i++) {
       ctx.logger.log('info', `First step progress ${i + 1}/5`, { progress: i + 1 })
@@ -32,5 +51,6 @@ export default defineQueueWorker(
 
     return {
       ok: true,
+      attempt: ctx.attempt,
     }
   })

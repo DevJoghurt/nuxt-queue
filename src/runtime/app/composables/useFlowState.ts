@@ -38,12 +38,21 @@ export interface LogEntry {
 export interface EventRecord {
   id: string
   ts: string
-  kind: string
-  subject: string
+  // v0.4 fields
+  type?: string
+  runId?: string
+  flowName?: string
+  stepName?: string
+  stepId?: string
+  attempt?: number
+  // Legacy v0.3 fields
+  kind?: string
+  subject?: string
   flow?: string
   step?: string
   trigger?: string
   correlationId?: string
+  // Common fields
   data?: any
   meta?: any
 }
@@ -59,11 +68,19 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
   }
 
   for (const e of events) {
-    switch (e.kind) {
+    // v0.4: Support both type and kind fields (for backward compatibility)
+    const eventType = e.type || e.kind
+
+    // Extract step key from various possible locations
+    // v0.4: stepName is the primary field, fall back to step/data
+    const stepKey = e.stepName || e.step || e.data?.stepName || e.data?.stepKey || e.data?.step || e.meta?.stepKey || e.meta?.step
+
+    switch (eventType) {
       case 'flow.start':
       case 'flow.started':
         state.status = 'running'
         state.startedAt = e.ts
+        if (e.flowName) state.meta = { ...state.meta, flowName: e.flowName }
         if (e.data?.flowName) state.meta = { ...state.meta, flowName: e.data.flowName }
         if (e.data?.input) state.meta = { ...state.meta, input: e.data.input }
         break
@@ -82,7 +99,6 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
         break
 
       case 'step.started': {
-        const stepKey = e.step || e.data?.stepKey
         if (!stepKey) break
         if (!state.steps[stepKey]) {
           state.steps[stepKey] = {
@@ -92,12 +108,12 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
         }
         state.steps[stepKey].status = 'running'
         state.steps[stepKey].startedAt = e.ts
-        state.steps[stepKey].attempt = e.meta?.attempt || state.steps[stepKey].attempt || 1
+        // v0.4: attempt is a top-level field
+        state.steps[stepKey].attempt = e.attempt || e.meta?.attempt || e.data?.attempt || state.steps[stepKey].attempt || 1
         break
       }
 
       case 'step.completed': {
-        const stepKey = e.step || e.data?.stepKey
         if (!stepKey) break
         if (!state.steps[stepKey]) {
           state.steps[stepKey] = { status: 'completed', attempt: 1 }
@@ -109,7 +125,6 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
       }
 
       case 'step.failed': {
-        const stepKey = e.step || e.data?.stepKey
         if (!stepKey) break
         if (!state.steps[stepKey]) {
           state.steps[stepKey] = { status: 'failed', attempt: 1 }
@@ -124,32 +139,32 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
       }
 
       case 'step.retry': {
-        const stepKey = e.step || e.data?.stepKey
         if (!stepKey) break
         if (!state.steps[stepKey]) {
           state.steps[stepKey] = { status: 'retrying', attempt: 1 }
         }
         state.steps[stepKey].status = 'retrying'
-        state.steps[stepKey].attempt = e.meta?.attempt || e.data?.attempt || 1
+        // v0.4: attempt or nextAttempt
+        state.steps[stepKey].attempt = e.data?.nextAttempt || e.attempt || e.meta?.attempt || e.data?.attempt || 1
+        state.steps[stepKey].error = e.data?.error
         break
       }
 
       case 'step.await.time':
       case 'step.await.event':
       case 'step.await.trigger': {
-        const stepKey = e.step || e.data?.stepKey
         if (!stepKey) break
         if (!state.steps[stepKey]) {
           state.steps[stepKey] = { status: 'waiting', attempt: 1 }
         }
         state.steps[stepKey].status = 'waiting'
-        state.steps[stepKey].awaitType = e.kind.split('.')[2] as 'time' | 'event' | 'trigger'
+        const awaitKind = eventType || e.kind || ''
+        state.steps[stepKey].awaitType = awaitKind.split('.')[2] as 'time' | 'event' | 'trigger'
         state.steps[stepKey].awaitData = e.data
         break
       }
 
       case 'step.resumed': {
-        const stepKey = e.step || e.data?.stepKey
         if (!stepKey) break
         if (!state.steps[stepKey]) {
           state.steps[stepKey] = { status: 'running', attempt: 1 }
@@ -161,7 +176,6 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
       }
 
       case 'step.await.timeout': {
-        const stepKey = e.step || e.data?.stepKey
         if (!stepKey) break
         if (!state.steps[stepKey]) {
           state.steps[stepKey] = { status: 'timeout', attempt: 1 }
@@ -174,15 +188,66 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
 
       case 'runner.log':
       case 'log': {
-        const stepKey = e.step || (e.meta as any)?.stepKey
         state.logs.push({
           ts: e.ts,
           step: stepKey,
           level: e.data?.level || 'info',
-          msg: e.data?.message || e.data?.msg || String(e.data),
+          msg: e.data?.message || e.data?.msg || (typeof e.data === 'string' ? e.data : String(e.data)),
           data: e.data,
         })
         break
+      }
+
+      // Handle any unrecognized events - log for debugging
+      default: {
+        // Log unhandled event types to console for debugging
+        if (typeof console !== 'undefined' && eventType && !eventType.startsWith('_')) {
+          console.debug('[useFlowState] Unhandled event type:', eventType, {
+            stepName: e.stepName,
+            stepKey,
+            data: e.data,
+          })
+        }
+      }
+    }
+  }
+
+  // If no flow start event was found but we have events, check first event
+  if (!state.startedAt && events.length > 0 && events[0]) {
+    state.startedAt = events[0].ts
+  }
+
+  // Infer flow completion if no explicit flow.completed event was found
+  // A flow is considered complete if:
+  // 1. It has started
+  // 2. It has at least one step
+  // 3. All steps have a terminal status (completed, failed, or timeout)
+  // 4. No steps are running, retrying, or waiting
+  if (state.status === 'running' && state.startedAt && Object.keys(state.steps).length > 0) {
+    const hasRunningSteps = Object.values(state.steps).some(
+      s => s.status === 'running' || s.status === 'retrying' || s.status === 'waiting',
+    )
+    const hasFailedSteps = Object.values(state.steps).some(s => s.status === 'failed')
+    const allStepsTerminal = Object.values(state.steps).every(
+      s => s.status === 'completed' || s.status === 'failed' || s.status === 'timeout',
+    )
+
+    if (!hasRunningSteps && allStepsTerminal) {
+      // Infer completion status
+      if (hasFailedSteps) {
+        state.status = 'failed'
+      }
+      else {
+        state.status = 'completed'
+      }
+      // Set completion time to the latest step completion time
+      const latestCompletion = Object.values(state.steps)
+        .map(s => s.completedAt)
+        .filter(Boolean)
+        .sort()
+        .pop()
+      if (latestCompletion) {
+        state.completedAt = latestCompletion
       }
     }
   }

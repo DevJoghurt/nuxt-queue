@@ -140,8 +140,12 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
     // v0.4: Always use a proper flow identifier (UUID for new flows, never job ID)
     const flowId = providedFlow || (autoScope === 'always' ? randomUUID() : undefined)
 
-    // Attempt number (provider-derived in future); placeholder 1 for now
-    const attempt = 1
+    // Get actual attempt number from BullMQ (1-indexed: attemptsMade starts at 0)
+    const attempt = (job.attemptsMade || 0) + 1
+    const maxAttempts = job.opts?.attempts || 1
+    const isRetry = attempt > 1
+    const isFinalAttempt = attempt >= maxAttempts
+
     // Generate a unique stepRunId for this attempt
     const stepRunId = `${String(flowId || job.id)}__${job.name}__attempt-${attempt}`
     // Get flowName for v0.4 events
@@ -184,19 +188,53 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
       result = await handler(job.data, { ...ctx, logger: attemptLogger })
     }
     catch (err) {
-      // v0.4: Emit step.failed event
-      try {
-        await ctx.emit({
-          type: 'step.failed',
-          flowName,
-          stepName: job.name,
-          stepId: stepRunId,
-          attempt,
-          data: { stepName: job.name, queue: queueName, error: String((err as any)?.message || err) },
-        })
+      // Determine if this is a retry or final failure
+      const willRetry = !isFinalAttempt
+
+      if (willRetry) {
+        // v0.4: Emit step.retry event
+        try {
+          await ctx.emit({
+            type: 'step.retry',
+            flowName,
+            stepName: job.name,
+            stepId: stepRunId,
+            attempt,
+            data: {
+              stepName: job.name,
+              queue: queueName,
+              error: String((err as any)?.message || err),
+              attempt,
+              maxAttempts,
+              nextAttempt: attempt + 1,
+            },
+          })
+        }
+        catch {
+          // ignore
+        }
       }
-      catch {
-        // ignore
+      else {
+        // v0.4: Emit step.failed event (final failure)
+        try {
+          await ctx.emit({
+            type: 'step.failed',
+            flowName,
+            stepName: job.name,
+            stepId: stepRunId,
+            attempt,
+            data: {
+              stepName: job.name,
+              queue: queueName,
+              error: String((err as any)?.message || err),
+              attempt,
+              maxAttempts,
+            },
+          })
+        }
+        catch {
+          // ignore
+        }
       }
       throw err
     }

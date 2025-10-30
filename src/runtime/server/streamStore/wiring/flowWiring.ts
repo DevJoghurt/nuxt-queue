@@ -69,14 +69,20 @@ export function createFlowWiring(deps: FlowWiringDeps) {
     const handleFlowEvent = async (e: EventRecord) => {
       try {
         // Only process ingress events (not already persisted)
-        if (e.id && e.ts) return
+        if (e.id && e.ts) {
+          return
+        }
 
         // v0.4: Get runId and flowName from event
         const runId = e.runId
-        if (!runId) return
+        if (!runId) {
+          return
+        }
 
         const flowName = e.flowName
-        if (!flowName) return
+        if (!flowName) {
+          return
+        }
 
         // Persist to stream nq:flow:{runId}
         const streamName = `nq:flow:${runId}`
@@ -94,10 +100,6 @@ export function createFlowWiring(deps: FlowWiringDeps) {
 
         const rec = await adapter.append(streamName, eventData)
 
-        if (process.env.NQ_DEBUG_EVENTS === '1') {
-          console.log('[flow-wiring] persisted', { type: e.type, streamName, id: rec.id })
-        }
-
         // For flow.start, add to index
         if (e.type === 'flow.start') {
           const timestamp = new Date(rec.ts || Date.now()).getTime()
@@ -105,9 +107,13 @@ export function createFlowWiring(deps: FlowWiringDeps) {
         }
       }
       catch (err) {
-        if (process.env.NQ_DEBUG_EVENTS === '1') {
-          console.error('[flow-wiring] error handling event:', err)
-        }
+        console.error('[flowWiring] ERROR handling event:', {
+          type: e.type,
+          runId: e.runId,
+          flowName: e.flowName,
+          error: (err as any)?.message,
+          stack: (err as any)?.stack,
+        })
       }
     }
 

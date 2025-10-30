@@ -74,11 +74,17 @@ interface FlowEntry {
   step: string
   queue: string
   workerId: string
+  runtime?: 'nodejs' | 'python'
+  runtype?: 'inprocess' | 'task'
+  emits?: string[]
 }
 interface FlowStep {
   queue: string
   workerId: string
   subscribes?: string[]
+  runtime?: 'nodejs' | 'python'
+  runtype?: 'inprocess' | 'task'
+  emits?: string[]
 }
 interface FlowMeta {
   id: string
@@ -86,7 +92,20 @@ interface FlowMeta {
   steps?: Record<string, FlowStep>
 }
 
-const props = defineProps<{ flow?: FlowMeta | null, heightClass?: string, showControls?: boolean, showMiniMap?: boolean, showBackground?: boolean }>()
+interface StepStatus {
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'retrying' | 'waiting' | 'timeout'
+  attempt?: number
+  error?: string
+}
+
+const props = defineProps<{
+  flow?: FlowMeta | null
+  heightClass?: string
+  showControls?: boolean
+  showMiniMap?: boolean
+  showBackground?: boolean
+  stepStates?: Record<string, StepStatus> // Current execution state
+}>()
 
 const heightClass = computed(() => props.heightClass || 'h-80')
 const emit = defineEmits<{
@@ -98,7 +117,17 @@ const flowId = computed(() => props.flow?.id)
 type FlowNode = {
   id: string
   position: { x: number, y: number }
-  data: { label: string, queue?: string, workerId?: string, status?: 'idle' | 'running' | 'error' | 'done' }
+  data: {
+    label: string
+    queue?: string
+    workerId?: string
+    status?: 'idle' | 'running' | 'error' | 'done'
+    attempt?: number
+    error?: string
+    runtime?: 'nodejs' | 'python'
+    runtype?: 'inprocess' | 'task'
+    emits?: string[]
+  }
   type?: string
   style?: Record<string, any>
 }
@@ -110,11 +139,25 @@ const nodes = computed<FlowNode[]>(() => {
   if (!f) return out
   let y = 0
   const xCenter = 100
+  const states = props.stepStates || {}
+  
   if (f.entry) {
+    const entryState = states[f.entry.step]
+    const status = mapStatusToNodeStatus(entryState?.status)
+
     out.push({
       id: `entry:${f.entry.step}`,
       position: { x: xCenter, y: y },
-      data: { label: f.entry.step, queue: f.entry.queue },
+      data: {
+        label: f.entry.step,
+        queue: f.entry.queue,
+        status,
+        attempt: entryState?.attempt,
+        error: entryState?.error,
+        runtime: f.entry.runtime,
+        runtype: f.entry.runtype,
+        emits: f.entry.emits,
+      },
       type: 'flow-entry',
       style: { minWidth: '220px' },
     })
@@ -125,10 +168,23 @@ const nodes = computed<FlowNode[]>(() => {
   const colWidth = 220
   names.forEach((name, idx) => {
     const step = steps[name]
+    const stepState = states[name]
+    const status = mapStatusToNodeStatus(stepState?.status)
+
     out.push({
       id: `step:${name}`,
       position: { x: (idx % 3) * colWidth, y: y + Math.floor(idx / 3) * 120 },
-      data: { label: name, queue: step?.queue, workerId: step?.workerId, status: 'idle' },
+      data: {
+        label: name,
+        queue: step?.queue,
+        workerId: step?.workerId,
+        status,
+        attempt: stepState?.attempt,
+        error: stepState?.error,
+        runtime: step?.runtime,
+        runtype: step?.runtype,
+        emits: step?.emits,
+      },
       type: 'flow-step',
       style: { minWidth: '220px' },
     })
@@ -136,11 +192,29 @@ const nodes = computed<FlowNode[]>(() => {
   return out
 })
 
+// Map step status to node visual status
+function mapStatusToNodeStatus(status?: string): 'idle' | 'running' | 'error' | 'done' {
+  switch (status) {
+    case 'running':
+    case 'retrying':
+    case 'waiting':
+      return 'running'
+    case 'completed':
+      return 'done'
+    case 'failed':
+    case 'timeout':
+      return 'error'
+    default:
+      return 'idle'
+  }
+}
+
 const edges = computed<FlowEdge[]>(() => {
   const f = props.flow
   if (!f) return []
   const steps = f.steps || {}
   const stepNames = Object.keys(steps)
+  const states = props.stepStates || {}
 
   const added = new Set<string>()
   const out: FlowEdge[] = []
@@ -148,8 +222,19 @@ const edges = computed<FlowEdge[]>(() => {
   function addEdge(source: string, target: string, label?: string) {
     const id = `${source}->${target}${label ? `:${label}` : ''}`
     if (added.has(id)) return
+
+    // Determine if edge should be animated
+    // Animate if source is completed and target is running/pending
+    const sourceStep = source.split(':')[1]
+    const targetStep = target.split(':')[1]
+    const sourceState = sourceStep ? states[sourceStep] : undefined
+    const targetState = targetStep ? states[targetStep] : undefined
+
+    const animated = sourceState?.status === 'completed'
+      && (targetState?.status === 'running' || targetState?.status === 'pending' || !targetState)
+
     added.add(id)
-    out.push({ id, source, target, label })
+    out.push({ id, source, target, label, animated })
   }
 
   let derived = 0
@@ -244,6 +329,24 @@ watch(() => props.flow, (f) => {
   internalNodes.value = builtNodes
   internalEdges.value = builtEdges
 }, { immediate: true, deep: false })
+
+// Update node data when stepStates change (for live status updates)
+watch(() => props.stepStates, () => {
+  if (!props.flow) return
+  // Update node data without changing positions
+  const builtNodes: VFNode[] = nodes.value.map(n => ({ id: n.id, position: { ...n.position }, data: { ...n.data }, type: n.type, style: n.style }))
+  // Keep existing positions from internalNodes
+  const positionMap = new Map(internalNodes.value.map(n => [n.id, n.position]))
+  builtNodes.forEach((n) => {
+    const existing = positionMap.get(n.id)
+    if (existing) n.position = existing
+  })
+  internalNodes.value = builtNodes
+  
+  // Update edges for animation
+  const builtEdges: VFEdge[] = edges.value.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label, animated: e.animated }))
+  internalEdges.value = builtEdges
+}, { deep: true })
 
 // Persist on any node movement
 watch(internalNodes, () => savePositionsDebounced(props.flow?.id), { deep: true })

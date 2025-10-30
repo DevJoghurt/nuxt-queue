@@ -29,8 +29,10 @@ export function createRedisStreamsAdapter(): StreamAdapter {
     lazyConnect: true,
   })
 
-  // Separate connection for Pub/Sub (v0.4 real-time)
-  const pubsub = new IORedis({
+  // Separate connection for Pub/Sub SUBSCRIBE (v0.4 real-time)
+  // NOTE: Once a connection enters subscriber mode (via SUBSCRIBE), it can ONLY
+  // execute subscriber commands. Regular commands like PUBLISH, XADD, etc. will fail.
+  const subscriber = new IORedis({
     host: conn.host,
     port: conn.port,
     username: conn.username,
@@ -100,7 +102,6 @@ export function createRedisStreamsAdapter(): StreamAdapter {
   return {
     async append(subject: string, e: Omit<EventRecord, 'id' | 'ts'>): Promise<EventRecord> {
       if (!redis.status || redis.status === 'end') await redis.connect()
-      if (!pubsub.status || pubsub.status === 'end') await pubsub.connect()
 
       const ts = nowIso()
       const payloadFields = buildFields({ ...(e as any), ts })
@@ -119,8 +120,10 @@ export function createRedisStreamsAdapter(): StreamAdapter {
       }
 
       // v0.4: PUBLISH to channel after XADD for real-time notifications
+      // NOTE: Must use the normal redis connection, NOT subscriber connection
+      // because PUBLISH is a regular command, not a subscriber command
       const channel = `nq:events:${subject}`
-      await pubsub.publish(channel, id)
+      await redis.publish(channel, id)
 
       if (process.env.NQ_DEBUG_EVENTS === '1') {
         console.log('[redis-streams] appended and published', { stream, id, channel, type: (e as any).type })
@@ -160,7 +163,7 @@ export function createRedisStreamsAdapter(): StreamAdapter {
       const stream = subject
       const channel = `nq:events:${subject}`
 
-      if (!pubsub.status || pubsub.status === 'end') await pubsub.connect()
+      if (!subscriber.status || subscriber.status === 'end') await subscriber.connect()
       if (!redis.status || redis.status === 'end') await redis.connect()
 
       let running = true
@@ -194,14 +197,14 @@ export function createRedisStreamsAdapter(): StreamAdapter {
         }
       }
 
-      pubsub.on('message', messageHandler)
-      await pubsub.subscribe(channel)
+      subscriber.on('message', messageHandler)
+      await subscriber.subscribe(channel)
 
       return {
         unsubscribe() {
           running = false
-          pubsub.off('message', messageHandler)
-          pubsub.unsubscribe(channel).catch(() => {
+          subscriber.off('message', messageHandler)
+          subscriber.unsubscribe(channel).catch(() => {
             // ignore
           })
         },
@@ -210,7 +213,7 @@ export function createRedisStreamsAdapter(): StreamAdapter {
     async close(): Promise<void> {
       try {
         await redis.quit()
-        await pubsub.quit()
+        await subscriber.quit()
       }
       catch {
         // ignore

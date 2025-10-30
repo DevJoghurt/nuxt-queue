@@ -57,7 +57,9 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@iconify-json/devicon": "^1.2.45",
     "@iconify-json/heroicons": "1.2.3",
+    "@iconify-json/lucide": "^1.2.71",
     "@nuxt/devtools": "^3.0.0",
     "@nuxt/eslint-config": "^1.9.0",
     "@nuxt/module-builder": "^1.0.2",

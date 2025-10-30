@@ -920,12 +920,30 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@iconify-json/devicon@npm:^1.2.45":
+  version: 1.2.45
+  resolution: "@iconify-json/devicon@npm:1.2.45"
+  dependencies:
+    "@iconify/types": "npm:*"
+  checksum: 10c0/0ac65a70e475de26b63b8626d032abc8256dcc2eae36b48d6edfc8a3afc7ed938b74001e6a87214edf7aac44d1dc1134e7b25bd0a33a1c036ec6c9bcd544c3d0
+  languageName: node
+  linkType: hard
+
 "@iconify-json/heroicons@npm:1.2.3":
   version: 1.2.3
   resolution: "@iconify-json/heroicons@npm:1.2.3"
   dependencies:
     "@iconify/types": "npm:*"
   checksum: 10c0/121a0e8bd6cd2091b0ceeb334754a068253cf6cc819f4cc18acfba66a4d59bcd092ce6c476a584d3a0874242b9c7f21459f24bfba3bb6a75d63f46cf31e701f4
+  languageName: node
+  linkType: hard
+
+"@iconify-json/lucide@npm:^1.2.71":
+  version: 1.2.71
+  resolution: "@iconify-json/lucide@npm:1.2.71"
+  dependencies:
+    "@iconify/types": "npm:*"
+  checksum: 10c0/c67bf70a7a32f3b64ee96fa18a998f9d0920ccf05e75febd3e5c00667d49f80ec282b155b2afe9fc336819643b5872881781057d7e0c6793564a94205ee83ac1
   languageName: node
   linkType: hard
 
@@ -8796,7 +8814,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "nuxt-queue@workspace:."
   dependencies:
+    "@iconify-json/devicon": "npm:^1.2.45"
     "@iconify-json/heroicons": "npm:1.2.3"
+    "@iconify-json/lucide": "npm:^1.2.71"
     "@nuxt/devtools": "npm:^3.0.0"
     "@nuxt/eslint-config": "npm:^1.9.0"
     "@nuxt/kit": "npm:^4.1.3"

@@ -3,62 +3,123 @@
     :class="heightClass"
     class="overflow-auto"
   >
-    <ul
-      v-if="items && items.length"
-      class="space-y-2"
+    <UTimeline
+      v-if="timelineItems && timelineItems.length"
+      :items="timelineItems"
+      size="xs"
+      class="px-4 py-3"
     >
-      <li
-        v-for="e in orderedItems"
-        :key="e.id"
-        class="text-sm"
-      >
-        <div class="flex gap-2 items-center">
-          <span class="text-gray-500">{{ formatTs(e) }}</span>
-          <span class="font-mono">{{ e.kind }}</span>
+      <!-- Custom indicator slot to show icons -->
+      <template #indicator="{ item }">
+        <UIcon
+          :name="item.icon || 'i-lucide-circle'"
+          class="size-4"
+        />
+      </template>
+
+      <!-- Custom title slot to include kind badge and subject -->
+      <template #title="{ item }">
+        <div class="flex items-center gap-2 min-w-0">
           <span
-            v-if="e.subject"
-            class="text-gray-500"
-          >{{ e.subject }}</span>
+            class="font-mono text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+          >
+            {{ item.eventType }}
+          </span>
+          <span
+            v-if="item.stepName"
+            class="text-xs text-gray-500 dark:text-gray-400 truncate"
+          >
+            {{ item.stepName }}
+          </span>
         </div>
-        <!-- Special rendering for runner.log -->
+      </template>
+
+      <!-- Custom description slot for rich content -->
+      <template #description="{ item }">
+        <!-- Special rendering for log events -->
         <div
-          v-if="e.kind === 'runner.log'"
-          class="mt-1"
+          v-if="item.eventType === 'log'"
+          class="space-y-2 mt-2"
         >
-          <div class="flex items-center gap-2">
+          <div class="flex items-start gap-2">
             <UBadge
-              :color="levelColor(e?.data?.level)"
+              :color="levelColor(item?.eventData?.level)"
               variant="subtle"
-              class="capitalize"
+              size="xs"
+              class="capitalize mt-0.5"
             >
-              {{ e?.data?.level || 'info' }}
+              {{ item?.eventData?.level || 'info' }}
             </UBadge>
-            <span class="">{{ e?.data?.msg || e?.data?.message || '' }}</span>
+            <span class="text-sm text-gray-900 dark:text-gray-100 flex-1">
+              {{ item?.eventData?.message || '' }}
+            </span>
           </div>
           <div
-            v-if="e?.data?.meta"
-            class="mt-1"
+            v-if="item?.eventData?.progress"
+            class="mt-2"
           >
-            <pre class="text-xs bg-gray-100/20 rounded p-2 overflow-auto">{{ pretty(e.data.meta) }}</pre>
+            <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-auto max-h-40 text-gray-700 dark:text-gray-300 font-mono">{{ pretty(item.eventData) }}</pre>
           </div>
         </div>
-        <pre
-          v-else
-          class="text-xs bg-gray-100/20 rounded p-2 overflow-auto"
-        >{{ pretty(e.data) }}</pre>
-      </li>
-    </ul>
+
+        <!-- Special rendering for flow events -->
+        <div
+          v-else-if="isFlowEvent(item.eventType)"
+          class="text-sm mt-2"
+        >
+          <div
+            v-if="item.eventData"
+            class="space-y-1"
+          >
+            <div
+              v-if="item.eventData.input"
+              class="flex items-start gap-2"
+            >
+              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px]">Input:</span>
+              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1">{{ pretty(item.eventData.input) }}</pre>
+            </div>
+            <div
+              v-if="item.eventData.output"
+              class="flex items-start gap-2"
+            >
+              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px]">Output:</span>
+              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1">{{ pretty(item.eventData.output) }}</pre>
+            </div>
+            <div
+              v-if="item.eventData.error"
+              class="flex items-start gap-2"
+            >
+              <span class="text-xs text-red-500 dark:text-red-400 font-medium min-w-[60px]">Error:</span>
+              <pre class="text-xs bg-red-50 dark:bg-red-900/20 rounded px-2 py-1 overflow-auto max-h-20 text-red-700 dark:text-red-300 font-mono flex-1">{{ pretty(item.eventData.error) }}</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Default rendering -->
+        <div
+          v-else-if="item.eventData && Object.keys(item.eventData).length > 0"
+          class="mt-2"
+        >
+          <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-auto max-h-40 text-gray-700 dark:text-gray-300 font-mono">{{ pretty(item.eventData) }}</pre>
+        </div>
+      </template>
+    </UTimeline>
     <div
       v-else
-      class="h-full w-full flex items-center justify-center text-sm text-gray-500"
+      class="h-full w-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500"
     >
-      No events yet.
+      <UIcon
+        name="i-lucide-inbox"
+        class="w-12 h-12 mb-3 opacity-50"
+      />
+      <span class="text-sm">No events yet.</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from '#imports'
+import type { TimelineItem } from '@nuxt/ui'
 
 const props = defineProps<{ items: any[], heightClass?: string }>()
 
@@ -85,9 +146,46 @@ function eventTsMs(e: any): number {
   return Date.now()
 }
 
-const orderedItems = computed(() => {
+function formatTs(e: any) {
+  try {
+    const t = eventTsMs(e)
+    return new Date(t).toLocaleString()
+  }
+  catch {
+    return ''
+  }
+}
+
+function eventIcon(type: string) {
+  if (!type) return 'i-lucide-circle'
+  
+  // Flow events
+  if (type === 'flow.start') return 'i-lucide-play-circle'
+  if (type === 'flow.completed') return 'i-lucide-check-circle-2'
+  if (type === 'flow.failed') return 'i-lucide-x-circle'
+  
+  // Step events
+  if (type === 'step.started' || type === 'step.running') return 'i-lucide-arrow-right-circle'
+  if (type === 'step.completed') return 'i-lucide-check-circle'
+  if (type === 'step.failed') return 'i-lucide-alert-circle'
+  if (type === 'step.retry') return 'i-lucide-rotate-cw'
+  if (type === 'step.timeout') return 'i-lucide-clock'
+  
+  // Log events
+  if (type === 'log') return 'i-lucide-file-text'
+  
+  // Emit events
+  if (type === 'emit') return 'i-lucide-zap'
+  
+  // Default
+  return 'i-lucide-circle-dot'
+}
+
+// Convert raw events to timeline items
+const timelineItems = computed(() => {
   const arr = Array.isArray(props.items) ? [...props.items] : []
-  // newest first
+  
+  // Sort newest first
   arr.sort((a, b) => {
     const tb = eventTsMs(b)
     const ta = eventTsMs(a)
@@ -97,7 +195,15 @@ const orderedItems = computed(() => {
     const bi = String((b as any)?.id || '')
     return bi.localeCompare(ai)
   })
-  return arr
+  
+  // Map to timeline item format
+  return arr.map(e => ({
+    date: formatTs(e),
+    icon: eventIcon(e.type),
+    eventType: e.type,
+    stepName: e.stepName,
+    eventData: e.data,
+  } as TimelineItem & { eventType: string, stepName?: string, eventData?: any }))
 })
 
 function pretty(v: any) {
@@ -109,16 +215,6 @@ function pretty(v: any) {
   }
 }
 
-function formatTs(e: any) {
-  try {
-    const t = eventTsMs(e)
-    return new Date(t).toLocaleString()
-  }
-  catch {
-    return ''
-  }
-}
-
 function levelColor(level?: string) {
   switch ((level || '').toLowerCase()) {
     case 'debug': return 'neutral'
@@ -127,6 +223,10 @@ function levelColor(level?: string) {
     case 'error': return 'error'
     default: return 'neutral'
   }
+}
+
+function isFlowEvent(type: string) {
+  return type?.startsWith('flow.') || type?.startsWith('step.')
 }
 </script>
 
