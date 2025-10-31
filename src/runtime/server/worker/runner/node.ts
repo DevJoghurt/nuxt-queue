@@ -1,7 +1,7 @@
 import type { Job as BullJob } from 'bullmq'
 import { randomUUID } from 'node:crypto'
 import { getStateProvider } from '../../state/stateFactory'
-import { useRuntimeConfig, useMetrics, useLogs, useEventManager, useFlowEngine } from '#imports'
+import { useRuntimeConfig, useLogs, useFlowEngine, useEventManager } from '#imports'
 
 export interface RunLogger {
   log: (level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any) => void
@@ -23,7 +23,6 @@ export interface RunContext {
   attempt?: number
   logger: RunLogger
   state: RunState
-  emit: (evt: any) => void
   flow: ReturnType<typeof useFlowEngine>
 }
 
@@ -59,36 +58,7 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
       return defaultState
     }
   })()
-  // Default emit via EventManager (publishes to adapter + in-proc bus)
-  const emit = partial?.emit || (async (evt: any) => {
-    const type = typeof evt?.type === 'string' ? evt.type : (evt?.kind || 'runner.event')
-    const data = evt?.data ?? evt
-    const { incCounter } = useMetrics()
-    try {
-      incCounter('runner_emits_total', { type })
-    }
-    catch {
-      // ignore
-    }
-    const mgr = useEventManager()
-    // v0.4: Build event with new schema
-    // Priority: explicit event fields > meta fields > partial context
-    const runId = evt?.runId || partial?.flowId || 'unknown'
-    const flowName = evt?.flowName || (evt?.meta as any)?.flowName || partial?.flowName || 'unknown'
-    const stepName = evt?.stepName || (evt?.meta as any)?.stepName || partial?.stepName
-    const stepId = evt?.stepId || (evt?.meta as any)?.stepId || partial?.stepId
-    const attempt = evt?.attempt !== undefined ? evt?.attempt : (evt?.meta as any)?.attempt
 
-    await mgr.publishBus({
-      type,
-      runId,
-      flowName,
-      stepName,
-      stepId,
-      attempt,
-      data,
-    })
-  })
   // Logger bridge: use provider; also mirror to events as runner.log
   const logger: RunLogger = partial?.logger || (() => {
     const logs = useLogs()
@@ -104,14 +74,14 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
   const baseFlowEngine = useFlowEngine()
   const flow = {
     ...baseFlowEngine,
-    handleTrigger: async (trigger: string, payload: any = {}) => {
+    emit: async (trigger: string, payload: any = {}) => {
       // Auto-inject flowId and flowName from context if not provided
       const enrichedPayload = {
         ...payload,
         flowId: payload.flowId || partial?.flowId,
         flowName: payload.flowName || partial?.flowName,
       }
-      return baseFlowEngine.handleTrigger(trigger, enrichedPayload)
+      return baseFlowEngine.emit(trigger, enrichedPayload)
     },
   }
 
@@ -125,7 +95,6 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
     attempt: partial?.attempt,
     logger,
     state,
-    emit,
     flow,
   }
 }
@@ -134,6 +103,7 @@ export type NodeHandler = (input: any, ctx: RunContext) => Promise<any>
 
 export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
   return async function processor(job: BullJob) {
+    const eventMgr = useEventManager()
     const rc: any = useRuntimeConfig()
     const autoScope: 'always' | 'flow' | 'never' = rc?.queue?.state?.autoScope || 'always'
     const providedFlow = job.data?.flowId
@@ -143,7 +113,6 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
     // Get actual attempt number from BullMQ (1-indexed: attemptsMade starts at 0)
     const attempt = (job.attemptsMade || 0) + 1
     const maxAttempts = job.opts?.attempts || 1
-    const isRetry = attempt > 1
     const isFinalAttempt = attempt >= maxAttempts
 
     // Generate a unique stepRunId for this attempt
@@ -170,13 +139,14 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
     }
     // v0.4: Emit step.started event
     try {
-      await ctx.emit({
+      await eventMgr.publishBus({
         type: 'step.started',
+        runId: flowId || 'unknown',
         flowName,
         stepName: job.name,
         stepId: stepRunId,
         attempt,
-        data: { jobId: job.id, name: job.name, queue: queueName },
+        data: { jobId: job.id, name: job.name, queue: queueName } as any,
       })
     }
     catch {
@@ -194,8 +164,9 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
       if (willRetry) {
         // v0.4: Emit step.retry event
         try {
-          await ctx.emit({
-            type: 'step.retry',
+          await eventMgr.publishBus({
+            type: 'step.retry' as any,
+            runId: flowId || 'unknown',
             flowName,
             stepName: job.name,
             stepId: stepRunId,
@@ -207,7 +178,7 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
               attempt,
               maxAttempts,
               nextAttempt: attempt + 1,
-            },
+            } as any,
           })
         }
         catch {
@@ -217,18 +188,16 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
       else {
         // v0.4: Emit step.failed event (final failure)
         try {
-          await ctx.emit({
+          const eventMgr = useEventManager()
+          await eventMgr.publishBus({
             type: 'step.failed',
+            runId: flowId || 'unknown',
             flowName,
             stepName: job.name,
             stepId: stepRunId,
             attempt,
             data: {
-              stepName: job.name,
-              queue: queueName,
               error: String((err as any)?.message || err),
-              attempt,
-              maxAttempts,
             },
           })
         }
@@ -240,13 +209,15 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
     }
     // v0.4: Emit step.completed event
     try {
-      await ctx.emit({
+      const eventMgr = useEventManager()
+      await eventMgr.publishBus({
         type: 'step.completed',
+        runId: flowId || 'unknown',
         flowName,
         stepName: job.name,
         stepId: stepRunId,
         attempt,
-        data: { stepName: job.name, queue: queueName, result },
+        data: { result },
       })
     }
     catch {

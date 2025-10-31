@@ -1,83 +1,71 @@
-# Lean Event Architecture (v0.3) - Complete Package
+# Nuxt Queue Architecture (v0.4) - Current Implementation
 
-This directory contains the complete specification for the v0.3 "Lean Event Architecture" - a radical simplification of the event storage and real-time distribution system with **generic support for flows, triggers, webhooks, and any future event sources**.
+This directory contains the complete specification for v0.4 - the current implementation of nuxt-queue, a BullMQ-based queue and flow orchestration system for Nuxt with integrated event sourcing and real-time monitoring.
 
-**Key Change**: Queue/job events are handled by BullMQ/PgBoss, NOT by this stream store. This system is for internal event sourcing (flows, triggers, etc.).
+**Core Architecture**: Stream-based event sourcing with Redis Pub/Sub for real-time distribution, BullMQ for queue management, and a unified flow orchestration engine.
 
 ## 📚 Documents
 
-1. **[lean-event-architecture.md](./lean-event-architecture.md)** ⭐️ START HERE
+1. **[v0.4-current-implementation.md](./v0.4-current-implementation.md)** ⭐️ START HERE
    - Complete architecture specification
-   - Design principles and rationale
-   - Storage model with examples
-   - Real-time distribution via Pub/Sub
-   - Performance targets
+   - Event sourcing with stream store
+   - Flow orchestration engine
+   - Real-time distribution via Redis Pub/Sub
+   - Worker context and runtime
 
-2. **[lean-event-architecture-implementation.md](./lean-event-architecture-implementation.md)**
-   - Concrete code examples
-   - Step-by-step implementation guide
-   - Migration checklist
-   - Performance testing scripts
+2. **[v0.4-event-schema.md](./v0.4-event-schema.md)** 📋 EVENTS
+   - Event types and schema
+   - Flow lifecycle events
+   - Step execution events
+   - State and logging
 
-3. **[architecture-comparison.md](./architecture-comparison.md)**
-   - Side-by-side comparison: v0.2 vs v0.3
-   - Performance metrics
-   - Code complexity analysis
-   - Migration effort estimate
-   - Decision matrix
+3. **[roadmap.md](./roadmap.md)** 🗺️ FUTURE
+   - Next steps and vision
+   - Planned features
+   - Architecture improvements
+   - Migration paths
 
-4. **[quick-reference.md](./quick-reference.md)** 📋 QUICK START
-   - One-page summary
-   - Visual diagrams
-   - Key metrics
-   - Implementation checklist
+4. **[quick-reference.md](./quick-reference.md)** � QUICK REFERENCE
+   - API overview
+   - Key concepts
+   - Common patterns
 
-## 🎯 What's New in v0.3
+## 🎯 What's in v0.4
 
-### The Big Changes
+### Current Features
 
-| Aspect | v0.2 (Current) | v0.3 (Lean) |
-|--------|----------------|-------------|
-| **Streams per flow** | 5 streams | 1 stream |
-| **Storage per run** | 9-16 KB | 5-10 KB |
-| **Real-time method** | XREAD polling | Redis Pub/Sub |
-| **Update latency** | 1-10 seconds | <100ms |
-| **Code complexity** | 288 lines (wiring) | 40 lines (wiring) |
-| **Horizontal scaling** | Difficult | Native |
-| **Retry & Await** | Limited | Full support |
-
-### Key Benefits
-
-✅ **40-60% less storage** - Lower Redis costs  
-✅ **4x faster writes** - Better throughput  
-✅ **10-100x faster updates** - Real-time UI like Motia  
-✅ **4x better scaling** - Stateless instances  
-✅ **70% less code** - Easier to maintain  
-✅ **Zero CPU when idle** - No polling loops  
-✅ **Automatic retry** - Exponential backoff built-in  
-✅ **Flow await patterns** - Time, event, and webhook-based pausing  
+✅ **Stream-based Event Sourcing** - Single stream per flow run with full event history  
+✅ **Real-time Distribution** - Redis Pub/Sub for <100ms update latency  
+✅ **Flow Orchestration** - Define multi-step workflows with TypeScript  
+✅ **BullMQ Integration** - Reliable queue management with retry support  
+✅ **Worker Context** - Rich runtime context with state, logging, and emit  
+✅ **Registry System** - Auto-discovery of queues and flows from filesystem  
+✅ **Horizontal Scaling** - Stateless architecture, scale workers independently  
+✅ **Development UI** - Real-time monitoring with Vue Flow diagrams  
+✅ **State Management** - Per-flow state with Redis backend  
+✅ **Metrics & Logging** - Integrated observability  
 
 ## 🚀 Quick Start
 
-### 1. Read the Spec (10 minutes)
+### 1. Read Current Implementation (15 minutes)
 
-Start with [quick-reference.md](./quick-reference.md) for a visual overview, then read [lean-event-architecture.md](./lean-event-architecture.md) for the complete picture.
+Start with [v0.4-current-implementation.md](./v0.4-current-implementation.md) for architecture overview and [v0.4-event-schema.md](./v0.4-event-schema.md) for event details.
 
-### 2. Review the Comparison (5 minutes)
+### 2. Check the Roadmap (5 minutes)
 
-Check [architecture-comparison.md](./architecture-comparison.md) to understand the improvements and migration effort.
+See [roadmap.md](./roadmap.md) to understand planned features and improvements.
 
-### 3. Follow the Implementation Guide (1-2 weeks)
+### 3. Use the Quick Reference
 
-Use [lean-event-architecture-implementation.md](./lean-event-architecture-implementation.md) for step-by-step code examples.
+Use [quick-reference.md](./quick-reference.md) for API patterns and common use cases.
 
 ## 🏗️ Architecture Overview
 
 ```
 ┌─────────────┐         ┌──────────────┐        ┌─────────────────┐
 │   Worker    │  emit   │  Event Bus   │ write  │  Redis Streams  │
-│  (Node.js)  ├────────>│  (Internal)  ├───────>│  Single Stream  │
-└─────────────┘         └──────────────┘        │  per Flow Run   │
+│  (Node.js)  ├────────>│  (Internal)  ├───────>│  per Flow Run   │
+└─────────────┘         └──────────────┘        │  nq:flow:<id>   │
                                │                 └────────┬────────┘
                                │                          │
                                ▼                   XADD + PUBLISH
@@ -99,199 +87,213 @@ Use [lean-event-architecture-implementation.md](./lean-event-architecture-implem
           └─────────────┘            └─────────────┘
 ```
 
-### The Core Principle
+### Core Principles
 
-**One stream per flow** (`nq:flow:<flowId>`) contains EVERYTHING:
-- Flow lifecycle events
-- Step attempts and completions
-- Logs and state changes
-- All in chronological order
+**Event Sourcing**: One stream per flow run (`nq:flow:<runId>`) contains all events in chronological order.
 
-**Redis Pub/Sub** handles real-time distribution:
-- Write once (XADD)
-- Publish once (PUBLISH)
-- Receive everywhere (<100ms)
+**Real-time Distribution**: Redis Pub/Sub broadcasts events to all subscribed instances with <100ms latency.
 
-**Client-side reduction** (Motia pattern):
-- Receive all events
-- Compute current state
-- Update UI reactively
+**Flow Orchestration**: Multi-step workflows defined as queue workers, executed by BullMQ.
+
+**Worker Context**: Rich runtime with state management, logging, event emission, and flow control.
+
+**Client-side Reduction**: Browser receives events and computes current state reactively.
 
 ## 📦 Storage Model
 
-### Before (v0.2): Complex
+### Current (v0.4)
+
 ```
 Per Flow Run:
-├── nq:flow:<flowId>                        (~5-10 KB)
-├── nq:proj:flow:<flowName>:<flowId>        (~2-3 KB)
-├── nq:proj:flow-steps:<flowId>             (~1-2 KB)
-├── nq:proj:flow-step-index:<flowId>        (~500 bytes)
-└── nq:proj:flow-runs:<flowName>            (~100 bytes)
+├── nq:flow:<runId>                             (~5-15 KB, depends on events)
+│   ├─ flow.start
+│   ├─ step.started
+│   ├─ log
+│   ├─ step.completed
+│   └─ flow.completed
+│
+└── Flow Index: nq:flows:<flowName>             (~100 bytes per entry)
+    └─ ZADD <timestamp> <runId>
 
-Total: 9-16 KB, 5 streams per run
+Plus BullMQ queues for job management:
+└── bull:<queueName>:*                          (handled by BullMQ)
 ```
 
-### After (v0.3): Simple
-```
-Per Flow Run:
-├── nq:flow:<flowId>                        (~5-10 KB)
-└── ZADD nq:flows:<flowName> <ts> <flowId>  (~100 bytes)
+## 🔄 Event Schema (v0.4)
 
-Total: 5-10 KB, 1 stream + 1 index entry
-```
-
-## 🔄 Event Schema
-
-### Simplified Envelope
+### Current Event Structure
 
 ```typescript
 {
-  id: "1719667845123-0",           // Redis Stream ID
-  ts: "2025-10-28T12:34:56Z",      // ISO timestamp
-  kind: "step.completed",           // Event type
-  subject: "abc-123-def",           // Context ID (flowId, triggerId, etc.)
-  flow: "abc-123-def",              // Flow run ID (optional, for flow events)
-  step: "fetch_data",               // Step name (optional, for step events)
-  trigger: "approval-123",          // Trigger ID (optional, for trigger events)
-  data: { result: {...} },          // Payload
-  meta: { attempt: 1 }              // Context (optional)
+  id: "1719667845123-0",          // Redis Stream ID (auto-generated)
+  ts: "2025-10-28T12:34:56Z",     // ISO timestamp (auto-generated)
+  type: "step.completed",          // Event type
+  runId: "abc-123-def",            // Flow run UUID
+  flowName: "example-flow",        // Flow definition name
+  stepName?: "fetch_data",         // Step name (optional, for step events)
+  stepId?: "step-1",               // Step ID (optional, for step events)
+  attempt?: 1,                     // Attempt number (optional, for step events)
+  data?: { result: {...} }         // Event payload (optional)
 }
 ```
 
-**Changes from v0.2**:
-- **Added `subject`** (required) - primary context identifier
-- **Made `flow` optional** - not all events are flow-related
-- **Added `trigger`** - for trigger events
-- **Added `correlationId`** - link events across contexts
-- Removed `stream` (redundant)
-- Removed `v` (version at adapter level)
+**Key fields**:
+- `id` - Redis stream ID (auto)
+- `ts` - ISO timestamp (auto)
+- `type` - Event type (required)
+- `runId` - Flow run UUID (required)
+- `flowName` - Flow name (required)
+- `stepName`, `stepId`, `attempt` - Optional for step events
+- `data` - Optional payload
 
-**New event kinds**:
-- `trigger.registered/fired/timeout/cancelled` - Trigger lifecycle
-- `step.retry` - Retry after failure
-- `step.await.time/event/trigger` - Pause execution
-- `step.resumed` - Resume after await
-- `step.await.timeout` - Await timeout
+## 📊 Current Capabilities
 
-## 📊 Performance Targets
+| Feature | Status |
+|---------|--------|
+| Stream-based events | ✅ Implemented |
+| Redis Pub/Sub real-time | ✅ Implemented |
+| Flow orchestration | ✅ Implemented |
+| BullMQ integration | ✅ Implemented |
+| TypeScript workers | ✅ Implemented |
+| Worker context (state/logs) | ✅ Implemented |
+| Development UI | ✅ Implemented |
+| Horizontal scaling | ✅ Supported |
+| Event streaming API | ✅ Implemented |
+| Registry auto-discovery | ✅ Implemented |
+| Python workers | 🚧 Planned |
+| Trigger/await patterns | 🚧 Planned |
+| PgBoss provider | 🚧 Planned |
+| Postgres stream store | 🚧 Planned |
+| Unified state/stream | 🚧 Planned |
 
-| Metric | Target | Expected |
-|--------|--------|----------|
-| Write latency | <5ms | 2-3ms |
-| Read latency | <10ms | 5-8ms |
-| Update latency | <100ms | 50-80ms |
-| Storage/run | <20KB | ~10KB |
-| CPU/client (idle) | <0.1% | ~0% |
-| Horizontal scaling | ✅ Yes | ✅ Yes |
-| Retry reliability | >99.9% | ✅ Yes |
-| Await accuracy | ±100ms | ✅ Yes |
+## 🛠️ Current Architecture Components
 
-## 🛠️ Implementation Checklist
+### Module System
+- **Registry**: Auto-discovers queues and flows from filesystem
+- **Compilation**: Builds static registry at build time, hot-reloads in dev
+- **Templates**: Generates type-safe imports for worker handlers
 
-### Phase 1: Foundation (Week 1)
-- [ ] Update event types (EventRecord)
-- [ ] Add Pub/Sub to Redis adapter
-- [ ] Create simplified wiring (flowWiring.ts)
-- [ ] Add flow index (ZADD)
+### Runtime
+- **Event Manager**: Publishes events to stream store and internal bus
+- **Stream Store**: Redis Streams adapter with Pub/Sub for real-time
+- **State Provider**: Redis-backed state management with flow scoping
+- **Queue Provider**: BullMQ integration for job management
+- **Worker Runner**: Executes steps with rich context
 
-### Phase 2: Endpoints (Week 2)
-- [ ] Update SSE endpoints (backfill + subscribe)
-- [ ] Add reducer composables
-- [ ] Add retry logic with exponential backoff
-- [ ] Implement await methods (time/event/trigger)
-- [ ] Add trigger API endpoint
-- [ ] Test real-time updates
+### API Endpoints
+- `GET /api/_flows/:name/runs` - List flow runs
+- `GET /api/_flows/:name/runs/:id` - Get flow run events
+- `GET /api/_flows/:name/runs/:id/stream` - SSE stream of events
+- `POST /api/_flows/:name/start` - Start flow run
+- `GET /api/_queues/:name` - Queue information
+- `POST /api/_queues/:name/enqueue` - Enqueue job
 
-### Phase 3: Migration (Week 3)
-- [ ] Feature flag (`LEAN_EVENTS=1`)
-- [ ] Gradual rollout (10% → 100%)
-- [ ] Monitor metrics
-- [ ] Performance testing
-
-### Phase 4: Cleanup (Week 4)
-- [ ] Remove old projection wiring
-- [ ] Delete unused streams
-- [ ] Update documentation
-- [ ] Celebrate 🎉
+### UI Components
+- Flow diagram visualization (Vue Flow)
+- Real-time event timeline
+- Flow run overview and logs
+- Queue statistics and monitoring
 
 ## 🧪 Testing
 
-### Unit Tests
+### Development
 ```bash
-# Test Redis Pub/Sub
-node specs/test-pubsub.js
+# Run tests
+yarn test
 
-# Test event reduction
-npm run test src/runtime/app/composables/useFlowState.test.ts
+# Start development server
+yarn dev
+
+# Access UI
+http://localhost:3000/__queue
 ```
 
-### Integration Tests
-```bash
-# Start flow and watch events
-curl http://localhost:3000/api/_flows/example-flow/start
-curl http://localhost:3000/api/_flows/example-flow/runs/<id>/stream
+### Example Flow
+```typescript
+// server/queues/example/first_step.ts
+export default defineQueueWorker(async (job, ctx) => {
+  ctx.logger.log('info', 'Starting step 1')
+  await ctx.state.set('step1Result', { success: true })
+  
+  // Emit event to trigger next step
+  ctx.emit({ type: 'emit', data: { name: 'step1.complete', result: { message: 'Step 1 complete' } } })
+  
+  return { message: 'Step 1 complete' }
+})
 
-# Should see real-time events with <100ms latency
-```
+export const config = defineQueueConfig({
+  flow: {
+    names: ['example-flow'],
+    role: 'entry',
+    step: 'first_step',
+    emits: ['step1.complete']
+  }
+})
 
-### Load Tests
-```bash
-# Simulate 100 concurrent flows
-node specs/test-load.js
+// server/queues/example/second_step.ts
+export default defineQueueWorker(async (job, ctx) => {
+  ctx.logger.log('info', 'Running step 2')
+  return { message: 'Step 2 complete' }
+})
 
-# Check:
-# - Write latency < 5ms
-# - Pub/Sub delivery < 100ms
-# - No memory leaks
+export const config = defineQueueConfig({
+  flow: {
+    names: ['example-flow'],
+    role: 'step',
+    step: 'second_step',
+    subscribes: ['step1.complete']  // Triggered by first_step
+  }
+})
 ```
 
 ## 📖 Related Documents
 
-- [message-and-streams-spec.md](./message-and-streams-spec.md) - Original v0.2 spec (historical reference)
-- [motia-inspired-design.md](./motia-inspired-design.md) - Original Motia-inspired architecture
+- [v0.4-current-implementation.md](./v0.4-current-implementation.md) - Complete architecture documentation
+- [v0.4-event-schema.md](./v0.4-event-schema.md) - Event types and schema
+- [roadmap.md](./roadmap.md) - Future plans and vision
+- [quick-reference.md](./quick-reference.md) - API quick reference
+
+### Historical References
+- [lean-event-architecture.md](./lean-event-architecture.md) - v0.3 design (historical)
+- [message-and-streams-spec.md](./message-and-streams-spec.md) - v0.2 spec (historical)
+- [motia-inspired-design.md](./motia-inspired-design.md) - Original inspiration
 
 ## 🤝 Contributing
 
-When implementing v0.3:
+When working on nuxt-queue:
 
-1. **Follow the spec** - Don't deviate without discussion
-2. **Test thoroughly** - Real-time systems are tricky
-3. **Monitor metrics** - Watch latency and throughput
-4. **Document changes** - Update this README
+1. **Follow the architecture** - Use stream store for events, BullMQ for jobs
+2. **Test thoroughly** - Real-time systems require careful testing
+3. **Document changes** - Keep specs in sync with implementation
+4. **Consider performance** - Monitor latency and throughput
 
 ## ❓ FAQ
 
-**Q: Why Pub/Sub instead of XREAD?**  
-A: Pub/Sub is event-driven (zero CPU when idle) and scales horizontally (Redis handles fanout). XREAD requires polling loops per connection.
+**Q: What's the difference between queue and flow?**  
+A: Queues handle individual jobs via BullMQ. Flows orchestrate multi-step workflows where steps are queued and tracked via event sourcing.
 
-**Q: What if I need projections for performance?**  
-A: Cache reduced snapshots in Redis with TTL. Most queries are fast enough without caching.
+**Q: How do I add a new flow?**  
+A: Create worker files in `server/queues/<flow-name>/` with `defineQueueWorker()` and `defineQueueConfig()`. The registry auto-discovers them.
 
-**Q: How do I query logs for a specific step?**  
-A: Client filters: `events.filter(e => e.step === 'fetch' && e.kind === 'log')`
+**Q: How does real-time work?**  
+A: Events are written to Redis Streams and published via Pub/Sub. SSE endpoints subscribe to Pub/Sub channels for instant updates.
 
-**Q: What about large flows (1000+ events)?**  
-A: Client reduces incrementally. Server can paginate backfill. Rarely an issue in practice.
+**Q: Can I use this without flows?**  
+A: Yes! You can use just the queue functionality with BullMQ for simple job processing.
 
-**Q: How do retries work?**  
-A: Configure retry policy with attempts and backoff. Steps automatically retry on retriable errors with exponential backoff.
+**Q: How do I access state in a worker?**  
+A: Use `ctx.state.get()` and `ctx.state.set()`. State is automatically scoped per flow run.
 
-**Q: Can steps wait for external triggers?**  
-A: Yes! Use `ctx.await.trigger()` to pause execution until webhook is called. Also supports time-based and event-based await.
-
-**Q: What happens if an await times out?**  
-A: A `step.await.timeout` event is emitted and the step fails. You can handle timeouts in your error handling logic.
-
-**Q: Can I mix v0.2 and v0.3?**  
-A: Yes, use a feature flag. They can coexist during migration.
+**Q: What about Python workers?**  
+A: Planned for future release. Currently TypeScript/JavaScript only.
 
 ## 📞 Support
 
-Questions? Open an issue or ping @DevJoghurt on GitHub.
+Questions? Open an issue or check the documentation in `/specs/`.
 
 ---
 
-**Status**: ✅ **Ready to implement**  
-**Version**: v0.3 (2025-10-29)  
+**Status**: ✅ **v0.4 - Current Implementation**  
+**Version**: v0.4.0  
 **Author**: @DevJoghurt  
 **License**: MIT

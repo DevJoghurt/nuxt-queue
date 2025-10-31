@@ -1,10 +1,9 @@
 import { ref, computed, type Ref } from 'vue'
 
 /**
- * v0.3 Client-Side Flow State Reducer
+ * Client-Side Flow State Reducer
  *
  * Reduces an array of events from the flow timeline into current state.
- * This follows the Motia pattern where the client computes state from events.
  */
 
 export interface FlowState {
@@ -38,23 +37,13 @@ export interface LogEntry {
 export interface EventRecord {
   id: string
   ts: string
-  // v0.4 fields
-  type?: string
-  runId?: string
+  type: string
+  runId: string
   flowName?: string
   stepName?: string
   stepId?: string
   attempt?: number
-  // Legacy v0.3 fields
-  kind?: string
-  subject?: string
-  flow?: string
-  step?: string
-  trigger?: string
-  correlationId?: string
-  // Common fields
   data?: any
-  meta?: any
 }
 
 /**
@@ -68,12 +57,8 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
   }
 
   for (const e of events) {
-    // v0.4: Support both type and kind fields (for backward compatibility)
-    const eventType = e.type || e.kind
-
-    // Extract step key from various possible locations
-    // v0.4: stepName is the primary field, fall back to step/data
-    const stepKey = e.stepName || e.step || e.data?.stepName || e.data?.stepKey || e.data?.step || e.meta?.stepKey || e.meta?.step
+    const eventType = e.type
+    const stepKey = e.stepName
 
     switch (eventType) {
       case 'flow.start':
@@ -108,8 +93,7 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
         }
         state.steps[stepKey].status = 'running'
         state.steps[stepKey].startedAt = e.ts
-        // v0.4: attempt is a top-level field
-        state.steps[stepKey].attempt = e.attempt || e.meta?.attempt || e.data?.attempt || state.steps[stepKey].attempt || 1
+        state.steps[stepKey].attempt = e.attempt || state.steps[stepKey].attempt || 1
         break
       }
 
@@ -144,8 +128,7 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
           state.steps[stepKey] = { status: 'retrying', attempt: 1 }
         }
         state.steps[stepKey].status = 'retrying'
-        // v0.4: attempt or nextAttempt
-        state.steps[stepKey].attempt = e.data?.nextAttempt || e.attempt || e.meta?.attempt || e.data?.attempt || 1
+        state.steps[stepKey].attempt = e.data?.nextAttempt || e.attempt || 1
         state.steps[stepKey].error = e.data?.error
         break
       }
@@ -158,8 +141,7 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
           state.steps[stepKey] = { status: 'waiting', attempt: 1 }
         }
         state.steps[stepKey].status = 'waiting'
-        const awaitKind = eventType || e.kind || ''
-        state.steps[stepKey].awaitType = awaitKind.split('.')[2] as 'time' | 'event' | 'trigger'
+        state.steps[stepKey].awaitType = eventType.split('.')[2] as 'time' | 'event' | 'trigger'
         state.steps[stepKey].awaitData = e.data
         break
       }

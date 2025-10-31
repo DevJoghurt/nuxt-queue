@@ -1,23 +1,30 @@
 import { getStreamStoreFactory } from '../streamStore/streamStoreFactory'
-import { getProjectionStreamNames } from '../streamStore/streamNames'
 import type { EventReadOptions, EventSubscription } from '../streamStore/types'
-import type { EventRecord } from '../events/eventBus'
+import type { EventRecord } from '../../types'
 
 export function useStreamStore() {
   const factory = getStreamStoreFactory()
-  const proj = getProjectionStreamNames()
-  // Subscribe directly via the underlying adapter (Store Bus)
 
   async function read(stream: string, opts?: EventReadOptions): Promise<EventRecord[]> {
     return await factory.adapter.read(stream, opts)
   }
 
-  function names() {
-    return factory.names
+  async function indexAdd(key: string, id: string, score: number): Promise<void> {
+    if (!factory.adapter.indexAdd) {
+      throw new Error('Current adapter does not support indexAdd')
+    }
+    return await factory.adapter.indexAdd(key, id, score)
   }
 
-  function projectionNames() {
-    return proj
+  async function indexRead(key: string, opts?: { offset?: number, limit?: number }) {
+    if (!factory.adapter.indexRead) {
+      throw new Error('Current adapter does not support indexRead')
+    }
+    return await factory.adapter.indexRead(key, opts)
+  }
+
+  function names() {
+    return factory.names
   }
 
   function subscribe(stream: string, handler: (e: EventRecord) => void): () => void {
@@ -30,7 +37,7 @@ export function useStreamStore() {
       try {
         sub = await factory.adapter.subscribe(stream, (e) => {
           if (process.env.NQ_DEBUG_EVENTS === '1') {
-            console.log('[use-stream-store] event received', { stream, id: e?.id, kind: e?.kind })
+            console.log('[use-stream-store] event received', { stream, id: e?.id, type: e?.type })
           }
           handler(e)
         })
@@ -69,9 +76,11 @@ export function useStreamStore() {
   return {
     // names
     names,
-    projectionNames,
     // read from canonical streams
     read,
+    // sorted set index operations
+    indexAdd,
+    indexRead,
     // subscribe to canonical stream events via the adapter (Store Bus)
     subscribe,
     // expose adapter if advanced usage is needed

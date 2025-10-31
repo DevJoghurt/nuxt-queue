@@ -1,17 +1,16 @@
 export const config = defineQueueConfig({
   queue: {
-    name: 'example_queue_parallel_step',
+    name: 'example_queue',
   },
   // Optional: let queue name default to file name ("second_step")
   flow: {
     // Must include the flow name(s) this step participates in
     name: ['example-flow'],
     role: 'step',
-    // This worker handles the "parallel_step" job name
-    step: 'parallel_step',
-    emits: ['parallel'],
+    // This worker handles the "second_step" job name
+    step: 'test',
     // Must match the emit from first_step
-    subscribes: ['first_step.completed'],
+    subscribes: ['parallel'],
   },
 })
 
@@ -24,11 +23,9 @@ export default defineQueueWorker(
     ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, { jobId: ctx.jobId, flowId: ctx.flowId, flowName: ctx.flowName })
 
     for (let i = 0; i < 5; i++) {
-      ctx.logger.log('info', `Parallel step progress ${i + 1}/5`, { progress: i + 1 })
+      ctx.logger.log('info', `Test progress ${i + 1}/5`, { progress: i + 1 })
       await wait(2000)
     }
-
-    ctx.flow.emit('parallel')
 
     return {
       ok: true,

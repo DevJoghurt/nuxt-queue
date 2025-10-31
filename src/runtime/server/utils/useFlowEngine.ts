@@ -20,14 +20,14 @@ export const useFlowEngine = () => {
     return { id, queue: flow.entry.queue, step: flow.entry.step, flowId }
   }
 
-  const handleTrigger = async (trigger: string, payload: any = {}) => {
+  const emit = async (trigger: string, payload: any = {}) => {
     // v0.4: Emit an 'emit' event that the flows plugin will handle
     // This allows the flows plugin to manage enqueueing and idempotency
     const flowId = payload?.flowId
     const flowName = payload?.flowName || 'unknown'
 
     if (!flowId) {
-      console.warn('[useFlowEngine] handleTrigger called without flowId, trigger may not work:', trigger)
+      console.warn('[useFlowEngine] emit called without flowId, trigger may not work:', trigger)
     }
 
     try {
@@ -46,5 +46,5 @@ export const useFlowEngine = () => {
     return []
   }
 
-  return { startFlow, handleTrigger }
+  return { startFlow, emit }
 }

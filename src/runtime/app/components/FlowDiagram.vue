@@ -15,9 +15,10 @@
           Reset
         </button>
         <VueFlow
+          ref="vueFlowRef"
           v-model:nodes="internalNodes"
           v-model:edges="internalEdges"
-          fit-view
+          :fit-view-on-init="true"
           class="h-full w-full"
           @node-click="onNodeClick"
         >
@@ -65,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from '#imports'
+import { computed, ref, watch, nextTick } from '#imports'
 import type { Node as VFNode, Edge as VFEdge } from '@vue-flow/core'
 import { Handle, Position } from '@vue-flow/core'
 import FlowNodeCard from '../components/FlowNodeCard.vue'
@@ -86,10 +87,23 @@ interface FlowStep {
   runtype?: 'inprocess' | 'task'
   emits?: string[]
 }
+
+interface AnalyzedStep extends FlowStep {
+  name: string
+  dependsOn: string[]
+  triggers: string[]
+  level: number
+}
+
 interface FlowMeta {
   id: string
   entry?: FlowEntry
   steps?: Record<string, FlowStep>
+  analyzed?: {
+    levels: string[][]
+    maxLevel: number
+    steps: Record<string, AnalyzedStep>
+  }
 }
 
 interface StepStatus {
@@ -113,6 +127,7 @@ const emit = defineEmits<{
   (e: 'nodeAction', payload: { id: string, action: 'run' | 'logs' | 'details' }): void
 }>()
 const flowId = computed(() => props.flow?.id)
+const vueFlowRef = ref<any>(null)
 
 type FlowNode = {
   id: string
@@ -137,17 +152,25 @@ const nodes = computed<FlowNode[]>(() => {
   const out: FlowNode[] = []
   const f = props.flow
   if (!f) return out
-  let y = 0
-  const xCenter = 100
-  const states = props.stepStates || {}
   
+  const states = props.stepStates || {}
+  const colWidth = 250
+  const rowHeight = 140
+  const horizontalGap = 50
+  const verticalGap = 80
+  const entryToStepsGap = 140 // Extra gap between entry and first step row
+  const nodeWidth = 220
+  
+  let y = 0
+  
+  // Entry node (centered) - offset by half width to center properly
   if (f.entry) {
     const entryState = states[f.entry.step]
     const status = mapStatusToNodeStatus(entryState?.status)
 
     out.push({
       id: `entry:${f.entry.step}`,
-      position: { x: xCenter, y: y },
+      position: { x: -nodeWidth / 2, y: y },
       data: {
         label: f.entry.step,
         queue: f.entry.queue,
@@ -159,36 +182,122 @@ const nodes = computed<FlowNode[]>(() => {
         emits: f.entry.emits,
       },
       type: 'flow-entry',
-      style: { minWidth: '220px' },
+      style: { minWidth: `${nodeWidth}px` },
     })
-    y += 120
+    y += rowHeight + entryToStepsGap
   }
+  
+  // Use analyzed levels if available, otherwise fall back to simple grid
   const steps = f.steps || {}
-  const names = Object.keys(steps)
-  const colWidth = 220
-  names.forEach((name, idx) => {
-    const step = steps[name]
-    const stepState = states[name]
-    const status = mapStatusToNodeStatus(stepState?.status)
-
-    out.push({
-      id: `step:${name}`,
-      position: { x: (idx % 3) * colWidth, y: y + Math.floor(idx / 3) * 120 },
-      data: {
-        label: name,
-        queue: step?.queue,
-        workerId: step?.workerId,
-        status,
-        attempt: stepState?.attempt,
-        error: stepState?.error,
-        runtime: step?.runtime,
-        runtype: step?.runtype,
-        emits: step?.emits,
-      },
-      type: 'flow-step',
-      style: { minWidth: '220px' },
+  
+  // Debug: log what we received
+  if (f.analyzed) {
+    console.log('[FlowDiagram] Analyzed data:', {
+      levels: f.analyzed.levels,
+      maxLevel: f.analyzed.maxLevel,
+      stepsCount: Object.keys(f.analyzed.steps || {}).length,
     })
-  })
+  }
+  
+  if (f.analyzed?.levels && f.analyzed.levels.length > 0) {
+    // Use analyzed levels for better layout
+    const levels = f.analyzed.levels.filter(level => level.length > 0) // Skip empty levels
+    
+    levels.forEach((levelSteps) => {
+      if (levelSteps.length === 0) return
+      
+      const cols = Math.min(4, levelSteps.length) // Max 4 columns per level
+      const rows = Math.ceil(levelSteps.length / cols)
+      
+      levelSteps.forEach((stepName, idx) => {
+        const step = steps[stepName]
+        if (!step) return
+        
+        const stepState = states[stepName]
+        const status = mapStatusToNodeStatus(stepState?.status)
+        
+        const col = idx % cols
+        const row = Math.floor(idx / cols)
+        
+        // Calculate how many nodes are in this specific row within this level
+        const remainingInLevel = levelSteps.length - (row * cols)
+        const nodesInThisRow = Math.min(cols, remainingInLevel)
+        
+        // Center this row based on its actual node count
+        const rowWidth = nodesInThisRow * colWidth + (nodesInThisRow - 1) * horizontalGap
+        const rowStartX = -rowWidth / 2
+        
+        const x = rowStartX + col * (colWidth + horizontalGap)
+        const yPos = y + row * (rowHeight + verticalGap)
+
+        out.push({
+          id: `step:${stepName}`,
+          position: { x, y: yPos },
+          data: {
+            label: stepName,
+            queue: step?.queue,
+            workerId: step?.workerId,
+            status,
+            attempt: stepState?.attempt,
+            error: stepState?.error,
+            runtime: step?.runtime,
+            runtype: step?.runtype,
+            emits: step?.emits,
+          },
+          type: 'flow-step',
+          style: { minWidth: `${nodeWidth}px` },
+        })
+      })
+      
+      // Move Y down for next level (account for all rows in this level)
+      y += rows * (rowHeight + verticalGap)
+    })
+  }
+  else {
+    // Fallback: simple grid layout
+    const names = Object.keys(steps)
+    const cols = 3
+    
+    names.forEach((name, idx) => {
+      const step = steps[name]
+      const stepState = states[name]
+      const status = mapStatusToNodeStatus(stepState?.status)
+      
+      const col = idx % cols
+      const row = Math.floor(idx / cols)
+      
+      // Calculate how many nodes are in this specific row
+      const totalRows = Math.ceil(names.length / cols)
+      const isLastRow = row === totalRows - 1
+      const nodesInThisRow = isLastRow ? (names.length % cols || cols) : cols
+      
+      // Center this row based on its actual node count
+      const rowWidth = nodesInThisRow * colWidth + (nodesInThisRow - 1) * horizontalGap
+      const rowStartX = -rowWidth / 2
+      
+      const x = rowStartX + col * (colWidth + horizontalGap)
+      const yPos = y + row * (rowHeight + verticalGap)
+
+      out.push({
+        id: `step:${name}`,
+        position: { x, y: yPos },
+        data: {
+          label: name,
+          queue: step?.queue,
+          workerId: step?.workerId,
+          status,
+          attempt: stepState?.attempt,
+          error: stepState?.error,
+          runtime: step?.runtime,
+          runtype: step?.runtype,
+          emits: step?.emits,
+        },
+        type: 'flow-step',
+        style: { minWidth: `${nodeWidth}px` },
+      })
+    })
+  }
+  
   return out
 })
 
@@ -212,8 +321,6 @@ function mapStatusToNodeStatus(status?: string): 'idle' | 'running' | 'error' | 
 const edges = computed<FlowEdge[]>(() => {
   const f = props.flow
   if (!f) return []
-  const steps = f.steps || {}
-  const stepNames = Object.keys(steps)
   const states = props.stepStates || {}
 
   const added = new Set<string>()
@@ -237,43 +344,29 @@ const edges = computed<FlowEdge[]>(() => {
     out.push({ id, source, target, label, animated })
   }
 
-  let derived = 0
-  for (const target of stepNames) {
-    const subs = steps[target]?.subscribes || []
-    for (const token of subs) {
-      const t = String(token)
-      const [prefix, valueRaw] = t.includes(':') ? t.split(':', 2) as [string, string] : [undefined, t]
-      const value = valueRaw?.trim()
-      const sources: string[] = []
-
-      // Match by explicit prefixes
-      if (prefix === 'step' && value) {
-        if (stepNames.includes(value)) sources.push(`step:${value}`)
+  // Always use analyzed dependencies
+  if (f.analyzed?.steps) {
+    const analyzedSteps = f.analyzed.steps
+    
+    // Add edges based on analyzed dependencies
+    for (const [stepName, stepInfo] of Object.entries(analyzedSteps)) {
+      const target = `step:${stepName}`
+      
+      if (stepInfo.dependsOn.length > 0) {
+        // Add edges from dependencies
+        for (const depName of stepInfo.dependsOn) {
+          const source = depName === f.entry?.step ? `entry:${depName}` : `step:${depName}`
+          addEdge(source, target)
+        }
       }
-      if (prefix === 'queue' && value) {
-        for (const s of stepNames) if (steps[s]?.queue === value) sources.push(`step:${s}`)
-      }
-      if (prefix === 'worker' && value) {
-        for (const s of stepNames) if (steps[s]?.workerId === value) sources.push(`step:${s}`)
-      }
-
-      // Heuristics without prefix: try step name first, then queue match
-      if (!prefix && value) {
-        if (stepNames.includes(value)) sources.push(`step:${value}`)
-        for (const s of stepNames) if (steps[s]?.queue === value) sources.push(`step:${s}`)
-      }
-
-      for (const src of sources) {
-        addEdge(src, `step:${target}`, t)
-        derived++
+      else if (f.entry) {
+        // No dependencies means it depends on entry
+        addEdge(`entry:${f.entry.step}`, target)
       }
     }
   }
-
-  // Fallback: entry -> all steps if nothing derived
-  if (derived === 0 && f.entry) {
-    const fromId = `entry:${f.entry.step}`
-    for (const name of stepNames) addEdge(fromId, `step:${name}`)
+  else {
+    console.warn('[FlowDiagram] No analyzed data available for edges')
   }
 
   return out
@@ -328,6 +421,13 @@ watch(() => props.flow, (f) => {
   applySavedPositions(builtNodes, f.id)
   internalNodes.value = builtNodes
   internalEdges.value = builtEdges
+  
+  // Trigger fit view after nodes are rendered
+  setTimeout(() => {
+    if (vueFlowRef.value) {
+      vueFlowRef.value.fitView({ padding: 0.2, duration: 200 })
+    }
+  }, 100)
 }, { immediate: true, deep: false })
 
 // Update node data when stepStates change (for live status updates)
@@ -365,15 +465,36 @@ function onAction(payload: { id: string, action: 'run' | 'logs' | 'details' }) {
 function resetLayout() {
   const id = flowId.value
   if (!id) return
+  
   try {
     localStorage.removeItem(storageKey(id))
   }
   catch {
     // ignore
   }
-  // Rebuild nodes without saved positions
-  const builtNodes: VFNode[] = nodes.value.map(n => ({ id: n.id, position: { ...n.position }, data: { ...n.data }, type: n.type }))
-  internalNodes.value = builtNodes
+  
+  // Get fresh positions from computed nodes (without saved positions)
+  const freshNodes: VFNode[] = nodes.value.map(n => ({
+    id: n.id,
+    position: { x: n.position.x, y: n.position.y },
+    data: { ...n.data },
+    type: n.type,
+    style: n.style,
+  }))
+  
+  // Update internal nodes with fresh positions
+  internalNodes.value = freshNodes
+  
+  // Use Vue Flow's fitView to center and zoom the diagram
+  nextTick(() => {
+    if (vueFlowRef.value) {
+      vueFlowRef.value.fitView({
+        padding: 0.2,
+        includeHiddenNodes: false,
+        duration: 300,
+      })
+    }
+  })
 }
 </script>
 

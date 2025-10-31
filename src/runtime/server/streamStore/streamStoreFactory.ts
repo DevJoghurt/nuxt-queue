@@ -1,5 +1,5 @@
 import { useRuntimeConfig } from '#imports'
-import { getStreamNames, getProjectionStreamNames } from './streamNames'
+import { getStreamNames } from './streamNames'
 import { createRedisFallbackStreamAdapter } from './adapters/redisFallbackAdapter'
 import { createRedisStreamsAdapter } from './adapters/redisStreamsAdapter'
 import { createMemoryStreamAdapter } from './adapters/memoryStreamAdapter'
@@ -27,13 +27,6 @@ export interface StreamStoreFactory {
 
 let cachedFactory: StreamStoreFactory | null = null
 
-/**
- * Projection stream naming utilities.
- * We store projections as append-only streams (no StateProvider).
- * Consumers can read the tail or page through for listings.
- */
-export type ProjectionStreamNames = ReturnType<typeof getProjectionStreamNames>
-
 // Internal factory getter (no `use` prefix). Utils wrapper will expose `useStreamStoreFactory`.
 export function getStreamStoreFactory(): StreamStoreFactory {
   if (cachedFactory) return cachedFactory
@@ -51,9 +44,8 @@ export function getStreamStoreFactory(): StreamStoreFactory {
   }
 
   const names = getStreamNames()
-  const proj = getProjectionStreamNames()
   // v0.3: Wiring registry with simplified flow wiring
-  const wiring = createWiringRegistry({ adapter, names: names as any, proj })
+  const wiring = createWiringRegistry({ adapter, names: names as any })
 
   const factory: StreamStoreFactory = {
     adapter,

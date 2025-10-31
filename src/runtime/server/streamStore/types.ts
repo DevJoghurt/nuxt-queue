@@ -31,10 +31,25 @@ export interface EventSubscription {
   unsubscribe(): void
 }
 
+export interface IndexEntry {
+  id: string
+  score: number
+}
+
+export interface IndexReadOptions {
+  offset?: number
+  limit?: number
+}
+
 // v0.4 minimal adapter interface - runId-based streams
 export interface StreamAdapter {
   append(subject: string, e: Omit<EventRecord, 'id' | 'ts'>): Promise<EventRecord>
   read(subject: string, opts?: EventReadOptions): Promise<EventRecord[]>
   subscribe(subject: string, onEvent: (e: EventRecord) => void): Promise<EventSubscription>
+
+  // Index operations for sorted lists (e.g., flow runs by flow name)
+  indexAdd?(key: string, id: string, score: number): Promise<void>
+  indexRead?(key: string, opts?: IndexReadOptions): Promise<IndexEntry[]>
+
   close(): Promise<void>
 }

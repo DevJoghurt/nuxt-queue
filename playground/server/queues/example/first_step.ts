@@ -47,7 +47,7 @@ export default defineQueueWorker(
     }
 
     // v0.4: Trigger next steps using flowId (no need to pass it explicitly, context provides it)
-    await ctx.flow.handleTrigger('first_step.completed', { test: 'data from first step' })
+    await ctx.flow.emit('first_step.completed', { test: 'data from first step' })
 
     return {
       ok: true,

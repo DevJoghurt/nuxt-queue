@@ -1,8 +1,7 @@
 import type { StreamAdapter } from '../types'
 import type { EventRecord } from '../../../types'
 import { getEventBus } from '../../events/eventBus'
-import { useRuntimeConfig } from '#imports'
-import IORedis from 'ioredis'
+import { useStreamStore } from '#imports'
 
 export interface FlowWiringDeps {
   adapter: StreamAdapter
@@ -12,7 +11,7 @@ export interface FlowWiringDeps {
  * v0.4 Lean Flow Wiring
  *
  * 1. Persists flow events to streams using runId
- * 2. Maintains a sorted set index: nq:flows:{flowName} for listing runs
+ * 2. Maintains a sorted set index using projection names for listing runs
  *
  * Events arrive as "ingress" (no id/ts) and are persisted to `nq:flow:{runId}` streams.
  */
@@ -22,34 +21,17 @@ export function createFlowWiring(deps: FlowWiringDeps) {
   const unsubs: Array<() => void> = []
   let wired = false
 
-  // Separate Redis connection for ZADD operations (index maintenance)
-  let redis: IORedis | null = null
-
-  const getRedis = () => {
-    if (!redis) {
-      const rc: any = useRuntimeConfig()
-      const conn = rc?.queue?.redis || {}
-      redis = new IORedis({
-        host: conn.host,
-        port: conn.port,
-        username: conn.username,
-        password: conn.password,
-        lazyConnect: true,
-      })
-    }
-    return redis
-  }
-
   /**
    * Add flow run to sorted set index for listing
    */
   const indexFlowRun = async (flowName: string, flowId: string, timestamp: number) => {
     try {
-      const r = getRedis()
-      if (!r.status || r.status === 'end') await r.connect()
+      const store = useStreamStore()
+      const names = store.names()
+      // Use centralized naming function
+      const indexKey = names.flowIndex(flowName)
 
-      const indexKey = `nq:flows:${flowName}`
-      await r.zadd(indexKey, timestamp, flowId)
+      await store.indexAdd(indexKey, flowId, timestamp)
 
       if (process.env.NQ_DEBUG_EVENTS === '1') {
         console.log('[flow-wiring] indexed run', { flowName, flowId, indexKey, timestamp })
@@ -63,6 +45,10 @@ export function createFlowWiring(deps: FlowWiringDeps) {
   function start() {
     if (wired) return
     wired = true
+
+    // Get stream names utility
+    const store = useStreamStore()
+    const names = store.names()
 
     // Subscribe to internal bus with a wildcard-like approach using subscribeRunId
     // Listen to all events from any runId
@@ -84,8 +70,8 @@ export function createFlowWiring(deps: FlowWiringDeps) {
           return
         }
 
-        // Persist to stream nq:flow:{runId}
-        const streamName = `nq:flow:${runId}`
+        // Use centralized naming function
+        const streamName = names.flow(runId)
         const eventData: any = {
           type: e.type,
           runId: e.runId,
@@ -140,13 +126,6 @@ export function createFlowWiring(deps: FlowWiringDeps) {
       catch {
         // ignore
       }
-    }
-
-    if (redis) {
-      redis.quit().catch(() => {
-        // ignore
-      })
-      redis = null
     }
 
     wired = false

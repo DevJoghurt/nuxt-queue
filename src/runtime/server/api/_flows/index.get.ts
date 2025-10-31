@@ -1,4 +1,5 @@
 import { defineEventHandler, $useQueueRegistry } from '#imports'
+import { analyzeFlow } from '../../utils/flowAnalyzer'
 
 export default defineEventHandler(() => {
   const registry = $useQueueRegistry() as any
@@ -17,7 +18,7 @@ export default defineEventHandler(() => {
     })
   }
 
-  // Return as an array for UI convenience, with runtime information added
+  // Return as an array for UI convenience, with runtime information and analysis
   return Object.entries(flows).map(([id, meta]: any) => {
     // Add runtime to entry
     const workerMeta = meta?.entry ? workerMetaMap.get(meta.entry.workerId) : undefined
@@ -48,10 +49,22 @@ export default defineEventHandler(() => {
         )
       : {}
 
-    return {
+    const flowMeta = {
       id,
       entry,
       steps,
+    }
+
+    // Analyze flow structure to determine relationships and levels
+    const analyzed = analyzeFlow(flowMeta)
+
+    return {
+      ...flowMeta,
+      analyzed: {
+        levels: analyzed.levels,
+        maxLevel: analyzed.maxLevel,
+        steps: analyzed.steps,
+      },
     }
   })
 })

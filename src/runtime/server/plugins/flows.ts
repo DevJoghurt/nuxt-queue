@@ -1,4 +1,4 @@
-import { defineNitroPlugin, useMetrics, useEventManager, $useQueueRegistry, useQueue } from '#imports'
+import { defineNitroPlugin, useEventManager, $useQueueRegistry, useQueue } from '#imports'
 
 export default defineNitroPlugin(() => {
   const { onType, publishBus } = useEventManager()
@@ -36,7 +36,6 @@ export default defineNitroPlugin(() => {
     if (!triggers.includes(emitName)) return
 
     const { enqueue } = useQueue()
-    const { incCounter } = useMetrics()
 
     // v0.4: Extract runId and flowName from event
     const runId = e.runId
@@ -51,13 +50,6 @@ export default defineNitroPlugin(() => {
 
       try {
         const id = await enqueue(t.queue, { name: t.step, data: payload, opts: jobId ? { jobId } : undefined })
-
-        try {
-          incCounter('flow_enqueues_total', { flowId: t.flowId || 'unknown', step: t.step })
-        }
-        catch {
-          // ignore metrics errors
-        }
 
         // Emit flow.start ONLY for trigger-originated NEW runs (no existing runId)
         // If runId already exists, this is a continuation, not a start

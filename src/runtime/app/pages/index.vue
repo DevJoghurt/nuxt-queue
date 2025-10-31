@@ -19,26 +19,20 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 import Queue from './queue/index.vue'
 import QueueJobs from './queue/jobs.vue'
 import QueueJob from './queue/job.vue'
-import QueueDashboard from './dashboard/index.vue'
-import QueueEvents from './events/index.vue'
 import QueueFlows from './flows/index.vue'
 
 const navItems = [
   [
-    { label: 'Dashboard', icon: 'i-heroicons-chart-pie', path: '/' },
-    { label: 'Queue', icon: 'i-lucide-app-window', path: '/queue' },
-    { label: 'Flows', icon: 'i-lucide-git-branch', path: '/flows' },
-    { label: 'Events', icon: 'i-lucide-activity', path: '/events' },
+    { label: 'Queue', icon: 'i-lucide-app-window', path: '/' },
+    { label: 'Flows', icon: 'i-lucide-git-branch', path: '/flows' }
   ],
 ] as (NavigationMenuItem & { path?: string })[][]
 
 const routes = {
-  '/': QueueDashboard,
-  '/queue': Queue,
+  '/': Queue,
   '/queue/:name/jobs': QueueJobs,
   '/queue/:name/jobs/:id': QueueJob,
-  '/flows': QueueFlows,
-  '/events': QueueEvents,
+  '/flows': QueueFlows
 }
 
 // Consumer mode: read the current router context from inside this page

@@ -1,6 +1,4 @@
-import { useEventManager } from '#imports'
-import { getStreamNames } from '../streamStore/streamNames'
-import { useStreamStore } from './useStreamStore'
+import { useEventManager, useStreamStore } from '#imports'
 
 export interface LogReadOptions {
   fromId?: string
@@ -9,8 +7,8 @@ export interface LogReadOptions {
 
 export function useLogs() {
   const eventManager = useEventManager()
-  const streams = getStreamNames()
   const store = useStreamStore()
+  const names = store.names()
 
   // Note: direct read helpers removed; prefer paged getters below or live subscriptions.
 
@@ -31,7 +29,8 @@ export function useLogs() {
    * - Otherwise returns an array of events
    */
   async function getFlowRunLogs(flowId: string, opts?: { limit?: number, fromId?: string, direction?: 'forward' | 'backward', paged?: boolean }) {
-    const s = typeof streams.flow === 'function' ? streams.flow(String(flowId)) : String(streams.flow) + String(flowId)
+    // Use centralized naming function
+    const s = names.flow(flowId)
     const limit = opts?.limit ?? 200
     const direction = opts?.direction || 'backward'
     if (opts?.paged) {
@@ -88,7 +87,8 @@ export function useLogs() {
 
   /** Subscribe to logs on a specific flow run stream via the store adapter (canonical). */
   function onFlowLog(flowId: string, handler: (e: { level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any, raw: any }) => void) {
-    const s = typeof streams.flow === 'function' ? streams.flow(String(flowId)) : String(streams.flow) + String(flowId)
+    // Use centralized naming function
+    const s = names.flow(flowId)
     return store.subscribe(s, (evt: any) => {
       if (evt?.kind !== 'runner.log') return
       const d = (evt?.data || {}) as any

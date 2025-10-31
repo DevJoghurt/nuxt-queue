@@ -60,6 +60,33 @@ export function createRedisFallbackStreamAdapter(): StreamAdapter {
         },
       }
     },
+    async indexAdd(key: string, id: string, score: number): Promise<void> {
+      const indexKey = `index:${key}`
+      const data = (await storage.getItem<Array<{ id: string, score: number }>>(indexKey)) || []
+
+      // Update or add entry
+      const existing = data.findIndex(entry => entry.id === id)
+      if (existing >= 0) {
+        data[existing].score = score
+      }
+      else {
+        data.push({ id, score })
+      }
+
+      await storage.setItem(indexKey, data)
+    },
+    async indexRead(key: string, opts?: { offset?: number, limit?: number }) {
+      const indexKey = `index:${key}`
+      const data = (await storage.getItem<Array<{ id: string, score: number }>>(indexKey)) || []
+
+      // Sort by score descending (newest first)
+      const sorted = [...data].sort((a, b) => b.score - a.score)
+
+      const offset = opts?.offset || 0
+      const limit = opts?.limit || 50
+
+      return sorted.slice(offset, offset + limit)
+    },
     async close(): Promise<void> {
       listeners.clear()
     },

@@ -1,11 +1,9 @@
 import type { StreamAdapter } from '../types'
-import type { ProjectionStreamNames } from '../streamStoreFactory'
 import { createFlowWiring } from './flowWiring'
 
 export interface WiringDeps {
   adapter: StreamAdapter
   names?: any // Legacy, not used in v0.3
-  proj?: ProjectionStreamNames // Legacy, not used in v0.3
 }
 
 export interface Wiring {

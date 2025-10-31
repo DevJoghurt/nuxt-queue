@@ -4,6 +4,8 @@ import type { EventRecord } from '../../../types'
 export function createMemoryStreamAdapter(): StreamAdapter {
   const events = new Map<string, EventRecord[]>()
   const listeners = new Map<string, Set<(e: EventRecord) => void>>()
+  const indices = new Map<string, Array<{ id: string, score: number }>>()
+
   return {
     async append(stream: string, e: Omit<EventRecord, 'id' | 'ts'>): Promise<EventRecord> {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -52,9 +54,35 @@ export function createMemoryStreamAdapter(): StreamAdapter {
         },
       }
     },
+    async indexAdd(key: string, id: string, score: number): Promise<void> {
+      const data = indices.get(key) || []
+
+      // Update or add entry
+      const existing = data.findIndex(entry => entry.id === id)
+      if (existing >= 0) {
+        data[existing].score = score
+      }
+      else {
+        data.push({ id, score })
+      }
+
+      indices.set(key, data)
+    },
+    async indexRead(key: string, opts?: { offset?: number, limit?: number }) {
+      const data = indices.get(key) || []
+
+      // Sort by score descending (newest first)
+      const sorted = [...data].sort((a, b) => b.score - a.score)
+
+      const offset = opts?.offset || 0
+      const limit = opts?.limit || 50
+
+      return sorted.slice(offset, offset + limit)
+    },
     async close(): Promise<void> {
       listeners.clear()
       events.clear()
+      indices.clear()
     },
   }
 }

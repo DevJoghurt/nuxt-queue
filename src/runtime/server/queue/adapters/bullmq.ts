@@ -1,7 +1,7 @@
 import { Queue, QueueEvents } from 'bullmq'
 import type { JobsOptions, Job as BullJob } from 'bullmq'
 import defu from 'defu'
-import { useRuntimeConfig, useMetrics, $useQueueRegistry, useEventManager } from '#imports'
+import { useRuntimeConfig, $useQueueRegistry, useEventManager } from '#imports'
 import type { QueueProvider, JobInput, Job, JobsQuery, ScheduleOptions, QueueEvent, JobCounts } from '../types'
 
 interface QueueCache {
@@ -22,7 +22,6 @@ export class BullMQProvider implements QueueProvider {
     let cached = this.queues.get(name)
     if (cached) return cached
     const { publishBus } = useEventManager()
-    const { incCounter } = useMetrics()
     const rc = useRuntimeConfig() as any
     const connection = rc.queue?.redis
     // Derive provider-agnostic queue options from registry (defaultJobOptions, prefix)
@@ -48,13 +47,6 @@ export class BullMQProvider implements QueueProvider {
     // Wire event forwarding once per queue
     if (!cached.wired) {
       const forward = async (kind: string, payload: any) => {
-        // metrics
-        try {
-          incCounter('queue_job_events_total', { kind, queue: name })
-        }
-        catch {
-          // ignore
-        }
         // Publish ONLY to the in-proc bus. Do NOT persist queue/job/global events in the stream store.
         // v0.4: Use type instead of kind, runId from job data if available
         const jobId = (payload as any)?.jobId || 'unknown'

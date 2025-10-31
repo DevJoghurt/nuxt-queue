@@ -210,6 +210,31 @@ export function createRedisStreamsAdapter(): StreamAdapter {
         },
       }
     },
+    async indexAdd(key: string, id: string, score: number): Promise<void> {
+      if (!redis.status || redis.status === 'end') await redis.connect()
+      await redis.zadd(key, score, id)
+    },
+    async indexRead(key: string, opts?: { offset?: number, limit?: number }) {
+      if (!redis.status || redis.status === 'end') await redis.connect()
+
+      const offset = opts?.offset || 0
+      const limit = opts?.limit || 50
+      const end = offset + limit - 1
+
+      // Read from sorted set in reverse order (newest first) with scores
+      const results = await redis.zrevrange(key, offset, end, 'WITHSCORES')
+
+      // Results alternate between member and score
+      const entries: Array<{ id: string, score: number }> = []
+      for (let i = 0; i < results.length; i += 2) {
+        entries.push({
+          id: results[i],
+          score: Number.parseInt(results[i + 1]),
+        })
+      }
+
+      return entries
+    },
     async close(): Promise<void> {
       try {
         await redis.quit()

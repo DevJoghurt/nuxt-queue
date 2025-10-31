@@ -4,11 +4,10 @@
 config = {
     "queue": "hello",  # optional; defaults to filename ("hello") if omitted
     "flow": {
-        "id": "welcome-flow",
-        "role": "main",          # 'main' or 'step'
+        "name": ["welcome-flow"],
+        "role": "entry",          # 'entry' or 'step'
         "step": "hello",
-        "emits": ["hello.done"], # optional
-        "triggers": "user.signed_up",  # string or list, both ok
+        "emits": ["hello.done"] # optional
     },
 }
 

@@ -52,15 +52,6 @@ function onType(type: string, handler: Handler) {
 
 export const eventBus = { publish, subscribeRunId, onType }
 
-// Legacy aliases for compatibility during migration
-export function subscribeSubject(subject: string, handler: Handler) {
-  return subscribeRunId(subject, handler)
-}
-
-export function onKind(kind: string, handler: Handler) {
-  return onType(kind, handler)
-}
-
 export function getEventBus() {
   return eventBus
 }
