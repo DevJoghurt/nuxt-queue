@@ -6,9 +6,10 @@ Event-sourced queue and flow orchestration for Nuxt. Built on BullMQ with integr
 
 - 🔄 **Queue Management**: Reliable job processing with BullMQ
 - 🎭 **Flow Orchestration**: Multi-step workflows with event sourcing
+- ⏰ **Flow Scheduling**: Cron-based and delayed flow execution
 - ⚡ **Real-time Updates**: Redis Pub/Sub for <100ms latency monitoring
 - 📊 **Event Sourcing**: Complete audit trail of all flow operations
-- 🎨 **Development UI**: Visual flow diagrams with Vue Flow
+- 🎨 **Development UI**: Visual flow diagrams, timeline, and scheduling
 - 🔌 **Worker Context**: Rich runtime with state, logging, and events
 - 📦 **Auto-discovery**: Filesystem-based worker registry
 - 🚀 **Horizontal Scaling**: Stateless architecture for easy scaling
@@ -18,14 +19,17 @@ Event-sourced queue and flow orchestration for Nuxt. Built on BullMQ with integr
 
 **Current Version**: v0.4.0 (Active Development)
 
-✅ Core queue and flow functionality implemented  
+✅ Core queue and flow functionality  
 ✅ Event sourcing with Redis Streams  
-✅ Real-time monitoring UI  
+✅ Real-time monitoring UI with Vue Flow diagrams  
+✅ Flow scheduling (cron patterns and delays)  
+✅ Worker context with state, logging, and events  
+✅ Auto-discovery and flow analysis  
+🚧 Comprehensive trigger system (planned v0.5)  
 🚧 Python workers (planned v0.5)  
-🚧 Trigger/await patterns (planned v0.5)  
 🚧 Postgres adapters (planned v0.6)
 
-See [roadmap](./specs/roadmap.md) for planned features.
+See [specs/roadmap.md](./specs/roadmap.md) for planned features.
 
 ## 🚀 Quick Start
 
@@ -65,9 +69,6 @@ export default defineQueueWorker(async (job, ctx) => {
   // Store state
   await ctx.state.set('processedAt', new Date().toISOString())
   
-  // Emit custom event
-  ctx.emit({ type: 'message.processed', data: { message } })
-  
   // Return result
   return { success: true, processed: message }
 })
@@ -99,7 +100,7 @@ export default defineQueueWorker(async (job, ctx) => {
   const prepared = { step: 1, data: job.data }
   
   // Emit event to trigger next steps
-  ctx.emit({ type: 'emit', data: { name: 'data.prepared', ...prepared } })
+  ctx.flow.emit('data.prepared', prepared)
   
   return prepared
 })
@@ -117,8 +118,8 @@ export const config = defineQueueConfig({
 export default defineQueueWorker(async (job, ctx) => {
   const result = await processData(job.data)
   
-  // Emit to trigger validation step
-  ctx.emit({ type: 'emit', data: { name: 'data.processed', result } })
+  // Emit to trigger next step
+  ctx.flow.emit('data.processed', result)
   
   return result
 })
@@ -136,7 +137,7 @@ export const config = defineQueueConfig({
 // server/queues/my-flow/validate.ts
 export default defineQueueWorker(async (job, ctx) => {
   const validated = await validate(job.data)
-  ctx.emit({ type: 'emit', data: { name: 'validation.complete', validated } })
+  ctx.flow.emit('validation.complete', validated)
   return validated
 })
 
@@ -159,15 +160,60 @@ await startFlow('my-flow', { input: 'data' })
 
 **Flow execution**: Entry step emits `data.prepared` → Both `process` and `validate` steps run in parallel (they both subscribe to `data.prepared`) → Each emits its own completion event for downstream steps.
 
+### Schedule a Flow
+
+Schedule flows to run automatically with cron patterns or delays:
+
+```typescript
+// Schedule a flow to run daily at 2 AM
+await $fetch('/api/_flows/my-flow/schedule', {
+  method: 'POST',
+  body: {
+    cron: '0 2 * * *',
+    input: { retentionDays: 30 },
+    metadata: {
+      description: 'Daily cleanup job'
+    }
+  }
+})
+
+// Schedule a one-time delayed execution (5 minutes)
+await $fetch('/api/_flows/reminder-flow/schedule', {
+  method: 'POST',
+  body: {
+    delay: 300000,  // milliseconds
+    input: { userId: '123', message: 'Check your email' }
+  }
+})
+
+// List all schedules for a flow
+const schedules = await $fetch('/api/_flows/my-flow/schedules')
+
+// Delete a schedule
+await $fetch('/api/_flows/my-flow/schedules/schedule-id', {
+  method: 'DELETE'
+})
+```
+
+**Common cron patterns:**
+- `* * * * *` - Every minute
+- `*/5 * * * *` - Every 5 minutes
+- `0 * * * *` - Every hour
+- `0 2 * * *` - Daily at 2 AM
+- `0 9 * * 1` - Every Monday at 9 AM
+- `0 0 1 * *` - First day of month at midnight
+
 ## 🎨 Development UI
 
 Access the built-in UI at `http://localhost:3000/__queue` (or use the `<QueueApp />` component):
 
 - 📊 **Dashboard**: Overview of queues and flows
 - 🔄 **Flow Diagrams**: Visual representation with Vue Flow
-- 📝 **Event Timeline**: Real-time event stream
+- ⏰ **Flow Scheduling**: Create and manage cron-based or delayed schedules
+- 📝 **Event Timeline**: Real-time event stream with step details
 - 📋 **Logs**: Filtered logging by flow/step
 - 📈 **Metrics**: Queue statistics and performance
+- 🔍 **Flow Runs**: Complete history with status tracking
 
 ## 🏗️ Architecture
 
@@ -210,8 +256,8 @@ Every worker receives a rich context:
     set(key, value, opts)    // Set with optional TTL
     delete(key)              // Delete state
   },
-  emit(event)                // Emit custom events
   flow: {
+    emit(eventName, data)    // Emit flow event to trigger subscribed steps
     startFlow(name, input)   // Start nested flow
   }
 }
@@ -219,38 +265,69 @@ Every worker receives a rich context:
 
 ## 📚 Documentation
 
-- **[v0.4 Current Implementation](./specs/v0.4-current-implementation.md)** - Complete architecture
-- **[Event Schema](./specs/v0.4-event-schema.md)** - Event types and structure
-- **[Roadmap](./specs/roadmap.md)** - Planned features
-- **[Quick Reference](./specs/quick-reference.md)** - API patterns
+### v0.4 Documentation
+- **[Current Implementation](./specs/v0.4/current-implementation.md)** - Complete architecture
+- **[Event Schema](./specs/v0.4/event-schema.md)** - Event types and structure
+- **[Flow Scheduling](./specs/v0.4/flow-scheduling.md)** - Scheduling specification
+- **[Quick Reference](./specs/v0.4/quick-reference.md)** - API patterns
+
+### Roadmap & Future
+- **[Roadmap](./specs/roadmap.md)** - Planned features across versions
+- **[v0.5 Trigger System](./specs/v0.5/trigger-system.md)** - Next-gen event handling
+- **[v0.6 Multi-language Workers](./specs/v0.6/multi-language-workers.md)** - Python support
+- **[v0.6 Postgres Backend](./specs/v0.6/postgres-backend.md)** - PgBoss integration
 
 ## 🔮 Roadmap
 
-### v0.5 (Q1 2026)
-- ⏱️ Await patterns (time, event, trigger)
-- 🔗 Webhook triggers with auto-setup
-- 🐍 Python worker support with RPC
+### v0.4 (Current - November 2025)
+✅ Core queue and flow orchestration  
+✅ Event sourcing with Redis Streams  
+✅ Real-time monitoring UI  
+✅ Flow scheduling (cron and delays)  
+✅ Worker context with state and logging  
 
-### v0.6 (Q2 2026)
-- 🐘 PgBoss queue provider
+### v0.5
+- 🎯 Comprehensive trigger system (schedule, webhook, event, manual)
+- ⏱️ Await patterns (time, event, condition)
+- 🐍 Python worker support with RPC bridge
+- 🔗 Webhook triggers with auto-setup
+
+### v0.6
+- 🐘 PgBoss queue provider option
 - 🗄️ Postgres stream store adapter
 - 🔄 Unified state and event storage
+- 📊 Advanced state management
 
-### v0.7 (Q3 2026)
+### v0.7
 - 📊 Enhanced logger with multiple adapters
-- 🌐 HTTP mode for workers
+- 🌐 HTTP mode for workers (REST/gRPC)
 - 🔌 External service hooks
+- 🎨 Pluggable worker execution modes
 
-See [roadmap.md](./specs/roadmap.md) for details.
+See [specs/roadmap.md](./specs/roadmap.md) for complete details.
 
 ## 🤝 Contributing
 
 Contributions welcome! Please read our architecture docs first:
 
-1. Review [v0.4-current-implementation.md](./specs/v0.4-current-implementation.md)
-2. Check [roadmap.md](./specs/roadmap.md) for planned features
+1. Review [specs/v0.4/current-implementation.md](./specs/v0.4/current-implementation.md)
+2. Check [specs/roadmap.md](./specs/roadmap.md) for planned features
 3. Open an issue to discuss changes
 4. Submit a PR with tests
+
+### Development Setup
+
+```bash
+# Install dependencies
+yarn install
+
+# Start playground with dev UI
+cd playground
+yarn dev
+
+# Run tests
+yarn test
+```
 
 ## 📄 License
 
