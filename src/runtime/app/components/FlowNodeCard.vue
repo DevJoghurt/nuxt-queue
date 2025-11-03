@@ -97,20 +97,20 @@
     </div>
 
     <template #footer>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center justify-center gap-2 w-full">
         <UButton
           size="xs"
           color="neutral"
           label="Logs"
           icon="i-heroicons-document-text-20-solid"
-          @click.stop="emit('action', { id: props.id, action: 'logs' })"
+          @click="handleAction('logs')"
         />
         <UButton
           size="xs"
           color="neutral"
           label="Details"
           icon="i-heroicons-information-circle-20-solid"
-          @click.stop="emit('action', { id: props.id, action: 'details' })"
+          @click="handleAction('details')"
         />
       </div>
     </template>
@@ -119,6 +119,7 @@
 
 <script setup lang="ts">
 import { computed } from '#imports'
+import { UCard, UButton, UBadge, UIcon } from '#components'
 
 type Status = 'idle' | 'running' | 'error' | 'done' | string | undefined
 
@@ -142,7 +143,9 @@ const emit = defineEmits<{
   (e: 'action', payload: { id: string, action: 'run' | 'logs' | 'details' }): void
 }>()
 
-console.log(props)
+function handleAction(action: 'run' | 'logs' | 'details') {
+  emit('action', { id: props.id, action })
+}
 
 const headerClass = computed(() => props.kind === 'entry'
   ? 'px-3 py-2 bg-gradient-to-br from-emerald-800 to-emerald-700 text-emerald-50 rounded-t'

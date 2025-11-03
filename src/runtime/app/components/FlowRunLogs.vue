@@ -1,7 +1,7 @@
 <template>
-  <div class="py-6 space-y-3">
+  <div class="px-6 py-6 space-y-3">
     <div
-      v-if="logs.length === 0"
+      v-if="reversedLogs.length === 0"
       class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-12 text-center"
     >
       <UIcon
@@ -18,7 +18,7 @@
       class="space-y-2"
     >
       <div
-        v-for="(log, idx) in logs"
+        v-for="(log, idx) in reversedLogs"
         :key="`log-${idx}`"
         class="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
       >
@@ -97,11 +97,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from '#imports'
+import { ref, computed } from '#imports'
 
-defineProps<{
+const props = defineProps<{
   logs: any[]
 }>()
+
+// Reverse logs to show newest first
+const reversedLogs = computed(() => [...props.logs].reverse())
 
 const expandedLogs = ref(new Set<number>())
 

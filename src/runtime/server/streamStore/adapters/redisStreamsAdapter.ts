@@ -2,6 +2,7 @@ import type { StreamAdapter, EventReadOptions, EventSubscription } from '../type
 import type { EventRecord } from '../../../types'
 import { useRuntimeConfig } from '#imports'
 import IORedis from 'ioredis'
+import { RedisPubSubGateway } from './redisPubSubGateway'
 
 function nowIso() {
   return new Date().toISOString()
@@ -27,18 +28,21 @@ export function createRedisStreamsAdapter(): StreamAdapter {
     username: conn.username,
     password: conn.password,
     lazyConnect: true,
+    enableReadyCheck: false, // Disable ready check to avoid INFO command conflicts
   })
 
-  // Separate connection for Pub/Sub SUBSCRIBE (v0.4 real-time)
-  // NOTE: Once a connection enters subscriber mode (via SUBSCRIBE), it can ONLY
-  // execute subscriber commands. Regular commands like PUBLISH, XADD, etc. will fail.
+  // Create dedicated subscriber connection for Pub/Sub
   const subscriber = new IORedis({
     host: conn.host,
     port: conn.port,
     username: conn.username,
     password: conn.password,
     lazyConnect: true,
+    enableReadyCheck: false,
   })
+
+  // Create gateway to manage pub/sub subscriptions efficiently
+  const gateway = new RedisPubSubGateway(subscriber)
 
   function buildFields(e: any) {
     // v0.4: Store type, runId, flowName, and optional step fields
@@ -159,22 +163,21 @@ export function createRedisStreamsAdapter(): StreamAdapter {
       return out
     },
     async subscribe(subject: string, onEvent: (e: EventRecord) => void): Promise<EventSubscription> {
-      // v0.3: Use Redis Pub/Sub for real-time events instead of XREAD polling
+      // v0.4: Use Redis Pub/Sub for real-time events
       const stream = subject
       const channel = `nq:events:${subject}`
 
-      if (!subscriber.status || subscriber.status === 'end') await subscriber.connect()
       if (!redis.status || redis.status === 'end') await redis.connect()
 
       let running = true
 
       if (process.env.NQ_DEBUG_EVENTS === '1') {
-        console.log('[redis-streams] subscribing via Pub/Sub', { stream, channel })
+        console.log('[redis-streams] subscribing', { stream, channel })
       }
 
-      // Handle incoming Pub/Sub messages
-      const messageHandler = async (ch: string, messageId: string) => {
-        if (ch !== channel || !running) return
+      // Create handler for this subscription
+      const messageHandler = async (messageId: string) => {
+        if (!running) return
 
         try {
           // Fetch the event from the stream using the message ID
@@ -184,7 +187,7 @@ export function createRedisStreamsAdapter(): StreamAdapter {
             const rec = parseFieldsToRecord(id, arr)
 
             if (process.env.NQ_DEBUG_EVENTS === '1') {
-              console.log('[redis-streams] received event via Pub/Sub', { stream, id, type: rec.type })
+              console.log('[redis-streams] received event', { stream, id, type: rec.type })
             }
 
             onEvent(rec)
@@ -192,21 +195,18 @@ export function createRedisStreamsAdapter(): StreamAdapter {
         }
         catch (err) {
           if (process.env.NQ_DEBUG_EVENTS === '1') {
-            console.error('[redis-streams] Pub/Sub message handling error:', err)
+            console.error('[redis-streams] message handling error:', err)
           }
         }
       }
 
-      subscriber.on('message', messageHandler)
-      await subscriber.subscribe(channel)
+      // Use the gateway to subscribe
+      const unsubscribe = await gateway.subscribe(channel, messageHandler)
 
       return {
         unsubscribe() {
           running = false
-          subscriber.off('message', messageHandler)
-          subscriber.unsubscribe(channel).catch(() => {
-            // ignore
-          })
+          unsubscribe()
         },
       }
     },
@@ -237,6 +237,7 @@ export function createRedisStreamsAdapter(): StreamAdapter {
     },
     async close(): Promise<void> {
       try {
+        await gateway.cleanup()
         await redis.quit()
         await subscriber.quit()
       }

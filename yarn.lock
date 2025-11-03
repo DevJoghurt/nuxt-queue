@@ -8832,6 +8832,7 @@ __metadata:
     bullmq: "npm:^5.62.0"
     bumpp: "npm:10.3.1"
     changelogen: "npm:^0.6.2"
+    chokidar: "npm:^4.0.3"
     defu: "npm:^6.1.4"
     eslint: "npm:^9.38.0"
     globby: "npm:15.0.0"

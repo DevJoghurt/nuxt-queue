@@ -21,6 +21,9 @@ export default defineNuxtConfig({
         name: 'redis',
         mode: 'streams',
       },
+      workers: {
+        concurrency: 5,
+      },
     },
   },
 

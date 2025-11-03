@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq'
 import { createBullMQProcessor, type NodeHandler } from './runner/node'
-import { useRuntimeConfig } from '#imports'
+import { useRuntimeConfig, useEventManager } from '#imports'
 
 // Track registered workers AND their handlers
 interface QueueWorkerInfo {
@@ -46,8 +46,11 @@ export async function registerTsWorker(queueName: string, jobName: string, handl
   const dispatcher = async (job: any) => {
     const handler = handlers.get(job.name)
     if (!handler) {
-      throw new Error(`[Worker] No handler registered for job "${job.name}" on queue "${queueName}"`)
+      const error = `[Worker] No handler registered for job "${job.name}" on queue "${queueName}". Available handlers: ${Array.from(handlers.keys()).join(', ')}`
+      console.error(error)
+      throw new Error(error)
     }
+
     const processor = createBullMQProcessor(handler, queueName)
     return processor(job)
   }
@@ -55,6 +58,41 @@ export async function registerTsWorker(queueName: string, jobName: string, handl
   const rc: any = useRuntimeConfig()
   const connection = rc?.queue?.redis
   const worker = new Worker(queueName, dispatcher, { connection, ...(opts || {}) })
+
+  // Add error handler to catch worker-level errors
+  worker.on('error', (err) => {
+    console.error(`[Worker] Error in worker for queue "${queueName}":`, err)
+  })
+
+  worker.on('failed', (job, err) => {
+    console.error(`[Worker] Job failed in worker for queue "${queueName}":`, {
+      jobId: job?.id,
+      jobName: job?.name,
+      error: err.message,
+      stack: err.stack,
+    })
+
+    // Also send as step.failed event if this is a flow job
+    // This handles errors that occur outside the handler (e.g., in dispatcher)
+    const flowId = job?.data?.flowId
+    const flowName = job?.data?.flowName || 'unknown'
+    if (flowId) {
+      const eventMgr = useEventManager()
+      eventMgr.publishBus({
+        type: 'step.failed',
+        runId: flowId,
+        flowName,
+        stepName: job.name,
+        stepId: `${flowId}__${job.name}__worker-error`,
+        data: {
+          error: err.message,
+          stack: err.stack,
+        },
+      } as any).catch(() => {
+        // ignore if event publish fails
+      })
+    }
+  })
 
   info = { worker, handlers }
   registeredWorkers.set(queueName, info)

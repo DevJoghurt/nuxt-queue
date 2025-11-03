@@ -10,6 +10,10 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const limit = Math.min(Number.parseInt(query.limit as string) || 50, 100)
 
+  // Prevent caching - always fetch fresh data
+  event.node.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  event.node.res.setHeader('Pragma', 'no-cache')
+
   if (!flowName) {
     return { error: 'Missing flow name' }
   }

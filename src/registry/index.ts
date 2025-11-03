@@ -1,6 +1,6 @@
 import type { LayerInfo } from './types'
 import { scanWorkers } from './scan'
-import { buildFlows } from './flows'
+import { buildFlows } from './flowBuilder'
 
 export async function compileRegistryFromServerWorkers(layers: LayerInfo[], queuesDir = 'queues') {
   const { workers, flowSources } = await scanWorkers(layers, queuesDir)
@@ -14,5 +14,7 @@ export async function compileRegistryFromServerWorkers(layers: LayerInfo[], queu
 
   return compiled
 }
+
+export * from './flowAnalyzer'
 
 export * from './types'

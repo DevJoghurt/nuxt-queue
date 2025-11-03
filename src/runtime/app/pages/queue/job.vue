@@ -17,7 +17,7 @@
           Job details
         </p>
       </div>
-      <UDropdownMenu
+      <DropdownMenu
         :items="[[
           {
             label: 'Re-create job',
@@ -27,13 +27,13 @@
         ]]"
         :disabled="!job?.id"
       >
-        <UButton
+        <Button
           variant="outline"
           size="sm"
           label="Options"
           trailing-icon="i-heroicons-chevron-down-20-solid"
         />
-      </UDropdownMenu>
+      </DropdownMenu>
     </section>
     <div class="flex flex-col lg:flex-row py-8 space-y-4 lg:space-y-0 lg:space-x-4">
       <div class="w-full lg:w-2/3">
@@ -49,7 +49,7 @@
                   class="w-24"
                   placeholder="limit"
                 />
-                <UButton
+                <Button
                   size="xs"
                   color="neutral"
                   variant="outline"
@@ -57,8 +57,8 @@
                   @click="loadMore"
                 >
                   More
-                </UButton>
-                <UButton
+                </Button>
+                <Button
                   size="xs"
                   color="neutral"
                   variant="outline"
@@ -66,7 +66,7 @@
                   @click="toggleTail"
                 >
                   {{ open ? 'Stop tail' : 'Tail' }}
-                </UButton>
+                </Button>
                 <span
                   v-if="reconnecting"
                   class="text-xs text-amber-500"
@@ -102,7 +102,7 @@
                       Progress
                     </p>
                     <div class="text-sm font-bold">
-                      <UProgress
+                      <Progress
                         v-model="progress"
                         indicator
                       />
@@ -180,7 +180,6 @@ import {
   onMounted,
   useComponentRouter,
 } from '#imports'
-import useEventSSE from '../../composables/useEventSSE'
 import TimelineList from '../../components/TimelineList.vue'
 
 const tabItems = [{
@@ -216,7 +215,10 @@ const jobId = ref((job.value as any)?.id || jobParam || null)
 const logEvents = ref<any[]>([])
 const lastLogId = ref<string | undefined>(undefined)
 const limitStr = ref<string>('100')
-const { start: startSSE, stop: stopSSE, open, reconnecting } = useEventSSE()
+
+// TODO: Implement WebSocket-based log tailing
+const open = ref(false)
+const reconnecting = ref(false)
 
 const loadMore = async () => {
   if (!queueName.value || !jobId.value) return
@@ -231,15 +233,17 @@ const loadMore = async () => {
 }
 
 const toggleTail = async () => {
-  if (open.value) return stopSSE()
-  if (!queueName.value || !jobId.value) return
-  const url = `/api/_queues/${encodeURIComponent(queueName.value)}/job/${encodeURIComponent(String(jobId.value))}/logs/tail`
-  startSSE(url, (msg) => {
-    if (msg?.record) {
-      logEvents.value.push(msg.record)
-      lastLogId.value = msg.record.id
-    }
-  }, { autoReconnect: true, maxRetries: 30, baseDelayMs: 500, maxDelayMs: 10000 })
+  // TODO: Implement WebSocket-based log tailing
+  console.warn('Log tailing not yet implemented with WebSocket')
+  // if (open.value) return stopSSE()
+  // if (!queueName.value || !jobId.value) return
+  // const url = `/api/_queues/${encodeURIComponent(queueName.value)}/job/${encodeURIComponent(String(jobId.value))}/logs/tail`
+  // startSSE(url, (msg) => {
+  //   if (msg?.record) {
+  //     logEvents.value.push(msg.record)
+  //     lastLogId.value = msg.record.id
+  //   }
+  // }, { autoReconnect: true, maxRetries: 30, baseDelayMs: 500, maxDelayMs: 10000 })
 }
 
 onMounted(async () => {

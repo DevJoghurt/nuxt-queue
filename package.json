@@ -42,6 +42,7 @@
     "@vue-flow/core": "^1.47.0",
     "@vue-flow/minimap": "^1.5.4",
     "bullmq": "^5.62.0",
+    "chokidar": "^4.0.3",
     "defu": "^6.1.4",
     "globby": "15.0.0",
     "ioredis": "^5.8.2",

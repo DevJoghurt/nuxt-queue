@@ -17,12 +17,11 @@ export default defineQueueWorker(
     await ctx.state.set('lastEmail', {
       test: 'sdfdsf',
     })
-    // Access Motia-style context
-    ctx.logger.log('info', `Sending mail for job ${ctx.jobId} on ${ctx.queue}`)
-    // Enqueue next step in a flow if needed
-    await ctx.flow.handleTrigger('email.sent', { to: input.to })
-    // Use provider if you need to enqueue programmatically
-    // await ctx.provider.enqueue('someQueue', { name: 'someStep', data: {} })
+    ctx.logger.log('info', `Processing step for job ${ctx.jobId} on ${ctx.queue}`)
+
+    // Emit trigger for potential next step
+    await ctx.flow.emit('email.sent', { to: input.to })
+
     return {
       ok: true,
     }

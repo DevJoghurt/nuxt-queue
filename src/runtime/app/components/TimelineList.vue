@@ -1,13 +1,13 @@
 <template>
   <div
     :class="heightClass"
-    class="overflow-auto"
+    class="overflow-y-auto overflow-x-hidden"
   >
     <UTimeline
       v-if="timelineItems && timelineItems.length"
       :items="timelineItems"
       size="xs"
-      class="px-4 py-3"
+      class="px-6 py-4"
     >
       <!-- Custom indicator slot to show icons -->
       <template #indicator="{ item }">
@@ -21,7 +21,7 @@
       <template #title="{ item }">
         <div class="flex items-center gap-2 min-w-0">
           <span
-            class="font-mono text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+            class="font-mono text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 flex-shrink-0"
           >
             {{ item.eventType }}
           </span>
@@ -46,11 +46,11 @@
               :color="levelColor(item?.eventData?.level)"
               variant="subtle"
               size="xs"
-              class="capitalize mt-0.5"
+              class="capitalize mt-0.5 flex-shrink-0"
             >
               {{ item?.eventData?.level || 'info' }}
             </UBadge>
-            <span class="text-sm text-gray-900 dark:text-gray-100 flex-1">
+            <span class="text-sm text-gray-900 dark:text-gray-100 flex-1 break-words">
               {{ item?.eventData?.message || '' }}
             </span>
           </div>
@@ -58,7 +58,7 @@
             v-if="item?.eventData?.progress"
             class="mt-2"
           >
-            <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-auto max-h-40 text-gray-700 dark:text-gray-300 font-mono">{{ pretty(item.eventData) }}</pre>
+            <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-x-auto max-h-40 text-gray-700 dark:text-gray-300 font-mono">{{ pretty(item.eventData) }}</pre>
           </div>
         </div>
 
@@ -75,22 +75,22 @@
               v-if="item.eventData.input"
               class="flex items-start gap-2"
             >
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px]">Input:</span>
-              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1">{{ pretty(item.eventData.input) }}</pre>
+              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Input:</span>
+              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-x-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1 min-w-0">{{ pretty(item.eventData.input) }}</pre>
             </div>
             <div
               v-if="item.eventData.output"
               class="flex items-start gap-2"
             >
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px]">Output:</span>
-              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1">{{ pretty(item.eventData.output) }}</pre>
+              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Output:</span>
+              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-x-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1 min-w-0">{{ pretty(item.eventData.output) }}</pre>
             </div>
             <div
               v-if="item.eventData.error"
               class="flex items-start gap-2"
             >
-              <span class="text-xs text-red-500 dark:text-red-400 font-medium min-w-[60px]">Error:</span>
-              <pre class="text-xs bg-red-50 dark:bg-red-900/20 rounded px-2 py-1 overflow-auto max-h-20 text-red-700 dark:text-red-300 font-mono flex-1">{{ pretty(item.eventData.error) }}</pre>
+              <span class="text-xs text-red-500 dark:text-red-400 font-medium min-w-[60px] flex-shrink-0">Error:</span>
+              <pre class="text-xs bg-red-50 dark:bg-red-900/20 rounded px-2 py-1 overflow-x-auto max-h-20 text-red-700 dark:text-red-300 font-mono flex-1 min-w-0">{{ pretty(item.eventData.error) }}</pre>
             </div>
           </div>
         </div>
@@ -100,7 +100,7 @@
           v-else-if="item.eventData && Object.keys(item.eventData).length > 0"
           class="mt-2"
         >
-          <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-auto max-h-40 text-gray-700 dark:text-gray-300 font-mono">{{ pretty(item.eventData) }}</pre>
+          <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-x-auto max-h-40 text-gray-700 dark:text-gray-300 font-mono">{{ pretty(item.eventData) }}</pre>
         </div>
       </template>
     </UTimeline>
@@ -120,6 +120,7 @@
 <script setup lang="ts">
 import { computed } from '#imports'
 import type { TimelineItem } from '@nuxt/ui'
+import { UTimeline, UIcon, UBadge } from '#components'
 
 const props = defineProps<{ items: any[], heightClass?: string }>()
 

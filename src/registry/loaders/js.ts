@@ -2,7 +2,9 @@ import { pathToFileURL } from 'node:url'
 import type { ConfigMeta } from '../types'
 
 export async function loadJsConfig(absPath: string): Promise<ConfigMeta> {
-  const mod = await import(pathToFileURL(absPath).href)
+  // Add timestamp to bust Node's module cache
+  const cacheBust = `?t=${Date.now()}`
+  const mod = await import(pathToFileURL(absPath).href + cacheBust)
 
   const cfg = mod?.config
   const queueName = (cfg && typeof cfg.queue === 'object' && cfg.queue) ? cfg.queue?.name : undefined

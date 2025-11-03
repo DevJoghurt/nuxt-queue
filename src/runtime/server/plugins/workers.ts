@@ -16,11 +16,22 @@ export default defineNitroPlugin(async (nitroApp) => {
     const registry = ($useQueueRegistry() as any) || { workers: [] }
     for (const entry of handlers) {
       const { queue, id, handler } = entry as any
-      // Extract job name from the worker id (e.g., "example/first_step" -> "first_step")
-      const jobName = id.includes('/') ? id.split('/').pop() : id
+
+      // Match exact worker by id; fallback to queue + absPath if needed
+      const w = (registry.workers as any[]).find(rw => (rw?.id === id) || (rw?.queue === queue && rw?.absPath === entry.absPath))
+
+      // Determine job name: use flow.step from config if available, otherwise extract from id
+      let jobName: string
+      if (w?.flow?.step) {
+        // Config has higher priority - use the step name from flow config
+        jobName = Array.isArray(w.flow.step) ? w.flow.step[0] : w.flow.step
+      }
+      else {
+        // Fallback: extract from worker id (e.g., "example/first_step" -> "first_step")
+        jobName = id.includes('/') ? id.split('/').pop() : id
+      }
+
       if (typeof handler === 'function') {
-        // Match exact worker by id; fallback to queue + absPath if needed
-        const w = (registry.workers as any[]).find(rw => (rw?.id === id) || (rw?.queue === queue && rw?.absPath === entry.absPath))
         const cfg = (w && w.worker) || {}
         // Map generic WorkerConfig -> provider-specific options (BullMQ currently)
         const opts: any = {}

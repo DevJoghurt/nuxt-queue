@@ -5,7 +5,6 @@ import { createRedisStreamsAdapter } from './adapters/redisStreamsAdapter'
 import { createMemoryStreamAdapter } from './adapters/memoryStreamAdapter'
 import { createFileStreamAdapter } from './adapters/fileStreamAdapter'
 import type { StreamAdapter } from './types'
-// import { getEventBus } from '../events/eventBus'
 import { createWiringRegistry } from './wiring/registry'
 
 export interface StreamStoreInstance {
@@ -33,6 +32,7 @@ export function getStreamStoreFactory(): StreamStoreFactory {
   const rc: any = useRuntimeConfig()
   const name = rc?.queue?.eventStore?.name || 'redis'
   const mode = rc?.queue?.eventStore?.mode || 'fallback'
+
   let adapter: StreamAdapter
   if (name === 'memory') adapter = createMemoryStreamAdapter()
   else if (name === 'file') adapter = createFileStreamAdapter()

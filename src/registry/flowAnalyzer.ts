@@ -144,7 +144,7 @@ function calculateLevels(
 
   function visit(stepName: string): number {
     if (visited.has(stepName)) {
-      return levels[stepName]
+      return levels[stepName] ?? 0
     }
 
     if (visiting.has(stepName)) {
@@ -263,7 +263,10 @@ export function analyzeFlow(flow: FlowMeta): AnalyzedFlow {
   const levelGroups: string[][] = Array.from({ length: maxLevel + 1 }, () => [])
 
   for (const [stepName, level] of Object.entries(levels)) {
-    levelGroups[level].push(stepName)
+    const levelArray = levelGroups[level]
+    if (levelArray) {
+      levelArray.push(stepName)
+    }
   }
 
   return {

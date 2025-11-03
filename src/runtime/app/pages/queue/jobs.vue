@@ -1,7 +1,7 @@
 <template>
   <div>
     <div>
-      <UButton
+      <Button
         label="Back"
         icon="i-heroicons-arrow-left"
         @click="back"
@@ -20,36 +20,36 @@
           </div>
           <div class="flex flex-row gap-2 md:justify-end">
             <div class="flex flex-row gap-2 md:justify-start">
-              <UBadge
+              <Badge
                 variant="subtle"
                 color="neutral"
               >
                 State: {{ metrics?.paused ? 'Paused' : 'Running' }}
-              </UBadge>
-              <UBadge
+              </Badge>
+              <Badge
                 variant="subtle"
                 color="warning"
               >
                 Active: {{ metrics?.counts?.active || 0 }}
-              </UBadge>
-              <UBadge
+              </Badge>
+              <Badge
                 variant="subtle"
                 color="neutral"
               >
                 Waiting: {{ metrics?.counts?.waiting || 0 }}
-              </UBadge>
-              <UBadge
+              </Badge>
+              <Badge
                 variant="subtle"
                 color="success"
               >
                 Completed: {{ metrics?.counts?.completed || 0 }}
-              </UBadge>
-              <UBadge
+              </Badge>
+              <Badge
                 variant="subtle"
                 color="error"
               >
                 Failed: {{ metrics?.counts?.failed || 0 }}
-              </UBadge>
+              </Badge>
             </div>
             <QueueStatCounter
               name="Active"
@@ -74,11 +74,11 @@
           </div>
         </div>
         <div class="flex flex-col justify-center space-y-2">
-          <UModal
+          <Modal
             key="create-job"
             title="Create new Job"
           >
-            <UButton
+            <Button
               icon="i-heroicons-plus"
               color="neutral"
               variant="outline"
@@ -87,7 +87,7 @@
               @click="() => {}"
             >
               Create Job
-            </UButton>
+            </Button>
             <template #body>
               <UForm
                 ref="jobForm"
@@ -119,7 +119,7 @@
             </template>
             <template #footer>
               <div class="flex justify-end w-full">
-                <UButton
+                <Button
                   type="submit"
                   color="neutral"
                   variant="outline"
@@ -127,12 +127,12 @@
                   @click.prevent="handleCreateJob"
                 >
                   Create
-                </UButton>
+                </Button>
               </div>
             </template>
-          </UModal>
+          </Modal>
           <div>
-            <UButton
+            <Button
               :icon="metrics?.paused ? 'i-heroicons-play' : 'i-heroicons-pause'"
               color="neutral"
               variant="outline"
@@ -141,10 +141,10 @@
               @click="togglePause()"
             >
               {{ metrics?.paused ? 'Resume queue' : 'Pause queue' }}
-            </UButton>
+            </Button>
           </div>
           <div class="flex gap-2">
-            <UButton
+            <Button
               icon="i-heroicons-arrow-path"
               color="neutral"
               variant="outline"
@@ -153,8 +153,8 @@
               @click="refreshMetrics()"
             >
               Refresh metrics
-            </UButton>
-            <UButton
+            </Button>
+            <Button
               icon="i-heroicons-bolt"
               color="neutral"
               variant="outline"
@@ -163,12 +163,12 @@
               @click="refreshJobs()"
             >
               Refresh jobs
-            </UButton>
+            </Button>
           </div>
           <USlideover
             title="Job Scheduling"
           >
-            <UButton
+            <Button
               icon="i-heroicons-arrow-path-rounded-square"
               color="neutral"
               variant="outline"
@@ -177,7 +177,7 @@
               @click="() => {}"
             >
               Job Scheduling
-            </UButton>
+            </Button>
 
             <template #body>
               <QueueJobScheduling :queue="queueName" />
@@ -200,7 +200,7 @@
             class="w-40"
             @change="updateJobStateFilter"
           />
-          <UButton
+          <Button
             icon="i-heroicons-funnel"
             color="neutral"
             class="cursor-pointer"
@@ -209,17 +209,17 @@
             @click="() => { filters = [] }"
           >
             Reset
-          </UButton>
+          </Button>
         </div>
 
         <!-- Header and Action buttons -->
         <div class="flex justify-end items-center w-full px-4 py-3">
           <div class="flex gap-1.5 items-center">
-            <UDropdownMenu
+            <DropdownMenu
               v-if="selectedRows.length > 1"
               :items="actions"
             >
-              <UButton
+              <Button
                 icon="i-heroicons-chevron-down"
                 trailing
                 class="cursor-pointer"
@@ -227,10 +227,10 @@
                 size="xs"
               >
                 Action
-              </UButton>
-            </UDropdownMenu>
+              </Button>
+            </DropdownMenu>
 
-            <UDropdownMenu
+            <DropdownMenu
               :items="
                 table?.tableApi
                   ?.getAllColumns()
@@ -249,14 +249,14 @@
               "
               :content="{ align: 'end' }"
             >
-              <UButton
+              <Button
                 label="Columns"
                 color="neutral"
                 class="cursor-pointer"
                 variant="outline"
                 trailing-icon="i-lucide-chevron-down"
               />
-            </UDropdownMenu>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -304,7 +304,11 @@ import {
   reactive,
   useComponentRouter,
 } from '#imports'
-import { UBadge, UProgress, UDropdownMenu, UButton } from '#components'
+
+const Badge = resolveComponent('Badge')
+const Progress = resolveComponent('Progress')
+const DropdownMenu = resolveComponent('DropdownMenu')
+const Button = resolveComponent('Button')
 
 const route = useRoute()
 const componentRouter = useComponentRouter()
@@ -381,7 +385,7 @@ const columns: TableColumn<Job>[] = [{
       failed: 'error' as const,
     }[row.getValue('state') as string]
 
-    return h(UBadge, { class: 'capitalize', variant: 'subtle', color }, () =>
+    return h(Badge, { class: 'capitalize', variant: 'subtle', color }, () =>
       row.getValue('state'),
     )
   },
@@ -389,7 +393,7 @@ const columns: TableColumn<Job>[] = [{
   accessorKey: 'progress',
   header: 'Progress',
   cell: ({ row }) => {
-    return h(UProgress, {
+    return h(Progress, {
       indicator: true,
       // @ts-ignore
       modelValue: row.getValue('progress'),
@@ -431,7 +435,7 @@ const columns: TableColumn<Job>[] = [{
       'div',
       { class: 'text-right' },
       h(
-        (UDropdownMenu as any),
+        (DropdownMenu as any),
         {
           content: {
             align: 'end',
@@ -452,7 +456,7 @@ const columns: TableColumn<Job>[] = [{
           }],
         },
         () =>
-          h(UButton, {
+          h(Button, {
             icon: 'i-lucide-ellipsis-vertical',
             color: 'neutral',
             variant: 'ghost',

@@ -1,35 +1,299 @@
-import { useStreamStore, defineWebSocketHandler } from '#imports'
+import {
+  defineWebSocketHandler,
+  useStreamStore,
+  registerWsPeer,
+  unregisterWsPeer,
+} from '#imports'
 
-const unsubMap = new WeakMap<any, () => void>()
+interface PeerContext {
+  subscriptions: Map<string, () => void> // streamName -> unsubscribe function
+}
 
+const peerContexts = new WeakMap<any, PeerContext>()
+
+/**
+ * Safely send a message to a peer, ignoring ECONNRESET errors
+ * during HMR or connection closure
+ */
+function safeSend(peer: any, data: any): boolean {
+  try {
+    peer.send(JSON.stringify(data))
+    return true
+  }
+  catch {
+    // Silently ignore connection errors (ECONNRESET, connection closed, etc.)
+    // These are expected during HMR or when client disconnects
+    return false
+  }
+}
+
+/**
+ * WebSocket endpoint for flow run events
+ * Supports subscribing to specific flow runs and receiving real-time updates
+ *
+ * Message format (client -> server):
+ * {
+ *   "type": "subscribe",
+ *   "flowName": "example",
+ *   "runId": "abc123"
+ * }
+ *
+ * {
+ *   "type": "unsubscribe",
+ *   "flowName": "example",
+ *   "runId": "abc123"
+ * }
+ *
+ * {
+ *   "type": "ping"
+ * }
+ *
+ * Message format (server -> client):
+ * {
+ *   "type": "event",
+ *   "flowName": "example",
+ *   "runId": "abc123",
+ *   "event": { v: 1, eventType: "...", record: {...} }
+ * }
+ *
+ * {
+ *   "type": "history",
+ *   "flowName": "example",
+ *   "runId": "abc123",
+ *   "events": [ ...historicalEvents ]
+ * }
+ *
+ * {
+ *   "type": "subscribed",
+ *   "flowName": "example",
+ *   "runId": "abc123"
+ * }
+ *
+ * {
+ *   "type": "unsubscribed",
+ *   "flowName": "example",
+ *   "runId": "abc123"
+ * }
+ *
+ * {
+ *   "type": "pong",
+ *   "timestamp": 1234567890
+ * }
+ *
+ * {
+ *   "type": "error",
+ *   "message": "error description"
+ * }
+ */
 export default defineWebSocketHandler({
-  open(_peer) {
-    // no-op; clients should send { type: 'subscribe', stream } messages
+  open(peer) {
+    console.log('[ws] client connected:', peer.id)
+
+    // Register peer for graceful shutdown during HMR
+    registerWsPeer(peer)
+
+    // Initialize peer context
+    peerContexts.set(peer, {
+      subscriptions: new Map(),
+    })
+
+    // Send welcome message
+    safeSend(peer, {
+      type: 'connected',
+      timestamp: Date.now(),
+    })
   },
+
   async message(peer, message) {
+    const context = peerContexts.get(peer)
+    if (!context) {
+      console.error('[ws] no context for peer:', peer.id)
+      return
+    }
+
+    let data: any
     try {
-      const payload = JSON.parse(String(message)) as any
-      const store = useStreamStore()
-      if (payload?.type === 'subscribe' && typeof payload.stream === 'string') {
-        const unsub = store.subscribe(payload.stream, (e) => {
-          peer.send(JSON.stringify({ v: 1, stream: payload.stream, event: e.kind, record: e }))
-        })
-        unsubMap.set(peer, unsub)
-        peer.send(JSON.stringify({ ok: true, subscribed: payload.stream }))
-      }
-      if (payload?.type === 'unsubscribe') {
-        const unsub = unsubMap.get(peer)
-        if (unsub) unsub()
-        peer.send(JSON.stringify({ ok: true, unsubscribed: true }))
-      }
+      data = JSON.parse(message.text())
     }
     catch {
-      // ignore malformed frames
+      // Silently ignore parse errors during connection close
+      // This can happen if we receive a partial message during shutdown
+      safeSend(peer, {
+        type: 'error',
+        message: 'Invalid JSON',
+      })
+      return
+    }
+
+    const { type, flowName, runId } = data
+
+    if (type === 'subscribe') {
+      if (!flowName || !runId) {
+        safeSend(peer, {
+          type: 'error',
+          message: 'Missing flowName or runId',
+        })
+        return
+      }
+
+      const store = useStreamStore()
+      const names = store.names()
+      const flowStream = names.flow(runId)
+      const subscriptionKey = `${flowName}:${runId}`
+
+      // Unsubscribe from any existing subscription with same key
+      const existingUnsub = context.subscriptions.get(subscriptionKey)
+      if (existingUnsub) {
+        try {
+          existingUnsub()
+        }
+        catch (err) {
+          console.error('[ws] error unsubscribing:', err)
+        }
+      }
+
+      // Subscribe to stream store events
+      const unsub = store.subscribe(flowStream, async (event: any) => {
+        safeSend(peer, {
+          type: 'event',
+          flowName,
+          runId,
+          event: {
+            v: 1,
+            eventType: event.type,
+            record: event,
+          },
+        })
+      })
+
+      context.subscriptions.set(subscriptionKey, unsub)
+
+      // Send historical events (backfill)
+      try {
+        const historicalEvents = await store.read(flowStream, {
+          limit: 100,
+          direction: 'forward',
+        })
+
+        safeSend(peer, {
+          type: 'history',
+          flowName,
+          runId,
+          events: historicalEvents.map(e => ({
+            v: 1,
+            eventType: (e as any).kind || e.type,
+            record: e,
+          })),
+        })
+      }
+      catch (err) {
+        console.error('[ws] error sending history:', err)
+        safeSend(peer, {
+          type: 'error',
+          message: 'Failed to load history',
+        })
+      }
+
+      // Confirm subscription
+      safeSend(peer, {
+        type: 'subscribed',
+        flowName,
+        runId,
+      })
+    }
+    else if (type === 'unsubscribe') {
+      if (!flowName || !runId) {
+        safeSend(peer, {
+          type: 'error',
+          message: 'Missing flowName or runId',
+        })
+        return
+      }
+
+      const subscriptionKey = `${flowName}:${runId}`
+      const unsub = context.subscriptions.get(subscriptionKey)
+
+      if (unsub) {
+        try {
+          unsub()
+          context.subscriptions.delete(subscriptionKey)
+
+          safeSend(peer, {
+            type: 'unsubscribed',
+            flowName,
+            runId,
+          })
+        }
+        catch (err) {
+          console.error('[ws] error unsubscribing:', err)
+          safeSend(peer, {
+            type: 'error',
+            message: 'Failed to unsubscribe',
+          })
+        }
+      }
+    }
+    else if (type === 'ping') {
+      safeSend(peer, {
+        type: 'pong',
+        timestamp: Date.now(),
+      })
+    }
+    else {
+      safeSend(peer, {
+        type: 'error',
+        message: `Unknown message type: ${type}`,
+      })
     }
   },
-  close(peer) {
-    const unsub = unsubMap.get(peer)
-    if (unsub) unsub()
-    unsubMap.delete(peer)
+
+  close(peer, event) {
+    const isNormalClosure = event?.code === 1000 || event?.code === 1001
+    if (!isNormalClosure) {
+      console.log('[ws] client disconnected:', peer.id, event?.code, event?.reason)
+    }
+
+    // Unregister peer from lifecycle tracking
+    unregisterWsPeer(peer)
+
+    const context = peerContexts.get(peer)
+    if (context) {
+      // Unsubscribe from all streams
+      for (const unsub of context.subscriptions.values()) {
+        try {
+          unsub()
+        }
+        catch (err) {
+          // Suppress errors during normal closure
+          if (!isNormalClosure) {
+            console.error('[ws] error unsubscribing on close:', err)
+          }
+        }
+      }
+      context.subscriptions.clear()
+      peerContexts.delete(peer)
+    }
+  },
+
+  error(peer, error) {
+    console.error('[ws] error for peer:', peer.id, error)
+
+    // Unregister peer from lifecycle tracking
+    unregisterWsPeer(peer)
+
+    const context = peerContexts.get(peer)
+    if (context) {
+      // Cleanup on error
+      for (const unsub of context.subscriptions.values()) {
+        try {
+          unsub()
+        }
+        catch (err) {
+          console.error('[ws] error unsubscribing on error:', err)
+        }
+      }
+      context.subscriptions.clear()
+      peerContexts.delete(peer)
+    }
   },
 })

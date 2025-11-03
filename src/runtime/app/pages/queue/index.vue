@@ -21,7 +21,7 @@
             <div class="font-semibold">
               Metrics
             </div>
-            <UButton
+            <Button
               size="xs"
               color="neutral"
               variant="outline"
@@ -29,7 +29,7 @@
               @click="refreshMetrics()"
             >
               Refresh
-            </UButton>
+            </Button>
           </div>
         </template>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -9,7 +9,16 @@ export async function loadTsConfig(absPath: string): Promise<ConfigMeta> {
   ;(globalThis as any).defineQueueConfig = (cfg: any) => cfg
 
   try {
-    const jiti = createJiti(import.meta.url)
+    const jiti = createJiti(import.meta.url, {
+      cache: false, // Disable cache
+      requireCache: false, // Also disable require cache
+      interopDefault: true,
+    })
+
+    // Clear any cached version of this specific file
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+    delete jiti.cache[absPath]
+
     const mod = await jiti.import(absPath)
 
     const cfg = mod?.config

@@ -1,14 +1,14 @@
 <template>
   <div class="space-y-4">
     <div class="flex justify-end">
-      <UButton
+      <Button
         icon="i-heroicons-clock"
         color="neutral"
         variant="outline"
         @click="jobSchedulerEditor = !jobSchedulerEditor"
       >
         Job Scheduler
-      </UButton>
+      </Button>
     </div>
     <UForm
       :schema="schema"
@@ -89,14 +89,14 @@
         </div>
         <template #footer>
           <div class="flex justify-end">
-            <UButton
+            <Button
               type="submit"
               color="neutral"
               variant="outline"
               class="cursor-pointer"
             >
               Create
-            </UButton>
+            </Button>
           </div>
         </template>
       </UCard>
@@ -112,7 +112,7 @@
           class="flex flex-col rounded-sm ring-1 ring-gray-200 dark:ring-gray-800 shadow p-4"
         >
           <div class="flex justify-end">
-            <UButton
+            <Button
               icon="i-heroicons-x-circle"
               color="error"
               variant="outline"

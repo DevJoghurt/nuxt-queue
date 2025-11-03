@@ -27,7 +27,7 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 export default defineQueueWorker(
   async (input, ctx) => {
     // v0.4: Use flowId and flowName from context
-    ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue} (attempt ${ctx.attempt})`, {
+    ctx.logger.log('info', `Starting new job ${ctx.jobId} on ${ctx.queue} (attempt ${ctx.attempt})`, {
       jobId: ctx.jobId,
       flowId: ctx.flowId,
       flowName: ctx.flowName,

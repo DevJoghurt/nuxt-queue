@@ -158,6 +158,16 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
       result = await handler(job.data, { ...ctx, logger: attemptLogger })
     }
     catch (err) {
+      // Log the error to console for debugging
+      console.error(`[worker] Job failed: ${job.name} (${job.id})`, {
+        queue: queueName,
+        flowId,
+        flowName,
+        stepName: job.name,
+        error: (err as any)?.message || String(err),
+        stack: (err as any)?.stack,
+      })
+
       // Determine if this is a retry or final failure
       const willRetry = !isFinalAttempt
 
@@ -175,6 +185,7 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
               stepName: job.name,
               queue: queueName,
               error: String((err as any)?.message || err),
+              stack: (err as any)?.stack,
               attempt,
               maxAttempts,
               nextAttempt: attempt + 1,
@@ -198,6 +209,7 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
             attempt,
             data: {
               error: String((err as any)?.message || err),
+              stack: (err as any)?.stack,
             },
           })
         }

@@ -10,14 +10,14 @@
         </div>
         <div class="flex items-center gap-3">
           <USelectMenu
-            v-model="selectedFlowObj"
-            :items="(flows || []).map(f => ({ label: f.id, value: f.id }))"
+            v-model="selectedFlow"
+            :items="(flows || []).map(f => f.id)"
             placeholder="Select a flow..."
             class="w-64"
           >
-            <template #leading="{ modelValue }">
+            <template #leading>
               <UIcon
-                v-if="modelValue"
+                v-if="selectedFlow"
                 name="i-lucide-git-branch"
                 class="w-4 h-4 text-gray-500"
               />
@@ -67,7 +67,7 @@
               Select a flow to view runs
             </div>
             <div
-              v-else-if="runs?.items.length === 0"
+              v-else-if="!runs || runs.items.length === 0"
               class="h-full flex items-center justify-center text-sm text-gray-400"
             >
               No runs yet
@@ -77,14 +77,14 @@
               class="divide-y divide-gray-100 dark:divide-gray-800"
             >
               <div
-                v-for="r in runs?.items"
+                v-for="r in runs.items"
                 :key="r.id"
                 class="group"
               >
                 <div
                   class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer"
                   :class="{ 'bg-gray-50 dark:bg-gray-900': selectedRunId === r.id }"
-                  @click="selectRun(r.id)"
+                  @click="selectedRunId = r.id"
                 >
                   <div class="flex items-start justify-between gap-3">
                     <div class="flex-1 min-w-0">
@@ -93,52 +93,13 @@
                           {{ r.id?.substring(0, 8) }}...{{ r.id?.substring(r.id?.length - 4) }}
                         </div>
                         <!-- Status indicator for selected run -->
-                        <div
+                        <FlowRunStatusBadge
                           v-if="selectedRunId === r.id"
-                          class="flex items-center gap-1.5 px-1.5 py-0.5 rounded text-xs border shrink-0"
-                          :class="{
-                            'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800': flowState.isCompleted.value,
-                            'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800': flowState.isFailed.value,
-                            'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800': flowState.isRunning.value,
-                            'bg-gray-50 dark:bg-gray-900/30 border-gray-200 dark:border-gray-800': !flowState.isRunning.value && !flowState.isCompleted.value && !flowState.isFailed.value,
-                          }"
-                        >
-                          <div
-                            class="w-1 h-1 rounded-full"
-                            :class="{
-                              'bg-emerald-500': flowState.isCompleted.value,
-                              'bg-red-500': flowState.isFailed.value,
-                              'bg-blue-500 animate-pulse': flowState.isRunning.value && !timelineReconnecting,
-                              'bg-amber-500 animate-pulse': timelineReconnecting,
-                              'bg-gray-400': !flowState.isRunning.value && !flowState.isCompleted.value && !flowState.isFailed.value,
-                            }"
-                          />
-                          <span
-                            class="text-[10px] font-medium uppercase tracking-wider"
-                            :class="{
-                              'text-emerald-700 dark:text-emerald-400': flowState.isCompleted.value,
-                              'text-red-700 dark:text-red-400': flowState.isFailed.value,
-                              'text-blue-700 dark:text-blue-400': flowState.isRunning.value,
-                              'text-gray-600 dark:text-gray-400': !flowState.isRunning.value && !flowState.isCompleted.value && !flowState.isFailed.value,
-                            }"
-                          >
-                            <template v-if="timelineReconnecting">
-                              Reconnecting
-                            </template>
-                            <template v-else-if="flowState.isRunning.value">
-                              Running
-                            </template>
-                            <template v-else-if="flowState.isCompleted.value">
-                              Done
-                            </template>
-                            <template v-else-if="flowState.isFailed.value">
-                              Failed
-                            </template>
-                            <template v-else>
-                              Idle
-                            </template>
-                          </span>
-                        </div>
+                          :is-running="flowState.isRunning.value"
+                          :is-completed="flowState.isCompleted.value"
+                          :is-failed="flowState.isFailed.value"
+                          :is-reconnecting="isReconnecting"
+                        />
                       </div>
                       <div class="text-xs text-gray-500 mt-1">
                         {{ formatTime(r.createdAt || r.ts || r.startedAt) }}
@@ -205,7 +166,12 @@
     </div>
 
     <!-- Timeline Slideover -->
-    <USlideover v-model:open="timelineOpen">
+    <USlideover
+      v-model:open="timelineOpen"
+      :ui="{
+        body: 'p-0 sm:p-0',
+      }"
+    >
       <template #title>
         <div class="flex items-center justify-between w-full pr-4">
           <div>
@@ -213,18 +179,18 @@
               Flow Timeline
             </div>
             <div class="text-xs font-mono text-gray-500 mt-0.5">
-              {{ timelineRunId.substring(0, 8) }}...{{ timelineRunId.substring(timelineRunId.length - 4) }}
+              {{ selectedRunId.substring(0, 8) }}...{{ selectedRunId.substring(selectedRunId.length - 4) }}
             </div>
           </div>
           <div
-            v-if="timelineReconnecting || (timelineOpenSSE && flowState.isRunning.value)"
+            v-if="isReconnecting || (isConnected && flowState.isRunning.value)"
             class="flex items-center gap-2 text-xs"
           >
             <div
               class="w-2 h-2 rounded-full"
-              :class="timelineReconnecting ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 animate-pulse'"
+              :class="isReconnecting ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 animate-pulse'"
             />
-            <span class="text-gray-500">{{ timelineReconnecting ? 'Reconnecting' : 'Live' }}</span>
+            <span class="text-gray-500">{{ isReconnecting ? 'Reconnecting' : 'Live' }}</span>
           </div>
           <div
             v-else-if="flowState.isCompleted.value"
@@ -243,32 +209,37 @@
         </div>
       </template>
       <template #body>
-        <UTabs
-          v-model="selectedTab"
-          :items="tabs"
-        />
+        <!-- Fixed Tabs Header -->
+        <div class="sticky top-0 z-10 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 px-6 pt-2">
+          <UTabs
+            v-model="selectedTab"
+            :items="tabs"
+          />
+        </div>
 
-        <!-- Tab Content -->
-        <FlowRunOverview
-          v-if="selectedTab === 'overview'"
-          :run-status="runSnapshot.status"
-          :started-at="runSnapshot.startedAt"
-          :completed-at="runSnapshot.completedAt"
-          :steps="flowState.stepList.value"
-        />
+        <!-- Scrollable Content Area -->
+        <div class="flex-1 overflow-y-auto overflow-x-hidden">
+          <FlowRunOverview
+            v-if="selectedTab === 'overview'"
+            :run-status="runSnapshot.status"
+            :started-at="runSnapshot.startedAt"
+            :completed-at="runSnapshot.completedAt"
+            :steps="flowState.stepList.value"
+          />
 
-        <FlowRunLogs
-          v-else-if="selectedTab === 'logs'"
-          :logs="flowState.state.value.logs"
-        />
+          <FlowRunLogs
+            v-else-if="selectedTab === 'logs'"
+            :logs="flowState.state.value.logs"
+          />
 
-        <FlowRunTimeline
-          v-else-if="selectedTab === 'timeline'"
-          :events="timeline"
-          :is-live="timelineOpenSSE"
-          @export="exportTimelineJson"
-          @clear="clearTimeline"
-        />
+          <FlowRunTimeline
+            v-else-if="selectedTab === 'timeline'"
+            :events="timeline"
+            :is-live="isConnected"
+            @export="exportTimelineJson"
+            @clear="clearTimeline"
+          />
+        </div>
       </template>
     </USlideover>
 
@@ -331,35 +302,50 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeUnmount, computed, watch, nextTick } from '#imports'
-import { useIntervalFn } from '@vueuse/core'
+import { ref, computed, watch } from '#imports'
 import FlowDiagram from '../../components/FlowDiagram.vue'
 import FlowRunOverview from '../../components/FlowRunOverview.vue'
 import FlowRunLogs from '../../components/FlowRunLogs.vue'
 import FlowRunTimeline from '../../components/FlowRunTimeline.vue'
-import useEventSSE from '../../composables/useEventSSE'
-import { useFlowState } from '../../composables/useFlowState'
+import FlowRunStatusBadge from '../../components/FlowRunStatusBadge.vue'
+import {
+  USelectMenu,
+  UIcon,
+  UButton,
+  UModal,
+  USlideover,
+  UTextarea,
+  UTabs,
+} from '#components'
 
-const selectedFlow = ref<string>('')
-const selectedFlowObj = ref<{ label: string, value: string } | undefined>(undefined)
-const selectedRunId = ref<string>('')
+// Composables
+import { useAnalyzedFlows } from '../../composables/useAnalyzedFlows'
+import { useFlowsNavigation } from '../../composables/useFlowsNavigation'
+import { useFlowRuns } from '../../composables/useFlowRuns'
+import { useFlowRunTimeline } from '../../composables/useFlowRunTimeline'
+import { useFlowRunsPolling } from '../../composables/useFlowRunsPolling'
 
-const timelineOpen = ref<boolean>(false)
-const timelineRunId = ref<string>('')
-const selectedTab = ref('overview')
+// Navigation state (synced with URL)
+const { selectedFlow, selectedRunId, timelineOpen, selectedTab } = useFlowsNavigation()
 
-// Start flow modal
-const startFlowModalOpen = ref<boolean>(false)
-const flowInputJson = ref<string>('{}')
-const jsonError = ref<string>('')
-const startingFlow = ref<boolean>(false)
+// Get analyzed flows (with HMR support)
+const flows = useAnalyzedFlows()
 
-const { data: flows } = await useFetch<any[]>('/api/_flows')
+// Fetch runs for selected flow (persists across HMR)
+const { runs, refresh: refreshRuns } = useFlowRuns(selectedFlow)
 
-const { data: runs, refresh: refreshRuns } = useFetch(() => `/api/_flows/${encodeURIComponent(selectedFlow.value)}/runs`, {
-  immediate: false,
-  watch: [selectedFlow],
-})
+// Manage timeline/SSE for selected run
+const { flowState, isConnected, isReconnecting } = useFlowRunTimeline(selectedFlow, selectedRunId)
+
+// Auto-poll runs list to keep it fresh (always poll when a flow is selected)
+const shouldPoll = computed(() => !!selectedFlow.value)
+useFlowRunsPolling(refreshRuns, shouldPoll)
+
+// Start flow modal state
+const startFlowModalOpen = ref(false)
+const flowInputJson = ref('{}')
+const jsonError = ref('')
+const startingFlow = ref(false)
 
 // Watch for JSON validation
 watch(flowInputJson, (value) => {
@@ -378,15 +364,6 @@ const tabs = [
   { label: 'Logs', value: 'logs', icon: 'i-lucide-file-text' },
   { label: 'Timeline', value: 'timeline', icon: 'i-lucide-activity' },
 ]
-
-// Use client-side reducer for flow state
-const flowState = useFlowState()
-
-// Separate SSE channels for runs list and timeline
-const runsSSE = useEventSSE()
-const timelineSSE = useEventSSE()
-const timelineOpenSSE = timelineSSE.open
-const timelineReconnecting = timelineSSE.reconnecting
 
 // Helper to format timestamps
 const formatTime = (timestamp: string | number | Date) => {
@@ -419,30 +396,6 @@ const runSnapshot = computed(() => {
 
 const timeline = computed(() => flowState.events.value)
 
-// Watch for flow selection changes from USelectMenu
-watch(selectedFlowObj, (newFlowObj) => {
-  const newFlow = newFlowObj?.value || ''
-  if (newFlow !== selectedFlow.value) {
-    selectedFlow.value = newFlow
-    selectedRunId.value = ''
-    // useFetch will automatically refetch due to watch option
-    refreshRuns()
-  }
-})
-
-// Also watch selectedFlow directly for programmatic changes
-watch(selectedFlow, (newFlow) => {
-  if (newFlow && (!selectedFlowObj.value || selectedFlowObj.value.value !== newFlow)) {
-    selectedFlowObj.value = { label: newFlow, value: newFlow }
-    selectedRunId.value = ''
-    // useFetch will automatically refetch due to watch option
-    refreshRuns()
-  }
-  else if (!newFlow) {
-    selectedFlowObj.value = undefined
-  }
-})
-
 const selectedFlowMeta = computed(() => {
   const id = selectedFlow.value
   if (!id) return null
@@ -451,70 +404,22 @@ const selectedFlowMeta = computed(() => {
 
 const diagramStepStates = computed(() => {
   if (!selectedRunId.value) return undefined
-  const steps = flowState.state.value.steps
-  console.log('[Flow Diagram] Computing step states:', {
-    selectedRunId: selectedRunId.value,
-    hasSteps: !!steps,
-    stepCount: Object.keys(steps).length,
-    steps,
-  })
-  return steps
+  return flowState.state.value.steps
 })
-
-// Select a run to view its interactive diagram
-const selectRun = async (runId: string) => {
-  console.log('[Flow Diagram] Selecting run:', runId)
-  
-  // Reset flow state first
-  flowState.reset()
-
-  console.log('[Flow Diagram] Loading run state:', runId)
-
-  // Set the selected run and timeline run IDs
-  selectedRunId.value = runId
-  timelineRunId.value = runId
-
-  // Wait for watchers to process
-  await nextTick()
-
-  // Start SSE stream for live updates - SSE will load initial events
-  startTimelineTail()
-}
 
 // Open the timeline slideover for a run
 const openRunTimeline = async (runId: string) => {
-  // If already selected, just open the slideover
-  if (selectedRunId.value === runId) {
-    timelineOpen.value = true
-    return
-  }
-
-  // Otherwise, select the run first (which loads data and starts SSE)
-  await selectRun(runId)
   
-  // Then open the slideover
-  timelineOpen.value = true
-}
-
-const startTimelineTail = () => {
-  if (!timelineRunId.value) return
-  // Use _flows SSE stream endpoint
-  const url = `/api/_flows/${encodeURIComponent(selectedFlow.value)}/${encodeURIComponent(timelineRunId.value)}/stream`
-  timelineSSE.start(url, (msg) => {
-    if (msg?.record) {
-      console.log('[Flow Timeline] SSE event received:', {
-        kind: msg.record.kind,
-        step: msg.record.step,
-        data: msg.record.data,
-        meta: msg.record.meta,
-      })
-      flowState.addEvent(msg.record)
-    }
-  }, {
-    autoReconnect: true,
-    maxRetries: 30,
-    baseDelayMs: 500,
-    maxDelayMs: 10000,
+  // Manually trigger router navigation and wait for it
+  const router = useRouter()
+  const route = useRoute()
+  
+  await router.push({
+    query: {
+      ...route.query,
+      run: runId,
+      timeline: 'true',
+    },
   })
 }
 
@@ -523,7 +428,7 @@ const exportTimelineJson = () => {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `flow-${selectedFlow.value}-${timelineRunId.value}-events-${new Date().toISOString()}.json`
+  a.download = `flow-${selectedFlow.value}-${selectedRunId.value}-events-${new Date().toISOString()}.json`
   document.body.appendChild(a)
   a.click()
   a.remove()
@@ -535,35 +440,26 @@ const clearTimeline = () => {
 }
 
 // Handle node card button actions
-const handleNodeAction = (payload: { id: string, action: 'run' | 'logs' | 'details' }) => {
-  console.log('[Flow Diagram] Node action:', payload)
+const handleNodeAction = async (payload: { id: string, action: 'run' | 'logs' | 'details' }) => {
   
   const stepName = payload.id.split(':')[1] // Extract step name from "entry:stepName" or "step:stepName"
   
+  if (!selectedRunId.value) {
+    console.log('[flows/index] No run selected, showing alert')
+    alert('Please select a flow run first to view logs or details.')
+    return
+  }
+  
   switch (payload.action) {
     case 'logs':
-      // Open the slideover and switch to logs tab, filtered by step
-      if (selectedRunId.value) {
-        timelineOpen.value = true
-        selectedTab.value = 'logs'
-        // TODO: Add step filtering to logs view
-        console.log('Show logs for step:', stepName)
-      }
-      else {
-        alert('Please select a flow run first to view logs.')
-      }
+      timelineOpen.value = true
+      selectedTab.value = 'logs'
+      // TODO: Add step filtering to logs view
       break
     
     case 'details':
-      // Open the slideover and show step details in overview
-      if (selectedRunId.value) {
-        timelineOpen.value = true
-        selectedTab.value = 'overview'
-        console.log('Show details for step:', stepName)
-      }
-      else {
-        alert('Please select a flow run first to view details.')
-      }
+      timelineOpen.value = true
+      selectedTab.value = 'overview'
       break
   }
 }
@@ -589,14 +485,13 @@ const startFlowRun = async () => {
     startFlowModalOpen.value = false
     flowInputJson.value = '{}'
 
-    // Refresh runs list to show the new run
-    await refreshRuns()
-    startTimelineTail()
-
-    // Optionally open the new run immediately
+    // Open the new run timeline first
     if (result?.flowId) {
       await openRunTimeline(result.flowId)
     }
+
+    // Then refresh runs list to show the new run
+    await refreshRuns()
   }
   catch (err) {
     console.error('Failed to start flow:', err)
@@ -606,79 +501,4 @@ const startFlowRun = async () => {
     startingFlow.value = false
   }
 }
-
-// Auto-manage polling for new runs when selectedFlow changes
-// Don't poll when we have an active SSE connection for a selected run
-const { pause: pausePolling, resume: resumePolling } = useIntervalFn(
-  async () => {
-    // Only poll if we have a flow selected but no run selected (or slideover is closed)
-    if (selectedFlow.value && !selectedRunId.value) {
-      await refreshRuns()
-    }
-  },
-  5000, // Poll every 5 seconds
-  { immediate: false }, // Don't start immediately
-)
-
-watch(selectedFlow, async (name, _prev) => {
-  try {
-    runsSSE.stop()
-  }
-  catch {
-    // ignore
-  }
-  
-  // Pause polling first
-  pausePolling()
-  
-  if (name) {
-    // useFetch will automatically refetch due to watch option
-    // Start polling for new runs (only when no run is selected)
-    resumePolling()
-  }
-})
-
-onBeforeUnmount(() => {
-  pausePolling()
-  // Clean up SSE connections
-  try {
-    timelineSSE.stop()
-    runsSSE.stop()
-  }
-  catch {
-    // ignore
-  }
-})
-
-// Manage SSE connection and polling based on selected run
-// SSE runs continuously while a run is selected, regardless of slideover state
-watch(selectedRunId, (runId, oldRunId) => {
-  // If we're switching between runs, stop the old SSE
-  if (oldRunId && oldRunId !== runId) {
-    try {
-      timelineSSE.stop()
-    }
-    catch {
-      // ignore
-    }
-  }
-  
-  // If no run is selected, stop SSE and resume polling
-  if (!runId) {
-    try {
-      timelineSSE.stop()
-    }
-    catch {
-      // ignore
-    }
-    if (selectedFlow.value) {
-      resumePolling()
-    }
-    return
-  }
-  
-  // If a new run is selected, pause polling
-  // Note: SSE will be started by selectRun() calling startTimelineTail()
-  pausePolling()
-}, { flush: 'post' }) // Run after selectRun() completes
 </script>

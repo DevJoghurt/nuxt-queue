@@ -60,6 +60,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { useComponentRouter } from '#imports'
+import { ULink, UDropdownMenu, UButton, UIcon, UBadge } from '#components'
 
 withDefaults(defineProps<{
   title?: string

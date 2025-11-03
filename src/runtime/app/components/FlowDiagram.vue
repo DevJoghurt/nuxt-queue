@@ -190,15 +190,6 @@ const nodes = computed<FlowNode[]>(() => {
   // Use analyzed levels if available, otherwise fall back to simple grid
   const steps = f.steps || {}
   
-  // Debug: log what we received
-  if (f.analyzed) {
-    console.log('[FlowDiagram] Analyzed data:', {
-      levels: f.analyzed.levels,
-      maxLevel: f.analyzed.maxLevel,
-      stepsCount: Object.keys(f.analyzed.steps || {}).length,
-    })
-  }
-  
   if (f.analyzed?.levels && f.analyzed.levels.length > 0) {
     // Use analyzed levels for better layout
     const levels = f.analyzed.levels.filter(level => level.length > 0) // Skip empty levels

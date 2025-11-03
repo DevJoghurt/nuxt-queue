@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 py-6">
+  <div class="space-y-6 px-6 py-6">
     <!-- Run Stats -->
     <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
       <div class="grid grid-cols-2 gap-4">

@@ -48,11 +48,26 @@ export class BullMQProvider implements QueueProvider {
     if (!cached.wired) {
       const forward = async (kind: string, payload: any) => {
         // Publish ONLY to the in-proc bus. Do NOT persist queue/job/global events in the stream store.
-        // v0.4: Use type instead of kind, runId from job data if available
+        // v0.4: Use type instead of kind, try to extract runId from job data if available
         const jobId = (payload as any)?.jobId || 'unknown'
+
+        // Try to fetch the job to get flowId/runId from data
+        let runId = ''
+        try {
+          if (jobId && jobId !== 'unknown') {
+            const job = await queue.getJob(jobId)
+            if (job?.data?.flowId) {
+              runId = job.data.flowId
+            }
+          }
+        }
+        catch {
+          // Ignore errors fetching job, use empty runId
+        }
+
         const rec = {
           type: `job.${kind}`,
-          runId: '', // Job events are transient, not part of flow streams
+          runId,
           data: { ...payload, queue: name, jobId },
         }
         // Publish directly to the in-proc bus via EventManager abstraction

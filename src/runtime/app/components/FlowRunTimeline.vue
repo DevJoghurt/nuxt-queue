@@ -1,6 +1,7 @@
 <template>
-  <div class="py-6 space-y-4">
-    <div class="flex items-center gap-2 flex-wrap">
+  <div class="flex flex-col h-full">
+    <!-- Action Bar -->
+    <div class="flex items-center gap-2 flex-wrap px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
       <UButton
         size="xs"
         color="neutral"
@@ -34,15 +35,17 @@
       </div>
     </div>
 
+    <!-- Timeline Content -->
     <TimelineList
       :items="events"
-      height-class="h-[calc(100vh-300px)]"
+      height-class="flex-1"
     />
   </div>
 </template>
 
 <script setup lang="ts">
 import TimelineList from './TimelineList.vue'
+import { UButton } from '#components'
 
 defineProps<{
   events: any[]
