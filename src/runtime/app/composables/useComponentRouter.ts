@@ -172,10 +172,21 @@ export function useComponentRouter(
     const m = matchPath(path) || matchPath(props.routes[0]?.path || '/')
     if (!m) return
     component.value = (m.record as ComponentRouteRecord).component
+
+    // Parse query params from the path if any (e.g., /path?foo=bar)
+    const [pathOnly, queryString] = path.split('?')
+    const queryParams: Record<string, any> = {}
+    if (queryString) {
+      const params = new URLSearchParams(queryString)
+      params.forEach((value, key) => {
+        queryParams[key] = value
+      })
+    }
+
     route.value = {
-      path,
+      path: pathOnly || path,
       params: m.params,
-      query: { ...(nuxtRoute.query as any) },
+      query: queryParams, // Only use query params from the current path, not from nuxtRoute
     }
     dbg('current', route.value)
   }
@@ -200,8 +211,20 @@ export function useComponentRouter(
   async function writeToHost(path: string, replace = false) {
     dbg('writeToHost', path, { replace, mode: props.mode })
     if (props.mode === 'query') {
-      const nextQuery = { ...(nuxtRoute.query as any), [props.base]: path }
-      if ((nuxtRoute.query as any)?.[props.base] === path) {
+      // Split path into path and query parts
+      const [pathOnly, queryString] = path.split('?')
+      const pathQuery: Record<string, any> = {}
+      if (queryString) {
+        const params = new URLSearchParams(queryString)
+        params.forEach((value, key) => {
+          pathQuery[key] = value
+        })
+      }
+
+      // Only keep the component router base param and any query params from the path itself
+      const nextQuery = { [props.base]: pathOnly, ...pathQuery }
+
+      if ((nuxtRoute.query as any)?.[props.base] === pathOnly && !queryString) {
         setCurrent(path)
         return
       }

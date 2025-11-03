@@ -103,13 +103,21 @@ export class BullMQProvider implements QueueProvider {
     const { queue } = this.ensureQueue(queueName)
     const j = await queue.getJob(id)
     if (!j) return null
-    return this.toJob(j)
+    return await this.toJob(j)
   }
 
   async getJobs(queueName: string, _q?: JobsQuery): Promise<Job[]> {
     const { queue } = this.ensureQueue(queueName)
-    const jobs = await queue.getJobs(['waiting', 'active', 'completed', 'failed', 'delayed'], 0, 50)
-    return jobs.map(j => this.toJob(j))
+
+    // Determine which states to query
+    const states = _q?.state && _q.state.length > 0
+      ? _q.state
+      : ['waiting', 'active', 'completed', 'failed', 'delayed', 'paused']
+
+    // Fetch with limit if provided, otherwise get up to 1000
+    const limit = _q?.limit || 1000
+    const jobs = await queue.getJobs(states as any, 0, limit - 1)
+    return await Promise.all(jobs.map(j => this.toJob(j)))
   }
 
   on(queueName: string, event: QueueEvent, cb: (p: any) => void): () => void {
@@ -160,15 +168,20 @@ export class BullMQProvider implements QueueProvider {
     this.queues.clear()
   }
 
-  private toJob(j: BullJob): Job {
+  private async toJob(j: BullJob): Promise<Job> {
+    // Get the current state of the job
+    const state = await j.getState()
+
     return {
       id: j.id as string,
       name: j.name,
       data: j.data,
-      progress: typeof j.progress === 'number' ? j.progress : undefined,
       returnvalue: (j as any).returnvalue,
       failedReason: j.failedReason,
-      // state resolved by caller when needed
+      state: state as 'waiting' | 'active' | 'completed' | 'failed' | 'delayed' | 'paused',
+      timestamp: j.timestamp,
+      processedOn: j.processedOn,
+      finishedOn: j.finishedOn,
     }
   }
 }

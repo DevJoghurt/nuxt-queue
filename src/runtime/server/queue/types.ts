@@ -20,9 +20,11 @@ export interface Job {
   name: string
   data: any
   state?: 'waiting' | 'active' | 'completed' | 'failed' | 'delayed' | 'paused'
-  progress?: number
   returnvalue?: any
   failedReason?: string
+  timestamp?: number
+  processedOn?: number
+  finishedOn?: number
 }
 
 export interface JobsQuery {
