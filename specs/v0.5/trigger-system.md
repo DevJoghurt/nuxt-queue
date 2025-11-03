@@ -2,11 +2,14 @@
 
 > **Version**: v0.5.0  
 > **Status**: 📋 Planning  
-> **Last Updated**: 2025-10-30
+> **Last Updated**: 2025-11-03  
+> **Migration Note**: ⚠️ This will replace the simple v0.4 scheduling implementation (see [v0.4 Flow Scheduling](../v0.4/flow-scheduling.md))
 
 ## Goal
 
 Build a comprehensive trigger system that unifies ALL ways flows interact with external events - whether starting a flow or resuming a paused step.
+
+This replaces the temporary v0.4 scheduling solution with a complete trigger infrastructure supporting events, webhooks, schedules, and await patterns.
 
 ## Core Concept
 

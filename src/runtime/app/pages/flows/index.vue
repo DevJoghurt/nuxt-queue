@@ -49,6 +49,16 @@
               </div>
               <UButton
                 v-if="selectedFlow"
+                icon="i-lucide-clock"
+                size="xs"
+                color="neutral"
+                variant="soft"
+                @click="openScheduleModal"
+              >
+                Schedule
+              </UButton>
+              <UButton
+                v-if="selectedFlow"
                 icon="i-lucide-play"
                 size="xs"
                 color="primary"
@@ -117,6 +127,41 @@
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <!-- Schedules Section -->
+          <div
+            v-if="selectedFlow"
+            class="border-t border-gray-200 dark:border-gray-800 shrink-0"
+          >
+            <div class="px-4 py-2 bg-gray-50 dark:bg-gray-900/50">
+              <div class="flex items-center justify-between">
+                <h3 class="text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Schedules
+                </h3>
+                <UButton
+                  icon="i-lucide-chevron-down"
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  square
+                  :class="{ 'rotate-180': showSchedules }"
+                  @click="showSchedules = !showSchedules"
+                />
+              </div>
+            </div>
+            <div
+              v-if="showSchedules"
+              class="max-h-48 overflow-y-auto"
+            >
+              <FlowSchedulesList
+                v-if="selectedFlow"
+                ref="schedulesListRef"
+                :flow-name="selectedFlow"
+                class="px-4 py-3"
+                @updated="handleSchedulesUpdated"
+              />
             </div>
           </div>
         </div>
@@ -298,6 +343,14 @@
         </div>
       </template>
     </UModal>
+
+    <!-- Schedule Flow Modal -->
+    <FlowScheduleDialog
+      v-if="selectedFlow"
+      v-model="scheduleModalOpen"
+      :flow-name="selectedFlow"
+      @scheduled="handleFlowScheduled"
+    />
   </div>
 </template>
 
@@ -308,6 +361,8 @@ import FlowRunOverview from '../../components/FlowRunOverview.vue'
 import FlowRunLogs from '../../components/FlowRunLogs.vue'
 import FlowRunTimeline from '../../components/FlowRunTimeline.vue'
 import FlowRunStatusBadge from '../../components/FlowRunStatusBadge.vue'
+import FlowScheduleDialog from '../../components/FlowScheduleDialog.vue'
+import FlowSchedulesList from '../../components/FlowSchedulesList.vue'
 import {
   USelectMenu,
   UIcon,
@@ -343,9 +398,14 @@ useFlowRunsPolling(refreshRuns, shouldPoll)
 
 // Start flow modal state
 const startFlowModalOpen = ref(false)
+const scheduleModalOpen = ref(false)
 const flowInputJson = ref('{}')
 const jsonError = ref('')
 const startingFlow = ref(false)
+
+// Schedules state
+const showSchedules = ref(true)
+const schedulesListRef = ref()
 
 // Watch for JSON validation
 watch(flowInputJson, (value) => {
@@ -409,11 +469,10 @@ const diagramStepStates = computed(() => {
 
 // Open the timeline slideover for a run
 const openRunTimeline = async (runId: string) => {
-  
   // Manually trigger router navigation and wait for it
   const router = useRouter()
   const route = useRoute()
-  
+
   await router.push({
     query: {
       ...route.query,
@@ -441,15 +500,14 @@ const clearTimeline = () => {
 
 // Handle node card button actions
 const handleNodeAction = async (payload: { id: string, action: 'run' | 'logs' | 'details' }) => {
-  
-  const stepName = payload.id.split(':')[1] // Extract step name from "entry:stepName" or "step:stepName"
-  
+  const _stepName = payload.id.split(':')[1] // Extract step name from "entry:stepName" or "step:stepName"
+
   if (!selectedRunId.value) {
     console.log('[flows/index] No run selected, showing alert')
     alert('Please select a flow run first to view logs or details.')
     return
   }
-  
+
   switch (payload.action) {
     case 'logs':
       timelineOpen.value = true
@@ -468,6 +526,20 @@ const openStartFlowModal = () => {
   flowInputJson.value = '{}'
   jsonError.value = ''
   startFlowModalOpen.value = true
+}
+
+const openScheduleModal = () => {
+  scheduleModalOpen.value = true
+}
+
+const handleFlowScheduled = () => {
+  // Refresh the schedules list after a schedule is created
+  schedulesListRef.value?.loadSchedules()
+}
+
+const handleSchedulesUpdated = () => {
+  // Called when schedules list needs to be refreshed
+  schedulesListRef.value?.loadSchedules()
 }
 
 const startFlowRun = async () => {

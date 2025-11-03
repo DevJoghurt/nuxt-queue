@@ -725,11 +725,12 @@ BULLMQ_WORKER_ENABLED=1
 ## Current Limitations
 
 1. **TypeScript only**: Python workers not yet implemented
-2. **No triggers/await**: Planned for next version
-3. **Redis only**: No Postgres adapter yet
-4. **State separate from events**: Not unified with stream store
-5. **Basic logging**: No advanced logger adapters
-6. **Flow-coupled workers**: Workers can't be called directly as HTTP handlers
+2. **No triggers/await**: Planned for v0.5 (see [Trigger System](../v0.5/trigger-system.md))
+3. **Basic scheduling**: Simple cron/delay scheduling available (see [Flow Scheduling](./flow-scheduling.md)) - will be replaced by v0.5 trigger system
+4. **Redis only**: No Postgres adapter yet
+5. **State separate from events**: Not unified with stream store
+6. **Basic logging**: No advanced logger adapters
+7. **Flow-coupled workers**: Workers can't be called directly as HTTP handlers
 
 ## Migration Notes
 
