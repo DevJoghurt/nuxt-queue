@@ -1,5 +1,5 @@
 import { defineNitroPlugin } from '#imports'
-import { getStreamStoreFactory } from '../streamStore/streamStoreFactory'
+import { getEventStoreFactory } from '../events/eventStoreFactory'
 
 /**
  * Flow Run Snapshots (stream-based)
@@ -20,8 +20,8 @@ import { getStreamStoreFactory } from '../streamStore/streamStoreFactory'
 //   - flow.run.indexed
 //   - flow.step.patch
 export default defineNitroPlugin(() => {
-  // Start stream store wiring; StreamStoreFactory handles idempotence
-  const factory = getStreamStoreFactory()
+  // Start event store wiring; EventStoreFactory handles idempotence
+  const factory = getEventStoreFactory()
   factory.start()
   return {
     hooks: {

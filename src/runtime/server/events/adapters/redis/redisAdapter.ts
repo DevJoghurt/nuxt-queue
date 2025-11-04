@@ -1,5 +1,5 @@
-import type { StreamAdapter, EventReadOptions, EventSubscription } from '../types'
-import type { EventRecord } from '../../../types'
+import type { StreamAdapter, EventReadOptions, EventSubscription } from '../../types'
+import type { EventRecord } from '../../../../types'
 import { useRuntimeConfig } from '#imports'
 import IORedis from 'ioredis'
 import { RedisPubSubGateway } from './redisPubSubGateway'
@@ -8,7 +8,7 @@ function nowIso() {
   return new Date().toISOString()
 }
 
-export function createRedisStreamsAdapter(): StreamAdapter {
+export function createRedisAdapter(): StreamAdapter {
   const rc: any = useRuntimeConfig()
   const conn = rc?.queue?.eventStore?.redis || {}
   const rsOpts = (rc?.queue?.eventStore?.options?.redisStreams || {}) as {

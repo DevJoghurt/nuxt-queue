@@ -1,6 +1,6 @@
 import { promises as fsp } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { StreamAdapter, EventReadOptions, EventSubscription } from '../types'
+import type { EventStoreAdapter, EventReadOptions, EventSubscription } from '../types'
 import type { EventRecord } from '../../../types'
 import { useRuntimeConfig } from '#imports'
 
@@ -27,7 +27,7 @@ async function fileExists(path: string) {
   catch { return false }
 }
 
-export function createFileStreamAdapter(): StreamAdapter {
+export function createFileAdapter(): EventStoreAdapter {
   const rc: any = useRuntimeConfig()
   const dirRoot = rc?.queue?.eventStore?.options?.file?.dir || join(process.cwd(), '.nq-events')
   const ext = rc?.queue?.eventStore?.options?.file?.ext || '.ndjson'
@@ -57,7 +57,7 @@ export function createFileStreamAdapter(): StreamAdapter {
     return out
   }
 
-  const adapter: StreamAdapter = {
+  const adapter: EventStoreAdapter = {
     async append(stream: string, e: Omit<EventRecord, 'id' | 'ts'>): Promise<EventRecord> {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`
       const rec: any = { ...(e as any), id, ts: nowIso() }

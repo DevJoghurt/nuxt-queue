@@ -1,41 +1,41 @@
 import { useRuntimeConfig } from '#imports'
 import { getStreamNames } from './streamNames'
-import { createRedisStreamsAdapter } from './adapters/redisStreamsAdapter'
-import { createMemoryStreamAdapter } from './adapters/memoryStreamAdapter'
-import { createFileStreamAdapter } from './adapters/fileStreamAdapter'
-import type { StreamAdapter } from './types'
+import { createRedisAdapter } from './adapters/redis/redisAdapter'
+import { createMemoryAdapter } from './adapters/memoryAdapter'
+import { createFileAdapter } from './adapters/fileAdapter'
+import type { EventStoreAdapter } from './types'
 import { createWiringRegistry } from './wiring/registry'
 
-export interface StreamStoreInstance {
+export interface EventStoreInstance {
   name: string
-  append: StreamAdapter['append']
-  read: StreamAdapter['read']
-  subscribe: StreamAdapter['subscribe']
+  append: EventStoreAdapter['append']
+  read: EventStoreAdapter['read']
+  subscribe: EventStoreAdapter['subscribe']
 }
 
-export interface StreamStoreFactory {
-  adapter: StreamAdapter
+export interface EventStoreFactory {
+  adapter: EventStoreAdapter
   names: ReturnType<typeof getStreamNames>
-  stream(name: string): StreamStoreInstance
+  stream(name: string): EventStoreInstance
   /** Idempotently start stream store wiring that persists ingress events and projections */
   start(): void
   /** Stop wiring and release listeners */
   stop(): void
 }
 
-let cachedFactory: StreamStoreFactory | null = null
+let cachedFactory: EventStoreFactory | null = null
 
-// Internal factory getter (no `use` prefix). Utils wrapper will expose `useStreamStoreFactory`.
-export function getStreamStoreFactory(): StreamStoreFactory {
+// Internal factory getter (no `use` prefix). Utils wrapper will expose `useEventStoreFactory`.
+export function getEventStoreFactory(): EventStoreFactory {
   if (cachedFactory) return cachedFactory
   const rc: any = useRuntimeConfig()
   const name = rc?.queue?.eventStore?.name || 'memory'
 
-  let adapter: StreamAdapter
-  if (name === 'memory') adapter = createMemoryStreamAdapter()
-  else if (name === 'file') adapter = createFileStreamAdapter()
-  else if (name === 'redis') adapter = createRedisStreamsAdapter()
-  else adapter = createMemoryStreamAdapter() // fallback to memory
+  let adapter: EventStoreAdapter
+  if (name === 'memory') adapter = createMemoryAdapter()
+  else if (name === 'file') adapter = createFileAdapter()
+  else if (name === 'redis') adapter = createRedisAdapter()
+  else adapter = createMemoryAdapter() // fallback to memory
 
   // Debug logging
   if (process.env.NQ_DEBUG_EVENTS === '1') {
@@ -46,10 +46,10 @@ export function getStreamStoreFactory(): StreamStoreFactory {
   // v0.3: Wiring registry with simplified flow wiring
   const wiring = createWiringRegistry({ adapter, names: names as any })
 
-  const factory: StreamStoreFactory = {
+  const factory: EventStoreFactory = {
     adapter,
     names,
-    stream(name: string): StreamStoreInstance {
+    stream(name: string): EventStoreInstance {
       return {
         name,
         append: (s, e) => adapter.append(s, e),
@@ -68,6 +68,6 @@ export function getStreamStoreFactory(): StreamStoreFactory {
   return factory
 }
 
-export function setStreamStoreFactory(f: StreamStoreFactory) {
+export function setEventStoreFactory(f: EventStoreFactory) {
   cachedFactory = f
 }

@@ -42,7 +42,7 @@ export interface IndexReadOptions {
 }
 
 // v0.4 minimal adapter interface - runId-based streams
-export interface StreamAdapter {
+export interface EventStoreAdapter {
   append(subject: string, e: Omit<EventRecord, 'id' | 'ts'>): Promise<EventRecord>
   read(subject: string, opts?: EventReadOptions): Promise<EventRecord[]>
   subscribe(subject: string, onEvent: (e: EventRecord) => void): Promise<EventSubscription>

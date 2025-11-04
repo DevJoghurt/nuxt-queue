@@ -1,49 +1,43 @@
-import { useStorage } from '#imports'
-import type { StreamAdapter, EventReadOptions, EventSubscription } from '../types'
+import type { EventStoreAdapter, EventReadOptions, EventSubscription } from '../types'
 import type { EventRecord } from '../../../types'
 
-const listeners = new Map<string, Set<(e: EventRecord) => void>>()
-
-function nowIso() {
-  return new Date().toISOString()
-}
-
-export function createRedisFallbackStreamAdapter(): StreamAdapter {
-  const storage = useStorage('redis')
+export function createMemoryAdapter(): EventStoreAdapter {
+  const events = new Map<string, EventRecord[]>()
+  const listeners = new Map<string, Set<(e: EventRecord) => void>>()
+  const indices = new Map<string, Array<{ id: string, score: number }>>()
 
   return {
     async append(stream: string, e: Omit<EventRecord, 'id' | 'ts'>): Promise<EventRecord> {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`
-      const rec: any = { ...(e as any), id, ts: nowIso() }
-      const key = `events:${stream}`
-      const curr = (await storage.getItem<any[]>(key)) || []
-      curr.push(rec)
-      await storage.setItem(key, curr)
+      const rec: any = { ...(e as any), id, ts: new Date().toISOString() }
+      const list = events.get(stream) || []
+      list.push(rec)
+      events.set(stream, list)
       const set = listeners.get(stream)
       if (set) set.forEach(cb => cb(rec))
       return rec
     },
     async read(stream: string, opts?: EventReadOptions): Promise<EventRecord[]> {
-      const key = `events:${stream}`
-      const curr = (await storage.getItem<EventRecord[]>(key)) || []
+      const list = events.get(stream) || []
       const dir = opts?.direction || 'forward'
       if (dir === 'backward') {
-        let end = curr.length
+        let end = list.length
         if (opts?.fromId) {
-          const idx = curr.findIndex(e => e.id === opts.fromId)
-          end = idx >= 0 ? idx : curr.length
+          const idx = list.findIndex(e => e.id === opts.fromId)
+          end = idx >= 0 ? idx : list.length
         }
         const count = opts?.limit && opts.limit > 0 ? opts.limit : end
         const start = Math.max(0, end - count)
-        const slice = curr.slice(start, end)
+        const slice = list.slice(start, end)
         return slice.reverse()
       }
+      // forward
       if (!opts?.fromId) {
-        if (opts?.limit && opts.limit > 0) return curr.slice(0, opts.limit)
-        return curr
+        if (opts?.limit && opts.limit > 0) return list.slice(0, opts.limit)
+        return list
       }
-      const idx = curr.findIndex(e => e.id === opts.fromId)
-      const out = idx >= 0 ? curr.slice(idx + 1) : curr
+      const idx = list.findIndex((e: any) => e.id === opts.fromId)
+      const out = idx >= 0 ? list.slice(idx + 1) : list
       if (opts?.limit && opts.limit > 0) return out.slice(0, opts.limit)
       return out
     },
@@ -61,8 +55,7 @@ export function createRedisFallbackStreamAdapter(): StreamAdapter {
       }
     },
     async indexAdd(key: string, id: string, score: number): Promise<void> {
-      const indexKey = `index:${key}`
-      const data = (await storage.getItem<Array<{ id: string, score: number }>>(indexKey)) || []
+      const data = indices.get(key) || []
 
       // Update or add entry
       const existing = data.findIndex(entry => entry.id === id)
@@ -73,11 +66,10 @@ export function createRedisFallbackStreamAdapter(): StreamAdapter {
         data.push({ id, score })
       }
 
-      await storage.setItem(indexKey, data)
+      indices.set(key, data)
     },
     async indexRead(key: string, opts?: { offset?: number, limit?: number }) {
-      const indexKey = `index:${key}`
-      const data = (await storage.getItem<Array<{ id: string, score: number }>>(indexKey)) || []
+      const data = indices.get(key) || []
 
       // Sort by score descending (newest first)
       const sorted = [...data].sort((a, b) => b.score - a.score)
@@ -88,27 +80,21 @@ export function createRedisFallbackStreamAdapter(): StreamAdapter {
       return sorted.slice(offset, offset + limit)
     },
     async deleteStream(subject: string): Promise<void> {
-      const key = `events:${subject}`
-      await storage.removeItem(key)
+      events.delete(subject)
       listeners.delete(subject)
     },
     async deleteByPattern(pattern: string): Promise<number> {
-      // Convert glob pattern to regex
+      // Convert glob pattern to regex (simple implementation)
       const regexPattern = pattern
         .replace(/\*/g, '.*')
         .replace(/\?/g, '.')
       const regex = new RegExp(`^${regexPattern}$`)
 
-      // Get all keys (this is not efficient but works for unstorage)
-      const keys = await storage.getKeys('events:')
       let count = 0
-
-      for (const key of keys) {
-        // Remove 'events:' prefix to match against pattern
-        const subject = key.replace(/^events:/, '')
-        if (regex.test(subject)) {
-          await storage.removeItem(key)
-          listeners.delete(subject)
+      for (const key of events.keys()) {
+        if (regex.test(key)) {
+          events.delete(key)
+          listeners.delete(key)
           count++
         }
       }
@@ -116,11 +102,12 @@ export function createRedisFallbackStreamAdapter(): StreamAdapter {
       return count
     },
     async deleteIndex(key: string): Promise<void> {
-      const indexKey = `index:${key}`
-      await storage.removeItem(indexKey)
+      indices.delete(key)
     },
     async close(): Promise<void> {
       listeners.clear()
+      events.clear()
+      indices.clear()
     },
   }
 }

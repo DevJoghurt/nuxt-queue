@@ -1,9 +1,9 @@
-import { getStreamStoreFactory } from '../streamStore/streamStoreFactory'
-import type { EventReadOptions, EventSubscription } from '../streamStore/types'
+import { getEventStoreFactory } from '../events/eventStoreFactory'
+import type { EventReadOptions, EventSubscription } from '../events/types'
 import type { EventRecord } from '../../types'
 
 export function useStreamStore() {
-  const factory = getStreamStoreFactory()
+  const factory = getEventStoreFactory()
 
   async function read(stream: string, opts?: EventReadOptions): Promise<EventRecord[]> {
     return await factory.adapter.read(stream, opts)

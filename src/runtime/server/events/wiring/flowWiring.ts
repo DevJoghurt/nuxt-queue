@@ -1,6 +1,6 @@
 import type { StreamAdapter } from '../types'
 import type { EventRecord } from '../../../types'
-import { getEventBus } from '../../events/eventBus'
+import { getEventBus } from '../eventBus'
 import { useStreamStore } from '#imports'
 
 export interface FlowWiringDeps {
