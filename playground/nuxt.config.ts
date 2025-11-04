@@ -15,38 +15,42 @@ export default defineNuxtConfig({
     preference: 'light',
   },
 
-  runtimeConfig: {
-    queue: {
-      eventStore: {
-        name: 'redis',
-        mode: 'streams',
-      },
-      workers: {
-        concurrency: 5,
-      },
-    },
-  },
-
   queue: {
-    debug: { events: true },
-    // Default configurations for all queues
-    defaultQueueConfig: {
-      prefix: 'nq',
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
-        },
-        removeOnComplete: 100,
-        removeOnFail: 50,
+    debug: { events: false },
+
+    // Shortcut: Configure all backends to use Redis
+    store: {
+      name: 'redis',
+      redis: {
+        host: '127.0.0.1',
+        port: 6379,
       },
     },
-    // Default configurations for all workers
-    defaultWorkerConfig: {
-      concurrency: 2,
-      lockDurationMs: 30000,
-      maxStalledCount: 1,
+    // You can still override individual configs:
+    // eventStore: {
+    //   name: 'memory',  // Use memory for events in development
+    // },
+    queue: {
+      defaultConfig: {
+        // Queue options
+        prefix: 'nq',
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 1000,
+          },
+          timeout: 120000,
+          removeOnComplete: 100,
+          removeOnFail: 50,
+        },
+        // Worker options
+        worker: {
+          concurrency: 2,
+          lockDurationMs: 120000,
+          maxStalledCount: 2,
+        },
+      },
     },
   },
 })

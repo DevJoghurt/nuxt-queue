@@ -56,8 +56,22 @@ export async function registerTsWorker(queueName: string, jobName: string, handl
   }
 
   const rc: any = useRuntimeConfig()
-  const connection = rc?.queue?.redis
+  const connection = rc?.queue?.queue?.redis
+
+  // BullMQ Workers start automatically by default
+  // If autorun is explicitly false, we need to pause it after creation
+  const shouldPause = opts?.autorun === false
+
   const worker = new Worker(queueName, dispatcher, { connection, ...(opts || {}) })
+
+  // Pause worker if autorun is disabled
+  if (shouldPause) {
+    await worker.pause()
+    console.info(`[registerTsWorker] Worker for queue "${queueName}" created but paused (autorun: false)`)
+  }
+  else {
+    console.info(`[registerTsWorker] Worker for queue "${queueName}" created and running`)
+  }
 
   // Add error handler to catch worker-level errors
   worker.on('error', (err) => {

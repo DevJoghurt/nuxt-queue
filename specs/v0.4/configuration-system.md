@@ -11,15 +11,31 @@ The configuration system in v0.4 allows developers to configure queues and worke
 
 The system uses a priority-based merge strategy where per-queue configurations override global defaults.
 
+### Store Shortcut
+
+v0.4 includes a convenient `store` shortcut that configures all backends (queue, state, eventStore) to use the same storage backend:
+
+```typescript
+queue: {
+  store: {
+    name: 'redis',
+    redis: { host: '127.0.0.1', port: 6379 }
+  }
+}
+```
+
+Individual backends can still override this shortcut.
+
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      nuxt.config.ts                         │
-│  ┌──────────────────────┐  ┌──────────────────────┐       │
-│  │ defaultQueueConfig   │  │ defaultWorkerConfig  │       │
-│  │ (Global Defaults)    │  │ (Global Defaults)    │       │
-│  └──────────────────────┘  └──────────────────────┘       │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ queue.defaultConfig (Global Defaults)                │  │
+│  │  - Queue options (prefix, defaultJobOptions, etc.)   │  │
+│  │  - Worker options (queue.defaultConfig.worker)       │  │
+│  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼ (Registry Build Time)
@@ -151,30 +167,56 @@ export default defineNuxtConfig({
   modules: ['nuxt-queue'],
   
   queue: {
-    // Global queue configuration
-    defaultQueueConfig: {
-      prefix: 'nq',
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
-        },
-        removeOnComplete: 100,
-        removeOnFail: 50,
-      },
-      limiter: {
-        max: 100,
-        duration: 60000, // 1 minute
+    // Option 1: Use the store shortcut (recommended)
+    store: {
+      name: 'redis', // or 'postgres'
+      redis: {
+        host: '127.0.0.1',
+        port: 6379,
       },
     },
     
-    // Global worker configuration
-    defaultWorkerConfig: {
-      concurrency: 2,
-      lockDurationMs: 30000, // 30 seconds
-      maxStalledCount: 1,
-      autorun: true,
+    // Option 2: Configure individual backends
+    // queue: {
+    //   name: 'redis',
+    //   redis: { host: '127.0.0.1', port: 6379 },
+    // },
+    // state: {
+    //   name: 'redis',
+    //   redis: { host: '127.0.0.1', port: 6379 },
+    // },
+    // eventStore: {
+    //   name: 'redis',
+    //   redis: { host: '127.0.0.1', port: 6379 },
+    // },
+    
+    // Global queue and worker configuration
+    queue: {
+      defaultConfig: {
+        // Queue options
+        prefix: 'nq',
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 1000,
+          },
+          removeOnComplete: 100,
+          removeOnFail: 50,
+        },
+        limiter: {
+          max: 100,
+          duration: 60000, // 1 minute
+        },
+        
+        // Worker options (nested under worker key)
+        worker: {
+          concurrency: 2,
+          lockDurationMs: 30000, // 30 seconds
+          maxStalledCount: 1,
+          autorun: true,
+        },
+      },
     },
   },
 })
@@ -232,9 +274,13 @@ The configuration system uses a priority-based merge strategy:
 ```typescript
 // Example merge result:
 // nuxt.config.ts
-defaultWorkerConfig: {
-  concurrency: 2,
-  lockDurationMs: 30000,
+queue: {
+  defaultConfig: {
+    worker: {
+      concurrency: 2,
+      lockDurationMs: 30000,
+    }
+  }
 }
 
 // server/queues/my-queue.ts
@@ -249,7 +295,7 @@ defineQueueConfig({
 {
   worker: {
     concurrency: 5,        // From defineQueueConfig
-    lockDurationMs: 30000, // From nuxt.config.ts
+    lockDurationMs: 30000, // From queue.defaultConfig.worker
   }
 }
 ```
@@ -356,16 +402,24 @@ Response:
 
 ## Best Practices
 
-### 1. Set Reasonable Global Defaults
+### 1. Use the Store Shortcut for Simplicity
 
 ```typescript
 // nuxt.config.ts
-defaultQueueConfig: {
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 1000 },
-    removeOnComplete: 100, // Keep last 100 completed jobs
-    removeOnFail: 50,      // Keep last 50 failed jobs
+queue: {
+  store: {
+    name: 'redis',
+    redis: { host: '127.0.0.1', port: 6379 },
+  },
+  queue: {
+    defaultConfig: {
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
+        removeOnComplete: 100, // Keep last 100 completed jobs
+        removeOnFail: 50,      // Keep last 50 failed jobs
+      },
+    },
   },
 }
 ```
@@ -535,6 +589,24 @@ export const config = defineQueueConfig({
 })
 ```
 
+### Global Config Migration
+
+```typescript
+
+// v0.4
+export default defineNuxtConfig({
+  queue: {
+    store: {
+      name: 'redis',
+      redis: {
+        host: '127.0.0.1',
+        port: 6379,
+      },
+    },
+  },
+})
+```
+
 ## Troubleshooting
 
 ### Configuration Not Applied
@@ -562,7 +634,7 @@ export const config = defineQueueConfig({
    ```typescript
    // In server code
    const config = useRuntimeConfig()
-   console.log(config.queue.defaultWorkerConfig)
+   console.log(config.queue.queue.defaultConfig.worker)
    ```
 
 ### Rate Limiting Not Working
@@ -582,6 +654,67 @@ In development, the registry is rebuilt automatically. In production:
 
 1. Rebuild the application
 2. Restart the server
+
+## Store Shortcut Configuration
+
+The `store` shortcut provides a convenient way to configure all backends at once:
+
+### Basic Usage
+
+```typescript
+// nuxt.config.ts
+export default defineNuxtConfig({
+  queue: {
+    store: {
+      name: 'redis',
+      redis: {
+        host: '127.0.0.1',
+        port: 6379,
+      },
+    },
+  },
+})
+```
+
+This automatically configures:
+- `queue.name` = 'redis' with `queue.redis` config
+- `state.name` = 'redis' with `state.redis` config  
+- `eventStore.name` = 'redis' with `eventStore.redis` config
+
+### With Overrides
+
+Individual backends can override the shortcut:
+
+```typescript
+export default defineNuxtConfig({
+  queue: {
+    store: {
+      name: 'redis',
+      redis: { host: '127.0.0.1', port: 6379 },
+    },
+    
+    // Override: use memory for eventStore in development
+    eventStore: {
+      name: 'memory',
+    },
+  },
+})
+```
+
+### PostgreSQL Example
+
+```typescript
+export default defineNuxtConfig({
+  queue: {
+    store: {
+      name: 'postgres',
+      postgres: {
+        connectionString: 'postgresql://localhost:5432/myapp',
+      },
+    },
+  },
+})
+```
 
 ## Related Documentation
 

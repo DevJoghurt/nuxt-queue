@@ -23,7 +23,7 @@ export class BullMQProvider implements QueueProvider {
     if (cached) return cached
     const { publishBus } = useEventManager()
     const rc = useRuntimeConfig() as any
-    const connection = rc.queue?.redis
+    const connection = rc.queue?.queue?.redis
     // Derive provider-agnostic queue options from registry (defaultJobOptions, prefix, limiter)
     let queueDefaults: any = undefined
     let prefix: string | undefined

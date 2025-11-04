@@ -15,6 +15,8 @@ import defu from 'defu'
 import { compileRegistryFromServerWorkers, type LayerInfo } from './registry'
 import { watchQueueFiles } from './utils/dev'
 import { generateRegistryTemplate, generateHandlersTemplate, generateAnalyzedFlowsTemplate } from './utils/templates'
+import { normalizeModuleOptions, toRuntimeConfig, getRedisStorageConfig } from './config'
+import type { ModuleOptions, QueueModuleConfig } from './config/types'
 import type {} from '@nuxt/schema'
 
 const meta = {
@@ -23,114 +25,15 @@ const meta = {
   configKey: 'queue',
 }
 
-export interface ModuleOptions {
-  dir?: string
-  runtimeDir?: string
-  ui?: boolean
-  redis?: {
-    host?: string
-    port?: number
-    username?: string
-    password?: string
-    db?: number
-    url?: string
-  }
-  debug?: Record<string, any>
-  /**
-   * Default queue configuration applied to all queues.
-   * Can be overridden per-queue using defineQueueConfig.
-   */
-  defaultQueueConfig?: {
-    /**
-     * Default job options for all queues.
-     */
-    defaultJobOptions?: {
-      attempts?: number
-      backoff?: number | { type: 'fixed' | 'exponential', delay: number }
-      delay?: number
-      priority?: number
-      timeout?: number
-      lifo?: boolean
-      removeOnComplete?: boolean | number
-      removeOnFail?: boolean | number
-    }
-    /**
-     * Rate limiting configuration.
-     */
-    limiter?: {
-      max?: number
-      duration?: number
-      groupKey?: string
-    }
-    /**
-     * Prefix for queue keys.
-     */
-    prefix?: string
-  }
-  /**
-   * Default worker configuration applied to all workers.
-   * Can be overridden per-worker using defineQueueConfig.
-   */
-  defaultWorkerConfig?: {
-    concurrency?: number
-    lockDurationMs?: number
-    maxStalledCount?: number
-    drainDelayMs?: number
-    autorun?: boolean
-    pollingIntervalMs?: number
-  }
-}
-
 declare module '@nuxt/schema' {
   interface RuntimeConfig {
-    queue: {
-      runtimeDir: string
-      redis: ModuleOptions['redis']
-      queues: any
-      workers: any
-      // compiled registry snapshot (JSON-safe)
-      registry?: any
-      state?: {
-        name?: 'redis' | 'postgres'
-        namespace?: string
-        autoScope?: 'always' | 'flow' | 'never'
-        cleanup?: {
-          strategy?: 'never' | 'immediate' | 'ttl' | 'on-complete'
-          ttlMs?: number
-        }
-      }
-      eventStore?: {
-        name?: 'redis' | 'postgres' | 'memory' | 'file'
-        mode?: 'streams' | 'fallback'
-        streams?: any
-        options?: {
-          file?: {
-            dir?: string
-            ext?: string
-            pollMs?: number
-          }
-        }
-      }
-      // Default queue configuration from nuxt.config
-      defaultQueueConfig?: ModuleOptions['defaultQueueConfig']
-      // Default worker configuration from nuxt.config
-      defaultWorkerConfig?: ModuleOptions['defaultWorkerConfig']
-    }
+    queue: QueueModuleConfig
   }
 }
 
 export default defineNuxtModule<ModuleOptions>({
   meta,
-  defaults: {
-    dir: 'queues',
-    runtimeDir: '',
-    ui: true,
-    debug: {},
-    redis: {
-      host: '127.0.0.1',
-      port: 6379,
-    },
-  },
+  defaults: {},
   moduleDependencies: {
     'json-editor-vue/nuxt': {
       version: '0.18.1',
@@ -138,6 +41,9 @@ export default defineNuxtModule<ModuleOptions>({
   },
   async setup(options, nuxt) {
     const { resolve } = createResolver(import.meta.url)
+
+    // Normalize and merge configuration
+    const config = normalizeModuleOptions(options)
 
     addServerScanDir(resolve('./runtime/server'))
 
@@ -148,7 +54,7 @@ export default defineNuxtModule<ModuleOptions>({
 
     // add vueflow assets
 
-    if (options.ui) {
+    if (config.ui) {
       addPlugin({
         src: resolve('./runtime/app/plugins/vueflow.client.ts'),
         mode: 'client',
@@ -172,13 +78,11 @@ export default defineNuxtModule<ModuleOptions>({
 
     nuxt.hook('nitro:config', (nitro) => {
       // Ensure Redis storage is configured for unstorage so StateProvider persists to Redis.
+      const redisConfig = getRedisStorageConfig(config)
       nitro.storage = defu(nitro.storage || {}, {
         redis: {
           driver: 'redis',
-          host: options.redis?.host,
-          port: options.redis?.port,
-          username: options.redis?.username,
-          password: options.redis?.password,
+          ...redisConfig,
           // base namespace handled in provider; keep storage base default
         },
       })
@@ -189,15 +93,8 @@ export default defineNuxtModule<ModuleOptions>({
 
     const runtimeConfig = nuxt.options.runtimeConfig
 
-    runtimeConfig.queue = defu(runtimeConfig.queue || {}, {
-      redis: options.redis,
-      debug: options.debug || {},
-      workers: [],
-      state: { name: 'redis', namespace: 'nq', autoScope: 'always', cleanup: { strategy: 'never' } },
-      eventStore: { name: 'redis' },
-      defaultQueueConfig: options.defaultQueueConfig || {},
-      defaultWorkerConfig: options.defaultWorkerConfig || {},
-    }) as any
+    // Convert normalized config to runtime config format
+    runtimeConfig.queue = defu(runtimeConfig.queue || {}, toRuntimeConfig(config)) as any
 
     // Build real registry snapshot from disk
     const layerInfos: LayerInfo[] = nuxt.options._layers.map(l => ({
@@ -205,21 +102,23 @@ export default defineNuxtModule<ModuleOptions>({
       serverDir: l.config?.serverDir || join(l.config.rootDir, 'server'),
     }))
 
-    // Prepare default configs from module options
+    // Prepare default configs from normalized config
+    // Extract queue options (excluding worker)
+    const { worker: _worker, ...queueOptions } = config.queue.defaultConfig || {}
     const defaultConfigs = {
-      queue: options.defaultQueueConfig,
-      worker: options.defaultWorkerConfig,
+      queue: queueOptions,
+      worker: config.queue.defaultConfig?.worker,
     }
 
-    const compiledRegistry = await compileRegistryFromServerWorkers(layerInfos, options?.dir || 'queues', defaultConfigs)
+    const compiledRegistry = await compileRegistryFromServerWorkers(layerInfos, config.dir || 'queues', defaultConfigs)
     // augment with defaults and metadata
     const compiledWithMeta = defu(compiledRegistry, {
       version: 1,
       compiledAt: new Date().toISOString(),
-      provider: { name: 'bullmq' },
+      provider: { name: config.queue.name === 'postgres' ? 'pgboss' : 'bullmq' },
       logger: { name: 'console', level: 'info' },
-      state: { name: 'redis', namespace: 'nq', autoScope: 'always', cleanup: { strategy: 'never' } },
-      eventStore: { name: 'redis' },
+      state: config.state,
+      eventStore: config.eventStore,
       runner: { ts: { isolate: 'inprocess' }, py: { enabled: false, cmd: 'python3', importMode: 'file' } },
       workers: [],
       flows: {},
@@ -273,16 +172,16 @@ export default defineNuxtModule<ModuleOptions>({
 
     // Small helper to refresh registry and re-generate app (dev)
     const refreshRegistry = async (reason: string, changedPath?: string) => {
-      const queuesRel = options?.dir || 'queues'
+      const queuesRel = config.dir || 'queues'
       const updatedRegistry = await compileRegistryFromServerWorkers(layerInfos, queuesRel, defaultConfigs)
       // No merging: the compiled registry is the single source of truth
       lastCompiledRegistry = JSON.parse(JSON.stringify(defu(updatedRegistry, {
         version: 1,
         compiledAt: new Date().toISOString(),
-        provider: { name: 'bullmq' },
+        provider: { name: config.queue.name === 'postgres' ? 'pgboss' : 'bullmq' },
         logger: { name: 'console', level: 'info' },
-        state: { name: 'redis', namespace: 'nq' },
-        eventStore: { name: 'redis' },
+        state: config.state,
+        eventStore: config.eventStore,
         runner: { ts: { isolate: 'inprocess' }, py: { enabled: false, cmd: 'python3', importMode: 'file' } },
         workers: [],
         flows: {},
@@ -311,7 +210,7 @@ export default defineNuxtModule<ModuleOptions>({
 
     if (nuxt.options.dev) {
       // Watch for changes in queue files and rebuild registry
-      const queuesRel = options?.dir || 'queues'
+      const queuesRel = config.dir || 'queues'
 
       // Use chokidar-based watcher for reliable file watching
       // Vite HMR handles component updates automatically when templates change
@@ -324,3 +223,5 @@ export default defineNuxtModule<ModuleOptions>({
     }
   },
 })
+
+export type { ModuleOptions } from './config/types'

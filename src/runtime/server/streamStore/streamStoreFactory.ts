@@ -1,6 +1,5 @@
 import { useRuntimeConfig } from '#imports'
 import { getStreamNames } from './streamNames'
-import { createRedisFallbackStreamAdapter } from './adapters/redisFallbackAdapter'
 import { createRedisStreamsAdapter } from './adapters/redisStreamsAdapter'
 import { createMemoryStreamAdapter } from './adapters/memoryStreamAdapter'
 import { createFileStreamAdapter } from './adapters/fileStreamAdapter'
@@ -30,17 +29,17 @@ let cachedFactory: StreamStoreFactory | null = null
 export function getStreamStoreFactory(): StreamStoreFactory {
   if (cachedFactory) return cachedFactory
   const rc: any = useRuntimeConfig()
-  const name = rc?.queue?.eventStore?.name || 'redis'
-  const mode = rc?.queue?.eventStore?.mode || 'fallback'
+  const name = rc?.queue?.eventStore?.name || 'memory'
 
   let adapter: StreamAdapter
   if (name === 'memory') adapter = createMemoryStreamAdapter()
   else if (name === 'file') adapter = createFileStreamAdapter()
-  else adapter = (mode === 'streams' ? createRedisStreamsAdapter() : createRedisFallbackStreamAdapter())
+  else if (name === 'redis') adapter = createRedisStreamsAdapter()
+  else adapter = createMemoryStreamAdapter() // fallback to memory
 
   // Debug logging
   if (process.env.NQ_DEBUG_EVENTS === '1') {
-    console.log('[stream-store-factory] initialized', { name, mode, adapterType: mode === 'streams' ? 'redis-streams' : 'fallback' })
+    console.log('[stream-store-factory] initialized', { name, adapterType: name })
   }
 
   const names = getStreamNames()

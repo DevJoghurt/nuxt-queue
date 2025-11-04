@@ -10,7 +10,7 @@ function nowIso() {
 
 export function createRedisStreamsAdapter(): StreamAdapter {
   const rc: any = useRuntimeConfig()
-  const conn = rc?.queue?.redis || {}
+  const conn = rc?.queue?.eventStore?.redis || {}
   const rsOpts = (rc?.queue?.eventStore?.options?.redisStreams || {}) as {
     group?: string
     consumer?: string
