@@ -10,6 +10,7 @@ Nuxt Queue is a BullMQ-based queue and flow orchestration system for Nuxt with i
 
 - **Queue Management**: BullMQ integration for reliable job processing
 - **Flow Orchestration**: Multi-step workflows with event sourcing
+- **Flow Scheduling**: Cron-based and delayed flow execution
 - **Event Sourcing**: Stream-based event storage with Redis Streams
 - **Real-time Updates**: Redis Pub/Sub for <100ms latency
 - **Worker Context**: Rich runtime with state, logging, and event emission
@@ -334,20 +335,24 @@ interface RunContext {
   attempt?: number          // Attempt number
   logger: RunLogger         // Logging interface
   state: RunState           // State management
-  emit: (event) => void     // Event emission
-  flow: FlowEngine          // Flow control
+  flow: {
+    emit(eventName, data)   // Emit event to trigger subscribed steps
+    startFlow(name, input)  // Start nested flow
+  }
 }
 ```
 
 **Execution Flow**:
 1. BullMQ worker receives job
-2. `executeWorker()` builds context
-3. Loads handler from registry
-4. Calls `handler(job, ctx)`
-5. Emits `step.started`, logs, `step.completed`
-6. Handler emits custom events via `ctx.emit()`
-7. Flow plugin listens to emitted events and enqueues subscribed steps
-8. Handles errors and emits `step.failed`
+2. Check for `__scheduledFlowStart` marker (for scheduled flows)
+3. If scheduled: call `startFlow()` to create flow index
+4. Otherwise: `executeWorker()` builds context
+5. Loads handler from registry
+6. Calls `handler(job, ctx)`
+7. Emits `step.started`, logs, `step.completed`
+8. Handler emits custom events via `ctx.flow.emit()`
+9. Flow plugin listens to emitted events and enqueues subscribed steps
+10. Handles errors and emits `step.failed`
 
 **Logger**:
 ```typescript
@@ -364,8 +369,10 @@ const val = await ctx.state.get('key')
 
 **Event Emission**:
 ```typescript
-ctx.emit({ type: 'custom.event', data: {...} })
+// Emit event to trigger subscribed steps
+ctx.flow.emit('data.processed', { result: 123 })
 // Published to stream and internal bus
+// Steps subscribing to 'data.processed' will be triggered
 ```
 
 ## API Endpoints
@@ -379,6 +386,33 @@ ctx.emit({ type: 'custom.event', data: {...} })
 POST /api/_flows/:flowName/start
 Body: { input?: any }
 Response: { flowId: string, startedAt: string }
+```
+
+#### Schedule Flow
+```
+POST /api/_flows/:flowName/schedule
+Body: { 
+  cron?: string,           // Cron pattern (e.g., "0 2 * * *")
+  delay?: number,          // Delay in milliseconds
+  input?: any,
+  metadata?: {
+    description?: string,
+    createdBy?: string
+  }
+}
+Response: { id: string, flowName: string, schedule: {...}, createdAt: string }
+```
+
+#### List Schedules
+```
+GET /api/_flows/:flowName/schedules
+Response: [{ id, flowName, schedule: { cron }, nextRun, ... }]
+```
+
+#### Delete Schedule
+```
+DELETE /api/_flows/:flowName/schedules/:scheduleId
+Response: { success: boolean, message: string }
 ```
 
 #### List Runs
@@ -448,6 +482,8 @@ Response: { jobId: string }
 - `FlowRunTimeline.vue` - Event timeline
 - `FlowRunLogs.vue` - Filtered log view
 - `FlowRunOverview.vue` - Summary statistics
+- `FlowScheduleDialog.vue` - Schedule creation modal
+- `FlowSchedulesList.vue` - Schedules list and management
 - `StatCounter.vue` - Metric display
 
 ### Composables
@@ -476,8 +512,8 @@ export default defineQueueWorker(async (job, ctx) => {
   // Do work
   const result = await processData(input)
   
-  // Emit custom event to trigger other steps
-  ctx.emit({ type: 'emit', data: { name: 'processing.complete', result } })
+  // Emit event to trigger other steps
+  ctx.flow.emit('processing.complete', result)
   
   // Return result
   return result
@@ -506,7 +542,7 @@ export default defineQueueWorker(async (job, ctx) => {
   const prepared = { prepared: input }
   
   // Emit event to trigger next steps
-  ctx.emit({ type: 'emit', data: { name: 'flow.prepared', ...prepared } })
+  ctx.flow.emit('flow.prepared', prepared)
   
   return prepared
 })
@@ -535,7 +571,7 @@ export default defineQueueWorker(async (job, ctx) => {
   await ctx.state.set('processed', processed)
   
   // Emit event to trigger final step
-  ctx.emit({ type: 'emit', data: { name: 'processing.done', ...processed } })
+  ctx.flow.emit('processing.done', processed)
   
   return processed
 })
@@ -724,13 +760,13 @@ BULLMQ_WORKER_ENABLED=1
 
 ## Current Limitations
 
-1. **TypeScript only**: Python workers not yet implemented
-2. **No triggers/await**: Planned for v0.5 (see [Trigger System](../v0.5/trigger-system.md))
-3. **Basic scheduling**: Simple cron/delay scheduling available (see [Flow Scheduling](./flow-scheduling.md)) - will be replaced by v0.5 trigger system
-4. **Redis only**: No Postgres adapter yet
-5. **State separate from events**: Not unified with stream store
-6. **Basic logging**: No advanced logger adapters
-7. **Flow-coupled workers**: Workers can't be called directly as HTTP handlers
+1. **TypeScript only**: Python workers not yet implemented (planned for v0.5)
+2. **No complex triggers**: Only basic scheduling available - v0.5 will add comprehensive trigger system (webhook, event, conditional)
+3. **No await patterns**: Pausing flows for time/events planned for v0.5
+4. **Redis only**: No Postgres adapter yet (planned for v0.6)
+5. **State separate from events**: Not unified with stream store (planned for v0.6)
+6. **Basic logging**: No advanced logger adapters (planned for v0.7)
+7. **No schedule editing**: Must delete and recreate schedules (v0.5 will add full trigger management)
 
 ## Migration Notes
 
@@ -785,22 +821,33 @@ console.log(useRuntimeConfig().queue.state)
 
 1. **Keep steps small**: Each step should do one thing
 2. **Use state for shared data**: Don't pass large objects between steps
-3. **Log appropriately**: Use info for milestones, debug for details
-4. **Handle errors**: Wrap critical code in try/catch
-5. **Set concurrency**: Limit based on resource requirements
-6. **Monitor metrics**: Use the UI to track performance
-7. **Clean up state**: Use TTL or on-complete cleanup
+3. **Use flow.emit() for triggering**: Use `ctx.flow.emit(eventName, data)` to trigger subscribed steps
+4. **Log appropriately**: Use info for milestones, debug for details
+5. **Handle errors**: Wrap critical code in try/catch
+6. **Set concurrency**: Limit based on resource requirements
+7. **Monitor metrics**: Use the UI to track performance
+8. **Clean up state**: Use TTL or on-complete cleanup
+9. **Document schedules**: Add descriptions to schedule metadata for maintainability
+
+## Related Documentation
+
+- **[Flow Scheduling](./flow-scheduling.md)** - Complete guide to scheduling flows with cron patterns and delays
+- **[Quick Reference](./quick-reference.md)** - One-page API reference
+- **[Event Schema](./event-schema.md)** - Event structure and types
+- **[v0.5 Trigger System](../v0.5/trigger-system.md)** - Future comprehensive trigger architecture
+- **[Roadmap](../roadmap.md)** - Planned features across versions
 
 ## References
 
-- [BullMQ Documentation](https://docs.bullmq.io/)
-- [Redis Streams](https://redis.io/docs/data-types/streams/)
-- [Redis Pub/Sub](https://redis.io/docs/manual/pubsub/)
-- [Nuxt Documentation](https://nuxt.com/)
-- [Vue Flow](https://vueflow.dev/)
+- **[BullMQ Documentation](https://docs.bullmq.io/)** - Queue and job processing
+- **[BullMQ Repeatable Jobs](https://docs.bullmq.io/guide/jobs/repeatable)** - Scheduling implementation
+- **[Redis Streams](https://redis.io/docs/data-types/streams/)** - Event sourcing backend
+- **[Redis Pub/Sub](https://redis.io/docs/manual/pubsub/)** - Real-time distribution
+- **[Nuxt Documentation](https://nuxt.com/)** - Framework reference
+- **[Vue Flow](https://vueflow.dev/)** - Flow diagram library
 
 ---
 
 **Version**: v0.4.0  
-**Last Updated**: 2025-10-30  
+**Last Updated**: 2025-11-04  
 **Status**: ✅ Current Implementation

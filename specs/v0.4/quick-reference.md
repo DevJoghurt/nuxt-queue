@@ -140,9 +140,6 @@ export default defineQueueWorker(async (job, ctx) => {
   // State
   await ctx.state.set('status', 'processing')
   
-  // Custom event to trigger other steps
-  ctx.emit({ type: 'emit', data: { name: 'work.done', foo: 'bar' } })
-  
   // Return result
   return { success: true }
 })
@@ -165,7 +162,7 @@ export default defineQueueWorker(async (job, ctx) => {
   const prepared = { prepared: job.data }
   
   // Emit to trigger subscribed steps
-  ctx.emit({ type: 'emit', data: { name: 'data.ready', ...prepared } })
+  ctx.flow.emit('data.ready', prepared)
   
   return prepared
 })
@@ -187,7 +184,7 @@ export default defineQueueWorker(async (job, ctx) => {
   const processed = await transform(data)
   
   // Emit to trigger next steps
-  ctx.emit({ type: 'emit', data: { name: 'transform.complete', ...processed } })
+  ctx.flow.emit('transform.complete', processed)
   
   return processed
 })

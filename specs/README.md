@@ -2,46 +2,56 @@
 
 This directory contains the complete specification for v0.4 - the current implementation of nuxt-queue, a BullMQ-based queue and flow orchestration system for Nuxt with integrated event sourcing and real-time monitoring.
 
-**Core Architecture**: Stream-based event sourcing with Redis Pub/Sub for real-time distribution, BullMQ for queue management, and a unified flow orchestration engine.
+**Core Architecture**: Stream-based event sourcing with Redis Pub/Sub for real-time distribution via WebSocket, BullMQ for queue management, unified flow orchestration engine, and cron-based flow scheduling.
 
 ## 📚 Documents
 
-1. **[v0.4-current-implementation.md](./v0.4-current-implementation.md)** ⭐️ START HERE
+1. **[v0.4/current-implementation.md](./v0.4/current-implementation.md)** ⭐️ START HERE
    - Complete architecture specification
    - Event sourcing with stream store
    - Flow orchestration engine
-   - Real-time distribution via Redis Pub/Sub
+   - Real-time distribution via Redis Pub/Sub + WebSocket
    - Worker context and runtime
+   - Flow scheduling system
 
-2. **[v0.4-event-schema.md](./v0.4-event-schema.md)** 📋 EVENTS
+2. **[v0.4/event-schema.md](./v0.4/event-schema.md)** 📋 EVENTS
    - Event types and schema
    - Flow lifecycle events
    - Step execution events
-   - State and logging
+   - State and logging events
+   - Real-time distribution
 
-3. **[roadmap.md](./roadmap.md)** 🗺️ FUTURE
+3. **[v0.4/flow-scheduling.md](./v0.4/flow-scheduling.md)** ⏰ SCHEDULING
+   - Flow scheduling with cron patterns
+   - Delay-based scheduling
+   - Schedule management API
+   - UI integration
+
+4. **[v0.4/quick-reference.md](./v0.4/quick-reference.md)** 📖 QUICK REFERENCE
+   - API overview
+   - Key concepts
+   - Common patterns
+   - Code examples
+
+5. **[roadmap.md](./roadmap.md)** 🗺️ FUTURE
    - Next steps and vision
    - Planned features
    - Architecture improvements
    - Migration paths
-
-4. **[quick-reference.md](./quick-reference.md)** � QUICK REFERENCE
-   - API overview
-   - Key concepts
-   - Common patterns
 
 ## 🎯 What's in v0.4
 
 ### Current Features
 
 ✅ **Stream-based Event Sourcing** - Single stream per flow run with full event history  
-✅ **Real-time Distribution** - Redis Pub/Sub for <100ms update latency  
+✅ **Real-time Distribution** - Redis Pub/Sub + WebSocket for <100ms update latency  
 ✅ **Flow Orchestration** - Define multi-step workflows with TypeScript  
+✅ **Flow Scheduling** - Cron patterns and delay-based scheduling with BullMQ repeatable jobs  
 ✅ **BullMQ Integration** - Reliable queue management with retry support  
-✅ **Worker Context** - Rich runtime context with state, logging, and emit  
+✅ **Worker Context** - Rich runtime context with state, logging, and event emission  
 ✅ **Registry System** - Auto-discovery of queues and flows from filesystem  
 ✅ **Horizontal Scaling** - Stateless architecture, scale workers independently  
-✅ **Development UI** - Real-time monitoring with Vue Flow diagrams  
+✅ **Development UI** - Real-time monitoring with Vue Flow diagrams and WebSocket updates  
 ✅ **State Management** - Per-flow state with Redis backend  
 ✅ **Metrics & Logging** - Integrated observability  
 
@@ -49,15 +59,19 @@ This directory contains the complete specification for v0.4 - the current implem
 
 ### 1. Read Current Implementation (15 minutes)
 
-Start with [v0.4-current-implementation.md](./v0.4-current-implementation.md) for architecture overview and [v0.4-event-schema.md](./v0.4-event-schema.md) for event details.
+Start with [v0.4/current-implementation.md](./v0.4/current-implementation.md) for architecture overview and [v0.4/event-schema.md](./v0.4/event-schema.md) for event details.
 
-### 2. Check the Roadmap (5 minutes)
+### 2. Learn Flow Scheduling (5 minutes)
+
+See [v0.4/flow-scheduling.md](./v0.4/flow-scheduling.md) to schedule flows with cron patterns or delays.
+
+### 3. Check the Roadmap (5 minutes)
 
 See [roadmap.md](./roadmap.md) to understand planned features and improvements.
 
-### 3. Use the Quick Reference
+### 4. Use the Quick Reference
 
-Use [quick-reference.md](./quick-reference.md) for API patterns and common use cases.
+Use [v0.4/quick-reference.md](./v0.4/quick-reference.md) for API patterns and common use cases.
 
 ## 🏗️ Architecture Overview
 
@@ -78,7 +92,7 @@ Use [quick-reference.md](./quick-reference.md) for API patterns and common use c
                  ▼                           ▼
           ┌─────────────┐            ┌─────────────┐
           │ Instance 1  │            │ Instance N  │
-          │   SSE/WS    │            │   SSE/WS    │
+          │  WebSocket  │            │  WebSocket  │
           └──────┬──────┘            └──────┬──────┘
                  │                          │
           ┌──────▼──────┐            ┌──────▼──────┐
@@ -91,13 +105,15 @@ Use [quick-reference.md](./quick-reference.md) for API patterns and common use c
 
 **Event Sourcing**: One stream per flow run (`nq:flow:<runId>`) contains all events in chronological order.
 
-**Real-time Distribution**: Redis Pub/Sub broadcasts events to all subscribed instances with <100ms latency.
+**Real-time Distribution**: Redis Pub/Sub broadcasts events to WebSocket connections with <100ms latency.
 
 **Flow Orchestration**: Multi-step workflows defined as queue workers, executed by BullMQ.
 
+**Flow Scheduling**: Cron-based and delay-based scheduling using BullMQ repeatable jobs.
+
 **Worker Context**: Rich runtime with state management, logging, event emission, and flow control.
 
-**Client-side Reduction**: Browser receives events and computes current state reactively.
+**Client-side Reduction**: Browser receives events via WebSocket and computes current state reactively.
 
 ## 📦 Storage Model
 
@@ -151,20 +167,21 @@ Plus BullMQ queues for job management:
 | Feature | Status |
 |---------|--------|
 | Stream-based events | ✅ Implemented |
-| Redis Pub/Sub real-time | ✅ Implemented |
+| Redis Pub/Sub + WebSocket | ✅ Implemented |
 | Flow orchestration | ✅ Implemented |
+| Flow scheduling (cron/delay) | ✅ Implemented |
 | BullMQ integration | ✅ Implemented |
 | TypeScript workers | ✅ Implemented |
-| Worker context (state/logs) | ✅ Implemented |
+| Worker context (state/logs/emit) | ✅ Implemented |
 | Development UI | ✅ Implemented |
 | Horizontal scaling | ✅ Supported |
-| Event streaming API | ✅ Implemented |
+| WebSocket real-time API | ✅ Implemented |
 | Registry auto-discovery | ✅ Implemented |
-| Python workers | 🚧 Planned |
-| Trigger/await patterns | 🚧 Planned |
-| PgBoss provider | 🚧 Planned |
-| Postgres stream store | 🚧 Planned |
-| Unified state/stream | 🚧 Planned |
+| Python workers | 🚧 Planned (v0.6) |
+| Trigger/await patterns | 🚧 Planned (v0.5) |
+| PgBoss provider | 🚧 Planned (v0.6) |
+| Postgres stream store | 🚧 Planned (v0.6) |
+| Advanced state features | 🚧 Planned (v0.6) |
 
 ## 🛠️ Current Architecture Components
 
@@ -183,8 +200,11 @@ Plus BullMQ queues for job management:
 ### API Endpoints
 - `GET /api/_flows/:name/runs` - List flow runs
 - `GET /api/_flows/:name/runs/:id` - Get flow run events
-- `GET /api/_flows/:name/runs/:id/stream` - SSE stream of events
+- `WS /api/_flows/ws` - WebSocket for real-time events
 - `POST /api/_flows/:name/start` - Start flow run
+- `POST /api/_flows/:name/schedule` - Create schedule
+- `GET /api/_flows/:name/schedules` - List schedules
+- `DELETE /api/_flows/:name/schedules/:id` - Delete schedule
 - `GET /api/_queues/:name` - Queue information
 - `POST /api/_queues/:name/enqueue` - Enqueue job
 
@@ -216,7 +236,7 @@ export default defineQueueWorker(async (job, ctx) => {
   await ctx.state.set('step1Result', { success: true })
   
   // Emit event to trigger next step
-  ctx.emit({ type: 'emit', data: { name: 'step1.complete', result: { message: 'Step 1 complete' } } })
+  ctx.flow.emit('step1.complete', { message: 'Step 1 complete' })
   
   return { message: 'Step 1 complete' }
 })
@@ -246,17 +266,44 @@ export const config = defineQueueConfig({
 })
 ```
 
+### Example: Schedule a Flow
+```typescript
+// Schedule with cron pattern
+await $fetch('/api/_flows/example-flow/schedule', {
+  method: 'POST',
+  body: {
+    pattern: '0 9 * * 1-5',  // Weekdays at 9 AM
+    input: { userId: 123 }
+  }
+})
+
+// Schedule with delay
+await $fetch('/api/_flows/example-flow/schedule', {
+  method: 'POST',
+  body: {
+    delay: 3600000,  // 1 hour
+    input: { userId: 123 }
+  }
+})
+```
+
 ## 📖 Related Documents
 
-- [v0.4-current-implementation.md](./v0.4-current-implementation.md) - Complete architecture documentation
-- [v0.4-event-schema.md](./v0.4-event-schema.md) - Event types and schema
+### v0.4 Documentation
+- [v0.4/current-implementation.md](./v0.4/current-implementation.md) - Complete architecture documentation
+- [v0.4/event-schema.md](./v0.4/event-schema.md) - Event types and schema
+- [v0.4/flow-scheduling.md](./v0.4/flow-scheduling.md) - Flow scheduling guide
+- [v0.4/quick-reference.md](./v0.4/quick-reference.md) - API quick reference
+
+### Planning
 - [roadmap.md](./roadmap.md) - Future plans and vision
-- [quick-reference.md](./quick-reference.md) - API quick reference
+- [v0.5/trigger-system.md](./v0.5/trigger-system.md) - Trigger/await patterns (planned)
+- [v0.6/multi-language-workers.md](./v0.6/multi-language-workers.md) - Python workers (planned)
+- [v0.6/postgres-backend.md](./v0.6/postgres-backend.md) - PgBoss + Postgres (planned)
 
 ### Historical References
-- [lean-event-architecture.md](./lean-event-architecture.md) - v0.3 design (historical)
-- [message-and-streams-spec.md](./message-and-streams-spec.md) - v0.2 spec (historical)
-- [motia-inspired-design.md](./motia-inspired-design.md) - Original inspiration
+- [advanced-features.md](./advanced-features.md) - Earlier design concepts
+- Original inspiration documents in `/specs/`
 
 ## 🤝 Contributing
 
@@ -276,7 +323,7 @@ A: Queues handle individual jobs via BullMQ. Flows orchestrate multi-step workfl
 A: Create worker files in `server/queues/<flow-name>/` with `defineQueueWorker()` and `defineQueueConfig()`. The registry auto-discovers them.
 
 **Q: How does real-time work?**  
-A: Events are written to Redis Streams and published via Pub/Sub. SSE endpoints subscribe to Pub/Sub channels for instant updates.
+A: Events are written to Redis Streams and published via Pub/Sub. WebSocket connections (`useFlowWebSocket`) subscribe to Pub/Sub channels for instant updates.
 
 **Q: Can I use this without flows?**  
 A: Yes! You can use just the queue functionality with BullMQ for simple job processing.
@@ -284,8 +331,11 @@ A: Yes! You can use just the queue functionality with BullMQ for simple job proc
 **Q: How do I access state in a worker?**  
 A: Use `ctx.state.get()` and `ctx.state.set()`. State is automatically scoped per flow run.
 
+**Q: How do I schedule a flow?**  
+A: Use the scheduling API with cron patterns or delays. See [flow-scheduling.md](./v0.4/flow-scheduling.md) for details.
+
 **Q: What about Python workers?**  
-A: Planned for future release. Currently TypeScript/JavaScript only.
+A: Planned for v0.6. Currently TypeScript/JavaScript only.
 
 ## 📞 Support
 
@@ -294,6 +344,7 @@ Questions? Open an issue or check the documentation in `/specs/`.
 ---
 
 **Status**: ✅ **v0.4 - Current Implementation**  
-**Version**: v0.4.0  
+**Version**: v0.4.x  
+**Last Updated**: 2025-11-04  
 **Author**: @DevJoghurt  
 **License**: MIT
