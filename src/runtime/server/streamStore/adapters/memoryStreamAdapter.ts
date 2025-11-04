@@ -79,6 +79,31 @@ export function createMemoryStreamAdapter(): StreamAdapter {
 
       return sorted.slice(offset, offset + limit)
     },
+    async deleteStream(subject: string): Promise<void> {
+      events.delete(subject)
+      listeners.delete(subject)
+    },
+    async deleteByPattern(pattern: string): Promise<number> {
+      // Convert glob pattern to regex (simple implementation)
+      const regexPattern = pattern
+        .replace(/\*/g, '.*')
+        .replace(/\?/g, '.')
+      const regex = new RegExp(`^${regexPattern}$`)
+
+      let count = 0
+      for (const key of events.keys()) {
+        if (regex.test(key)) {
+          events.delete(key)
+          listeners.delete(key)
+          count++
+        }
+      }
+
+      return count
+    },
+    async deleteIndex(key: string): Promise<void> {
+      indices.delete(key)
+    },
     async close(): Promise<void> {
       listeners.clear()
       events.clear()

@@ -235,6 +235,37 @@ export function createRedisStreamsAdapter(): StreamAdapter {
 
       return entries
     },
+    async deleteStream(subject: string): Promise<void> {
+      if (!redis.status || redis.status === 'end') await redis.connect()
+      await redis.del(subject)
+    },
+    async deleteByPattern(pattern: string): Promise<number> {
+      if (!redis.status || redis.status === 'end') await redis.connect()
+
+      // Use SCAN to find all keys matching the pattern
+      let cursor = '0'
+      const keysToDelete: string[] = []
+
+      do {
+        const result = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100)
+        cursor = result[0]
+        const keys = result[1]
+        if (keys.length > 0) {
+          keysToDelete.push(...keys)
+        }
+      } while (cursor !== '0')
+
+      // Delete all found keys
+      if (keysToDelete.length > 0) {
+        await redis.del(...keysToDelete)
+      }
+
+      return keysToDelete.length
+    },
+    async deleteIndex(key: string): Promise<void> {
+      if (!redis.status || redis.status === 'end') await redis.connect()
+      await redis.del(key)
+    },
     async close(): Promise<void> {
       try {
         await gateway.cleanup()

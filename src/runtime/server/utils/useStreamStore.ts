@@ -23,6 +23,27 @@ export function useStreamStore() {
     return await factory.adapter.indexRead(key, opts)
   }
 
+  async function deleteStream(subject: string): Promise<void> {
+    if (!factory.adapter.deleteStream) {
+      throw new Error('Current adapter does not support deleteStream')
+    }
+    return await factory.adapter.deleteStream(subject)
+  }
+
+  async function deleteByPattern(pattern: string): Promise<number> {
+    if (!factory.adapter.deleteByPattern) {
+      throw new Error('Current adapter does not support deleteByPattern')
+    }
+    return await factory.adapter.deleteByPattern(pattern)
+  }
+
+  async function deleteIndex(key: string): Promise<void> {
+    if (!factory.adapter.deleteIndex) {
+      throw new Error('Current adapter does not support deleteIndex')
+    }
+    return await factory.adapter.deleteIndex(key)
+  }
+
   function names() {
     return factory.names
   }
@@ -81,6 +102,10 @@ export function useStreamStore() {
     // sorted set index operations
     indexAdd,
     indexRead,
+    // deletion operations
+    deleteStream,
+    deleteByPattern,
+    deleteIndex,
     // subscribe to canonical stream events via the adapter (Store Bus)
     subscribe,
     // expose adapter if advanced usage is needed

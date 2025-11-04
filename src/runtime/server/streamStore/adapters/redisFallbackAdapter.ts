@@ -87,6 +87,38 @@ export function createRedisFallbackStreamAdapter(): StreamAdapter {
 
       return sorted.slice(offset, offset + limit)
     },
+    async deleteStream(subject: string): Promise<void> {
+      const key = `events:${subject}`
+      await storage.removeItem(key)
+      listeners.delete(subject)
+    },
+    async deleteByPattern(pattern: string): Promise<number> {
+      // Convert glob pattern to regex
+      const regexPattern = pattern
+        .replace(/\*/g, '.*')
+        .replace(/\?/g, '.')
+      const regex = new RegExp(`^${regexPattern}$`)
+
+      // Get all keys (this is not efficient but works for unstorage)
+      const keys = await storage.getKeys('events:')
+      let count = 0
+
+      for (const key of keys) {
+        // Remove 'events:' prefix to match against pattern
+        const subject = key.replace(/^events:/, '')
+        if (regex.test(subject)) {
+          await storage.removeItem(key)
+          listeners.delete(subject)
+          count++
+        }
+      }
+
+      return count
+    },
+    async deleteIndex(key: string): Promise<void> {
+      const indexKey = `index:${key}`
+      await storage.removeItem(indexKey)
+    },
     async close(): Promise<void> {
       listeners.clear()
     },

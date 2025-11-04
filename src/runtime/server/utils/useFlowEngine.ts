@@ -9,15 +9,21 @@ export const useFlowEngine = () => {
   const startFlow = async (flowName: string, payload: any = {}) => {
     const flow = (registry?.flows as Record<string, any>)?.[flowName]
     if (!flow || !flow.entry) throw new Error('Flow not found')
+
+    // Extract queue name (handle both string and object formats)
+    const queueName = typeof flow.entry.queue === 'string'
+      ? flow.entry.queue
+      : flow.entry.queue?.name || flow.entry.queue
+
     // Generate a flowId for the entire run
     const flowId = randomUUID()
-    const id = await queueAdapter.enqueue(flow.entry.queue, { name: flow.entry.step, data: { ...payload, flowId, flowName } })
+    const id = await queueAdapter.enqueue(queueName, { name: flow.entry.step, data: { ...payload, flowId, flowName } })
     // v0.4: Emit flow.start event
     try {
       await eventsManager.publishBus({ type: 'flow.start', runId: flowId, flowName, data: { input: payload } })
     }
     catch { /* best-effort */ }
-    return { id, queue: flow.entry.queue, step: flow.entry.step, flowId }
+    return { id, queue: queueName, step: flow.entry.step, flowId }
   }
 
   const emit = async (trigger: string, payload: any = {}) => {

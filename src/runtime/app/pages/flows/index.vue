@@ -37,27 +37,7 @@
               Runs
             </h2>
             <div class="flex items-center gap-2">
-              <div
-                v-if="selectedFlow && runs?.items"
-                class="flex items-center gap-2 text-xs text-gray-500"
-              >
-                <UIcon
-                  name="i-lucide-list"
-                  class="w-3.5 h-3.5"
-                />
-                <span>{{ runs.items.length }} run{{ runs.items.length === 1 ? '' : 's' }}</span>
-              </div>
-              <UButton
-                v-if="selectedFlow"
-                icon="i-lucide-clock"
-                size="xs"
-                color="neutral"
-                variant="soft"
-                @click="openScheduleModal"
-              >
-                Schedule
-              </UButton>
-              <UButton
+            <UButton
                 v-if="selectedFlow"
                 icon="i-lucide-play"
                 size="xs"
@@ -67,66 +47,120 @@
               >
                 Start
               </UButton>
+              <div
+                v-if="selectedFlow"
+                class="flex items-center gap-2 text-xs text-gray-500"
+              >
+                <UIcon
+                  name="i-lucide-list"
+                  class="w-3.5 h-3.5"
+                />
+                <span>{{ totalRuns }} run{{ totalRuns === 1 ? '' : 's' }}</span>
+              </div>
+              <UDropdownMenu
+                v-if="selectedFlow"
+                :items="flowActionsItems"
+                :ui="{ content: 'min-w-48' }"
+              >
+                <UButton
+                  icon="i-lucide-more-vertical"
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  square
+                />
+              </UDropdownMenu>
             </div>
           </div>
-          <div class="flex-1 overflow-y-auto min-h-0">
-            <div
-              v-if="!selectedFlow"
-              class="h-full flex items-center justify-center text-sm text-gray-400 px-4 text-center"
-            >
+          <div
+            v-if="!selectedFlow"
+            class="flex-1 overflow-y-auto min-h-0"
+          >
+            <div class="h-full flex items-center justify-center text-sm text-gray-400 px-4 text-center">
               Select a flow to view runs
             </div>
-            <div
-              v-else-if="!runs || runs.items.length === 0"
-              class="h-full flex items-center justify-center text-sm text-gray-400"
-            >
-              No runs yet
-            </div>
-            <div
-              v-else
-              class="divide-y divide-gray-100 dark:divide-gray-800"
-            >
-              <div
-                v-for="r in runs.items"
-                :key="r.id"
-                class="group"
-              >
-                <div
-                  class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer"
-                  :class="{ 'bg-gray-50 dark:bg-gray-900': selectedRunId === r.id }"
-                  @click="selectedRunId = r.id"
-                >
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-2">
-                        <div class="text-xs font-mono text-gray-900 dark:text-gray-100 truncate">
-                          {{ r.id?.substring(0, 8) }}...{{ r.id?.substring(r.id?.length - 4) }}
-                        </div>
-                        <!-- Status indicator for selected run -->
-                        <FlowRunStatusBadge
-                          v-if="selectedRunId === r.id"
-                          :is-running="flowState.isRunning.value"
-                          :is-completed="flowState.isCompleted.value"
-                          :is-failed="flowState.isFailed.value"
-                          :is-reconnecting="isReconnecting"
-                        />
-                      </div>
-                      <div class="text-xs text-gray-500 mt-1">
-                        {{ formatTime(r.createdAt || r.ts || r.startedAt) }}
-                      </div>
-                    </div>
-                    <UButton
-                      icon="i-lucide-panels-right-bottom"
-                      size="xs"
-                      color="neutral"
-                      variant="ghost"
-                      square
-                      title="Open timeline"
-                      @click.stop="openRunTimeline(r.id)"
-                    />
-                  </div>
+          </div>
+          <div
+            v-else-if="!runs || runs.length === 0"
+            class="flex-1 overflow-y-auto min-h-0"
+          >
+            <div class="h-full flex items-center justify-center text-sm text-gray-400">
+              <div class="text-center">
+                <div v-if="loadingRuns">
+                  Loading runs...
+                </div>
+                <div v-else>
+                  No runs yet
                 </div>
               </div>
+            </div>
+          </div>
+          <div
+            v-else
+            ref="runsScrollContainer"
+            class="flex-1 overflow-y-auto min-h-0 divide-y divide-gray-100 dark:divide-gray-800"
+            @scroll="handleRunsScroll"
+          >
+            <div
+              v-for="r in runs"
+              :key="r.id"
+              class="group"
+            >
+              <div
+                class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer"
+                :class="{ 'bg-gray-50 dark:bg-gray-900': selectedRunId === r.id }"
+                @click="selectedRunId = r.id"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <div class="text-xs font-mono text-gray-900 dark:text-gray-100 truncate">
+                        {{ r.id?.substring(0, 8) }}...{{ r.id?.substring(r.id?.length - 4) }}
+                      </div>
+                      <!-- Status indicator for selected run -->
+                      <FlowRunStatusBadge
+                        v-if="selectedRunId === r.id"
+                        :is-running="flowState.isRunning.value"
+                        :is-completed="flowState.isCompleted.value"
+                        :is-failed="flowState.isFailed.value"
+                        :is-reconnecting="isReconnecting"
+                      />
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">
+                      {{ formatTime(r.createdAt) }}
+                    </div>
+                  </div>
+                  <UButton
+                    icon="i-lucide-panels-right-bottom"
+                    size="xs"
+                    color="neutral"
+                    variant="ghost"
+                    square
+                    title="Open timeline"
+                    @click.stop="openRunTimeline(r.id)"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Loading indicator for infinite scroll -->
+            <div
+              v-if="loadingRuns"
+              class="px-4 py-3 text-center text-xs text-gray-400"
+            >
+              <UIcon
+                name="i-lucide-loader-2"
+                class="w-4 h-4 animate-spin inline-block"
+              />
+              <span class="ml-2">Loading more runs...</span>
+            </div>
+
+            <!-- End of list indicator -->
+            <div
+              v-else-if="!hasMoreRuns && runs.length > 0"
+              class="px-4 py-3 text-center text-xs text-gray-400"
+            >
+              All runs loaded
             </div>
           </div>
 
@@ -351,6 +385,21 @@
       :flow-name="selectedFlow"
       @scheduled="handleFlowScheduled"
     />
+
+    <!-- Confirm Dialog -->
+    <ConfirmDialog
+      v-model:open="confirmDialogOpen"
+      :title="confirmDialogConfig.title"
+      :description="confirmDialogConfig.description"
+      :items="confirmDialogConfig.items"
+      :warning="confirmDialogConfig.warning"
+      :loading="clearingHistory"
+      confirm-label="Clear History"
+      confirm-color="error"
+      icon="i-lucide-trash-2"
+      icon-color="error"
+      @confirm="confirmDialogConfig.onConfirm"
+    />
   </div>
 </template>
 
@@ -361,8 +410,9 @@ import FlowRunOverview from '../../components/FlowRunOverview.vue'
 import FlowRunLogs from '../../components/FlowRunLogs.vue'
 import FlowRunTimeline from '../../components/FlowRunTimeline.vue'
 import FlowRunStatusBadge from '../../components/FlowRunStatusBadge.vue'
-import FlowScheduleDialog from '../../components/FlowScheduleDialog.vue'
 import FlowSchedulesList from '../../components/FlowSchedulesList.vue'
+import FlowScheduleDialog from '../../components/FlowScheduleDialog.vue'
+import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import {
   USelectMenu,
   UIcon,
@@ -371,12 +421,13 @@ import {
   USlideover,
   UTextarea,
   UTabs,
+  UDropdownMenu,
 } from '#components'
 
 // Composables
 import { useAnalyzedFlows } from '../../composables/useAnalyzedFlows'
 import { useFlowsNavigation } from '../../composables/useFlowsNavigation'
-import { useFlowRuns } from '../../composables/useFlowRuns'
+import { useFlowRunsInfinite } from '../../composables/useFlowRunsInfinite'
 import { useFlowRunTimeline } from '../../composables/useFlowRunTimeline'
 import { useFlowRunsPolling } from '../../composables/useFlowRunsPolling'
 
@@ -386,15 +437,24 @@ const { selectedFlow, selectedRunId, timelineOpen, selectedTab } = useFlowsNavig
 // Get analyzed flows (with HMR support)
 const flows = useAnalyzedFlows()
 
-// Fetch runs for selected flow (persists across HMR)
-const { runs, refresh: refreshRuns } = useFlowRuns(selectedFlow)
+// Fetch runs for selected flow with infinite scroll (persists across HMR)
+const {
+  items: runs,
+  total: totalRuns,
+  loading: loadingRuns,
+  hasMore: hasMoreRuns,
+  loadMore: loadMoreRuns,
+  refresh: refreshRuns,
+  checkForNewRuns,
+} = useFlowRunsInfinite(selectedFlow)
 
 // Manage timeline/SSE for selected run
 const { flowState, isConnected, isReconnecting } = useFlowRunTimeline(selectedFlow, selectedRunId)
 
 // Auto-poll runs list to keep it fresh (always poll when a flow is selected)
+// Use checkForNewRuns instead of refresh to avoid scroll reset
 const shouldPoll = computed(() => !!selectedFlow.value)
-useFlowRunsPolling(refreshRuns, shouldPoll)
+useFlowRunsPolling(checkForNewRuns, shouldPoll)
 
 // Start flow modal state
 const startFlowModalOpen = ref(false)
@@ -406,6 +466,32 @@ const startingFlow = ref(false)
 // Schedules state
 const showSchedules = ref(true)
 const schedulesListRef = ref()
+const clearingHistory = ref(false)
+
+// Confirm dialog state
+const confirmDialogOpen = ref(false)
+const confirmDialogConfig = ref({
+  title: '',
+  description: '',
+  items: [] as string[],
+  warning: '',
+  onConfirm: () => {},
+})
+
+// Flow actions dropdown menu
+const flowActionsItems = computed(() => [[
+  {
+    label: 'Schedule Flow',
+    icon: 'i-lucide-clock',
+    onSelect: () => openScheduleModal(),
+  },
+  {
+    label: 'Clear History',
+    icon: 'i-lucide-trash-2',
+    disabled: clearingHistory.value,
+    onSelect: () => confirmClearHistory(),
+  },
+]])
 
 // Watch for JSON validation
 watch(flowInputJson, (value) => {
@@ -424,6 +510,24 @@ const tabs = [
   { label: 'Logs', value: 'logs', icon: 'i-lucide-file-text' },
   { label: 'Timeline', value: 'timeline', icon: 'i-lucide-activity' },
 ]
+
+// Ref for scroll container
+const runsScrollContainer = ref<HTMLElement | null>(null)
+
+// Infinite scroll handler
+const handleRunsScroll = (event: Event) => {
+  if (!hasMoreRuns.value || loadingRuns.value) return
+
+  const container = event.target as HTMLElement
+  const scrollTop = container.scrollTop
+  const scrollHeight = container.scrollHeight
+  const clientHeight = container.clientHeight
+
+  // Load more when scrolled to within 200px of the bottom
+  if (scrollTop + clientHeight >= scrollHeight - 200) {
+    loadMoreRuns()
+  }
+}
 
 // Helper to format timestamps
 const formatTime = (timestamp: string | number | Date) => {
@@ -571,6 +675,68 @@ const startFlowRun = async () => {
   }
   finally {
     startingFlow.value = false
+  }
+}
+
+const confirmClearHistory = () => {
+  if (!selectedFlow.value) return
+
+  confirmDialogConfig.value = {
+    title: 'Clear Flow History',
+    description: `Are you sure you want to clear all history for "${selectedFlow.value}"?`,
+    items: [
+      'All flow run events',
+      'All flow run logs',
+      'The runs index',
+    ],
+    warning: 'This action cannot be undone.',
+    onConfirm: () => {
+      clearFlowHistory()
+    },
+  }
+
+  confirmDialogOpen.value = true
+}
+
+const clearFlowHistory = async () => {
+  if (!selectedFlow.value) return
+
+  try {
+    clearingHistory.value = true
+
+    await $fetch(`/api/_flows/${encodeURIComponent(selectedFlow.value)}/clear-history`, {
+      method: 'DELETE',
+    })
+
+    // Close confirm dialog
+    confirmDialogOpen.value = false
+
+    // Reset UI state
+    selectedRunId.value = ''
+    timelineOpen.value = false
+
+    // Refresh runs list (should be empty now)
+    await refreshRuns()
+
+    // Show success notification (could be enhanced with toast notification)
+    console.log(`Successfully cleared history for "${selectedFlow.value}"`)
+  }
+  catch (err) {
+    console.error('Failed to clear history:', err)
+    
+    // Show error in confirm dialog by updating config
+    confirmDialogConfig.value = {
+      title: 'Error Clearing History',
+      description: `Failed to clear history: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      items: [],
+      warning: '',
+      onConfirm: () => {
+        confirmDialogOpen.value = false
+      },
+    }
+  }
+  finally {
+    clearingHistory.value = false
   }
 }
 </script>

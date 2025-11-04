@@ -1,14 +1,15 @@
 import { defineEventHandler, getRouterParam, getQuery, useStreamStore } from '#imports'
 
 /**
- * GET /api/_flows/:name/runs?limit=50
+ * GET /api/_flows/:name/runs?limit=50&offset=0
  *
- * List recent runs for a specific flow
+ * List runs for a specific flow with pagination support
  */
 export default defineEventHandler(async (event) => {
   const flowName = getRouterParam(event, 'name')
   const query = getQuery(event)
   const limit = Math.min(Number.parseInt(query.limit as string) || 50, 100)
+  const offset = Math.max(Number.parseInt(query.offset as string) || 0, 0)
 
   // Prevent caching - always fetch fresh data
   event.node.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
@@ -25,8 +26,21 @@ export default defineEventHandler(async (event) => {
     // Use centralized naming function
     const runIndexKey = names.flowIndex(flowName)
 
-    // Read from the sorted set index using the abstracted method
-    const entries = await store.indexRead(runIndexKey, { limit })
+    // First, get the total count (Redis ZCARD for sorted sets)
+    // We'll need to add a method to get the count
+    let totalCount = 0
+    try {
+      // For now, we'll fetch a large limit to get the count
+      // This can be optimized by adding a `indexCount` method to the adapter
+      const allEntries = await store.indexRead(runIndexKey, { limit: 10000 })
+      totalCount = allEntries.length
+    }
+    catch {
+      totalCount = 0
+    }
+
+    // Read paginated results from the sorted set index
+    const entries = await store.indexRead(runIndexKey, { offset, limit })
 
     // Build response items
     const items = entries.map(entry => ({
@@ -38,6 +52,10 @@ export default defineEventHandler(async (event) => {
     return {
       flowName,
       count: items.length,
+      total: totalCount,
+      offset,
+      limit,
+      hasMore: offset + items.length < totalCount,
       items,
     }
   }

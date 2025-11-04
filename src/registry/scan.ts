@@ -46,6 +46,7 @@ export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Pr
           if (hasDefaultExport) {
             const kind: WorkerEntry['kind'] = 'ts'
             const virtualPath = relative(layer.serverDir, abs).replace(/\\/g, '/')
+            queueName = String((meta.queue?.name || meta.queueName) || (id.split('/').pop() || id))
             workerByVirtualPath.set(virtualPath, {
               id,
               kind,
@@ -53,7 +54,7 @@ export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Pr
               absPath: abs,
               exportName: 'default',
               queue: {
-                name: String((meta.queue?.name || meta.queueName) || (id.split('/').pop() || id)),
+                name: queueName,
                 defaultJobOptions: meta.queue?.defaultJobOptions,
                 prefix: meta.queue?.prefix,
                 limiter: meta.queue?.limiter,
@@ -69,6 +70,7 @@ export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Pr
           flow = meta.flow
           const kind: WorkerEntry['kind'] = 'py'
           const virtualPath = relative(layer.serverDir, abs).replace(/\\/g, '/')
+          queueName = String((meta.queue?.name || meta.queueName) || (id.split('/').pop() || id))
           workerByVirtualPath.set(virtualPath, {
             id,
             kind,
@@ -76,7 +78,7 @@ export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Pr
             absPath: abs,
             exportName: 'default',
             queue: {
-              name: String((meta.queue?.name || meta.queueName) || (id.split('/').pop() || id)),
+              name: queueName,
               defaultJobOptions: meta.queue?.defaultJobOptions,
               prefix: meta.queue?.prefix,
               limiter: meta.queue?.limiter,
@@ -93,6 +95,7 @@ export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Pr
             if (hasDefaultExport) {
               const kind: WorkerEntry['kind'] = 'ts'
               const virtualPath = relative(layer.serverDir, abs).replace(/\\/g, '/')
+              queueName = String((meta.queue?.name || meta.queueName) || (id.split('/').pop() || id))
               workerByVirtualPath.set(virtualPath, {
                 id,
                 kind,
@@ -100,7 +103,7 @@ export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Pr
                 absPath: abs,
                 exportName: 'default',
                 queue: {
-                  name: String((meta.queue?.name || meta.queueName) || (id.split('/').pop() || id)),
+                  name: queueName,
                   defaultJobOptions: meta.queue?.defaultJobOptions,
                   prefix: meta.queue?.prefix,
                   limiter: meta.queue?.limiter,

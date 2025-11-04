@@ -16,10 +16,29 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: `Flow '${flowName}' not found` })
   }
 
+  // Extract queue name (handle both string and object formats)
+  const queueName = typeof flow.entry.queue === 'string'
+    ? flow.entry.queue
+    : flow.entry.queue?.name || flow.entry.queue
+
   const rc = useRuntimeConfig() as any
   const connection = rc.queue?.redis
 
-  const queue = new Queue(flow.entry.queue, { connection })
+  // Get queue prefix from registry worker config
+  let prefix: string | undefined
+  try {
+    if (registry && Array.isArray(registry.workers)) {
+      const worker = registry.workers.find((w: any) => w?.queue?.name === queueName)
+      if (worker?.queue?.prefix) {
+        prefix = worker.queue.prefix
+      }
+    }
+  }
+  catch {
+    // ignore
+  }
+
+  const queue = new Queue(queueName, { connection, prefix })
 
   try {
     // Remove repeatable job by key

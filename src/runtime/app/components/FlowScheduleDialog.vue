@@ -36,13 +36,14 @@
           <USelectMenu
             v-model="selectedPreset"
             :items="cronPresets"
+            class="w-full"
             placeholder="Select preset or custom"
           />
           <UInput
             v-if="selectedPreset?.value === 'custom'"
             v-model="customCron"
             placeholder="0 2 * * *"
-            class="mt-2"
+            class="mt-2 w-full"
           />
         </div>
 
@@ -75,7 +76,7 @@
             v-model="inputJson"
             placeholder="{ &quot;key&quot;: &quot;value&quot; }"
             :rows="4"
-            class="font-mono text-sm"
+            class="font-mono text-sm w-full"
           />
           <p
             v-if="jsonError"
@@ -92,6 +93,7 @@
           </label>
           <UInput
             v-model="description"
+            class="w-full"
             placeholder="Daily cleanup job"
           />
         </div>

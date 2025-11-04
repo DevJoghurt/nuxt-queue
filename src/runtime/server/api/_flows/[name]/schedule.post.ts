@@ -31,6 +31,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: `Flow '${flowName}' not found` })
   }
 
+  // Extract queue name (handle both string and object formats)
+  const queueName = typeof flow.entry.queue === 'string'
+    ? flow.entry.queue
+    : flow.entry.queue?.name || flow.entry.queue
+
   const queue = useQueue()
 
   // Create schedule options
@@ -52,7 +57,7 @@ export default defineEventHandler(async (event) => {
 
   // Schedule the job in the flow's entry queue
   const id = await queue.schedule(
-    flow.entry.queue,
+    queueName,
     {
       name: flow.entry.step,
       data: jobData,
@@ -64,7 +69,7 @@ export default defineEventHandler(async (event) => {
   return {
     id,
     flowName,
-    queue: flow.entry.queue,
+    queue: queueName,
     step: flow.entry.step,
     schedule: scheduleOpts,
     createdAt: new Date().toISOString(),

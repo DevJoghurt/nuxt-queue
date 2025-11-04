@@ -51,5 +51,13 @@ export interface StreamAdapter {
   indexAdd?(key: string, id: string, score: number): Promise<void>
   indexRead?(key: string, opts?: IndexReadOptions): Promise<IndexEntry[]>
 
+  // Deletion operations
+  /** Delete a specific stream/subject */
+  deleteStream?(subject: string): Promise<void>
+  /** Delete all streams matching a pattern (e.g., 'flow:*' or 'trigger:webhook-*') */
+  deleteByPattern?(pattern: string): Promise<number>
+  /** Delete an index key */
+  deleteIndex?(key: string): Promise<void>
+
   close(): Promise<void>
 }

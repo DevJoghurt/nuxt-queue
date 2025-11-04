@@ -149,6 +149,63 @@ export function createFileStreamAdapter(): StreamAdapter {
         },
       }
     },
+    async deleteStream(subject: string): Promise<void> {
+      const p = streamPath(subject)
+      try {
+        await fsp.unlink(p)
+      }
+      catch {
+        // ignore if doesn't exist
+      }
+      subscribers.delete(subject)
+      const t = timers.get(subject)
+      if (t) {
+        clearInterval(t)
+        timers.delete(subject)
+      }
+      lastIds.delete(subject)
+    },
+    async deleteByPattern(pattern: string): Promise<number> {
+      // Convert glob pattern to regex
+      const regexPattern = pattern
+        .replace(/\*/g, '.*')
+        .replace(/\?/g, '.')
+      const regex = new RegExp(`^${regexPattern}$`)
+
+      let count = 0
+      try {
+        await ensureDir(dirRoot)
+        const files = await fsp.readdir(dirRoot)
+
+        for (const file of files) {
+          if (!file.endsWith(ext)) continue
+
+          // Remove extension and unsanitize (approximately)
+          const subject = file.slice(0, -ext.length)
+
+          if (regex.test(subject)) {
+            const p = join(dirRoot, file)
+            await fsp.unlink(p)
+            subscribers.delete(subject)
+            const t = timers.get(subject)
+            if (t) {
+              clearInterval(t)
+              timers.delete(subject)
+            }
+            lastIds.delete(subject)
+            count++
+          }
+        }
+      }
+      catch {
+        // ignore errors
+      }
+
+      return count
+    },
+    async deleteIndex(_key: string): Promise<void> {
+      // File adapter doesn't support indices
+    },
     async close(): Promise<void> {
       for (const t of timers.values()) {
         try {
