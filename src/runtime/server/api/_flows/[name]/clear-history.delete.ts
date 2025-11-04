@@ -1,4 +1,4 @@
-import { defineEventHandler, createError, useStreamStore } from '#imports'
+import { defineEventHandler, createError, useEventStore } from '#imports'
 
 /**
  * DELETE /api/_flows/:flowName/clear-history
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const store = useStreamStore()
+    const store = useEventStore()
     const names = store.names()
 
     let deletedStreams = 0

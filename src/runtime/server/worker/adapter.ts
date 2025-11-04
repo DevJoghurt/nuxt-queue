@@ -13,10 +13,17 @@ const registeredWorkers = new Map<string, QueueWorkerInfo>()
 // Close all workers (called on HMR reload or server shutdown)
 export async function closeAllWorkers() {
   const closePromises: Promise<void>[] = []
-  for (const [_, info] of registeredWorkers.entries()) {
-    closePromises.push(info.worker.close())
+  for (const [queueName, info] of registeredWorkers.entries()) {
+    closePromises.push(
+      info.worker.close().catch((err) => {
+        // Ignore EPIPE and connection errors during close - they're expected during HMR
+        if (err.code !== 'EPIPE' && !err.message?.includes('Connection is closed')) {
+          console.warn(`[closeAllWorkers] Error closing worker for queue "${queueName}":`, err.message)
+        }
+      }),
+    )
   }
-  await Promise.all(closePromises)
+  await Promise.allSettled(closePromises)
   registeredWorkers.clear()
 
   console.info('[closeAllWorkers] All workers closed')

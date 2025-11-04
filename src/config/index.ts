@@ -12,7 +12,7 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<Omit<Mo
     ui: true,
     debug: {},
     queue: {
-      name: 'redis',
+      adapter: 'redis',
       redis: {
         host: '127.0.0.1',
         port: 6379,
@@ -29,7 +29,7 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<Omit<Mo
       },
     },
     state: {
-      name: 'redis',
+      adapter: 'redis',
       namespace: 'nq',
       autoScope: 'always',
       cleanup: {
@@ -41,7 +41,14 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<Omit<Mo
       },
     },
     eventStore: {
-      name: 'memory',
+      adapter: 'memory',
+      options: {
+        file: {
+          dir: '.data/nq-events',
+          ext: '.ndjson',
+          pollMs: 1000,
+        },
+      },
     },
   }
 
@@ -64,9 +71,9 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<Omit<Mo
 function expandStoreShortcut(store: ModuleOptions['store']): Partial<Omit<ModuleOptions, 'store'>> {
   if (!store) return {}
 
-  const storeName = store.name
+  const storeAdapter = store.adapter
 
-  if (storeName === 'redis') {
+  if (storeAdapter === 'redis') {
     const redisConfig = store.redis || {
       host: '127.0.0.1',
       port: 6379,
@@ -74,41 +81,41 @@ function expandStoreShortcut(store: ModuleOptions['store']): Partial<Omit<Module
 
     return {
       queue: {
-        name: 'redis',
+        adapter: 'redis',
         redis: redisConfig,
         defaultConfig: {},
       },
       state: {
-        name: 'redis',
+        adapter: 'redis',
         namespace: 'nq',
         autoScope: 'always',
         cleanup: { strategy: 'never' },
         redis: redisConfig,
       },
       eventStore: {
-        name: 'redis',
+        adapter: 'redis',
         redis: redisConfig,
       },
     }
   }
 
-  if (storeName === 'postgres') {
+  if (storeAdapter === 'postgres') {
     const postgresConfig = store.postgres || {
       connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/nuxt_queue',
     }
 
     return {
       queue: {
-        name: 'postgres',
+        adapter: 'postgres',
         postgres: postgresConfig,
         defaultConfig: {},
       },
       state: {
-        name: 'postgres',
+        adapter: 'postgres',
         postgres: postgresConfig,
       },
       eventStore: {
-        name: 'postgres',
+        adapter: 'postgres',
         postgres: postgresConfig,
       },
     }

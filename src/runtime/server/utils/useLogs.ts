@@ -1,4 +1,4 @@
-import { useEventManager, useStreamStore } from '#imports'
+import { useEventManager, useEventStore } from '#imports'
 
 export interface LogReadOptions {
   fromId?: string
@@ -7,7 +7,7 @@ export interface LogReadOptions {
 
 export function useLogs() {
   const eventManager = useEventManager()
-  const store = useStreamStore()
+  const store = useEventStore()
   const names = store.names()
 
   // Note: direct read helpers removed; prefer paged getters below or live subscriptions.

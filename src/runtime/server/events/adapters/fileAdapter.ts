@@ -29,15 +29,20 @@ async function fileExists(path: string) {
 
 export function createFileAdapter(): EventStoreAdapter {
   const rc: any = useRuntimeConfig()
-  const dirRoot = rc?.queue?.eventStore?.options?.file?.dir || join(process.cwd(), '.nq-events')
+  const rootDir = rc?.queue?.rootDir || process.cwd()
+  const dirRoot = rc?.queue?.eventStore?.options?.file?.dir
+    ? join(rootDir, rc.queue.eventStore.options.file.dir)
+    : join(rootDir, '.data/nq-events')
   const ext = rc?.queue?.eventStore?.options?.file?.ext || '.ndjson'
   const pollMs = rc?.queue?.eventStore?.options?.file?.pollMs ?? 1000
 
   const subscribers = new Map<string, Set<(e: EventRecord) => void>>()
   const timers = new Map<string, NodeJS.Timeout>()
   const lastIds = new Map<string, string | undefined>()
+  const indices = new Map<string, Array<{ id: string, score: number }>>()
 
   const streamPath = (stream: string) => join(dirRoot, sanitize(stream) + ext)
+  const indexPath = (key: string) => join(dirRoot, 'indices', sanitize(key) + '.json')
 
   const readAll = async (stream: string): Promise<EventRecord[]> => {
     const p = streamPath(stream)
@@ -203,8 +208,84 @@ export function createFileAdapter(): EventStoreAdapter {
 
       return count
     },
-    async deleteIndex(_key: string): Promise<void> {
-      // File adapter doesn't support indices
+    async deleteIndex(key: string): Promise<void> {
+      // Remove from memory
+      indices.delete(key)
+
+      // Remove from file system
+      const p = indexPath(key)
+      try {
+        await fsp.unlink(p)
+      }
+      catch {
+        // ignore if doesn't exist
+      }
+    },
+    async indexAdd(key: string, id: string, score: number): Promise<void> {
+      // Load existing index from memory cache
+      let data = indices.get(key)
+
+      // If not in memory, try to load from file
+      if (!data) {
+        const p = indexPath(key)
+        if (await fileExists(p)) {
+          try {
+            const content = await fsp.readFile(p, 'utf8')
+            data = JSON.parse(content) as Array<{ id: string, score: number }>
+          }
+          catch {
+            data = []
+          }
+        }
+        else {
+          data = []
+        }
+        indices.set(key, data)
+      }
+
+      // Update or add entry
+      const existing = data.findIndex(entry => entry.id === id)
+      if (existing >= 0) {
+        data[existing].score = score
+      }
+      else {
+        data.push({ id, score })
+      }
+
+      // Persist to file
+      const p = indexPath(key)
+      await ensureDir(dirname(p))
+      await fsp.writeFile(p, JSON.stringify(data, null, 2), 'utf8')
+    },
+    async indexRead(key: string, opts?: { offset?: number, limit?: number }) {
+      // Load from memory cache first
+      let data = indices.get(key)
+
+      // If not in memory, try to load from file
+      if (!data) {
+        const p = indexPath(key)
+        if (await fileExists(p)) {
+          try {
+            const content = await fsp.readFile(p, 'utf8')
+            data = JSON.parse(content) as Array<{ id: string, score: number }>
+            indices.set(key, data)
+          }
+          catch {
+            data = []
+          }
+        }
+        else {
+          data = []
+        }
+      }
+
+      // Sort by score descending (newest first)
+      const sorted = [...data].sort((a, b) => b.score - a.score)
+
+      const offset = opts?.offset || 0
+      const limit = opts?.limit || 50
+
+      return sorted.slice(offset, offset + limit)
     },
     async close(): Promise<void> {
       for (const t of timers.values()) {

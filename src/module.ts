@@ -96,6 +96,10 @@ export default defineNuxtModule<ModuleOptions>({
     // Convert normalized config to runtime config format
     runtimeConfig.queue = defu(runtimeConfig.queue || {}, toRuntimeConfig(config)) as any
 
+    // Add rootDir to runtime config for file-based adapters
+    if (!runtimeConfig.queue) runtimeConfig.queue = {} as any
+    ;(runtimeConfig.queue as any).rootDir = nuxt.options.rootDir
+
     // Build real registry snapshot from disk
     const layerInfos: LayerInfo[] = nuxt.options._layers.map(l => ({
       rootDir: l.config.rootDir,
@@ -115,7 +119,7 @@ export default defineNuxtModule<ModuleOptions>({
     const compiledWithMeta = defu(compiledRegistry, {
       version: 1,
       compiledAt: new Date().toISOString(),
-      provider: { name: config.queue.name === 'postgres' ? 'pgboss' : 'bullmq' },
+      provider: { name: config.queue.adapter === 'postgres' ? 'pgboss' : 'bullmq' },
       logger: { name: 'console', level: 'info' },
       state: config.state,
       eventStore: config.eventStore,
@@ -178,7 +182,7 @@ export default defineNuxtModule<ModuleOptions>({
       lastCompiledRegistry = JSON.parse(JSON.stringify(defu(updatedRegistry, {
         version: 1,
         compiledAt: new Date().toISOString(),
-        provider: { name: config.queue.name === 'postgres' ? 'pgboss' : 'bullmq' },
+        provider: { name: config.queue.adapter === 'postgres' ? 'pgboss' : 'bullmq' },
         logger: { name: 'console', level: 'info' },
         state: config.state,
         eventStore: config.eventStore,

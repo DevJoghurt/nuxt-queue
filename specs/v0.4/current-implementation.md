@@ -83,7 +83,7 @@ The registry auto-discovers workers and flows from the filesystem at build time.
 
 **Key Files**:
 - `scan.ts` - Scans filesystem for workers
-- `flows.ts` - Builds flow graph from worker configs
+- `flow-lifecycle.ts` - Handles complete flow lifecycle: trigger processing, step tracking, and flow completion detection
 - `loaders/` - Language-specific loaders (ts, js, py)
 
 **Process**:
@@ -100,8 +100,8 @@ The registry auto-discovers workers and flows from the filesystem at build time.
   compiledAt: "2025-10-30T...",
   provider: { name: 'bullmq' },
   logger: { name: 'console', level: 'info' },
-  state: { name: 'redis', namespace: 'nq', autoScope: 'always' },
-  eventStore: { name: 'redis' },
+  state: { adapter: 'redis', namespace: 'nq', autoScope: 'always' },
+  eventStore: { adapter: 'redis' },
   runner: { 
     ts: { isolate: 'inprocess' },
     py: { enabled: false, cmd: 'python3', importMode: 'file' }
@@ -260,7 +260,8 @@ interface StateProvider {
 - Uses Nitro's `useStorage()` with redis driver
 - Keys scoped by flow: `nq:flow:<runId>:<key>`
 - Optional TTL support
-- Cleanup strategies: never, immediate, ttl, on-complete
+- Cleanup strategies: never, immediate, ttl
+  - **Note**: `on-complete` strategy not available in v0.4 (requires distributed flow tracking, planned for v0.6)
 
 **Worker Access**:
 ```typescript
@@ -661,7 +662,7 @@ runtimeConfig: {
       namespace: 'nq',
       autoScope: 'always',
       cleanup: {
-        strategy: 'never',  // or 'immediate', 'ttl', 'on-complete'
+        strategy: 'never',  // or 'immediate', 'ttl' (on-complete not available in v0.4)
         ttlMs: 86400000
       }
     },
@@ -826,7 +827,7 @@ console.log(useRuntimeConfig().queue.state)
 5. **Handle errors**: Wrap critical code in try/catch
 6. **Set concurrency**: Limit based on resource requirements
 7. **Monitor metrics**: Use the UI to track performance
-8. **Clean up state**: Use TTL or on-complete cleanup
+8. **Clean up state**: Use TTL or immediate cleanup (on-complete not available in v0.4)
 9. **Document schedules**: Add descriptions to schedule metadata for maintainability
 
 ## Related Documentation

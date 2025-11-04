@@ -155,7 +155,7 @@ Use Postgres LISTEN/NOTIFY for real-time updates:
 export default defineNuxtConfig({
   queue: {
     eventStore: {
-      name: 'postgres',  // or 'redis'
+      adapter: 'postgres',  // or 'redis'
       postgres: {
         // Use Nitro's database config
         connectionString: process.env.DATABASE_URL

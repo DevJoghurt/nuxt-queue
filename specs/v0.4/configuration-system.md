@@ -18,7 +18,7 @@ v0.4 includes a convenient `store` shortcut that configures all backends (queue,
 ```typescript
 queue: {
   store: {
-    name: 'redis',
+    adapter: 'redis',
     redis: { host: '127.0.0.1', port: 6379 }
   }
 }
@@ -169,7 +169,7 @@ export default defineNuxtConfig({
   queue: {
     // Option 1: Use the store shortcut (recommended)
     store: {
-      name: 'redis', // or 'postgres'
+      adapter: 'redis', // or 'postgres'
       redis: {
         host: '127.0.0.1',
         port: 6379,
@@ -178,15 +178,15 @@ export default defineNuxtConfig({
     
     // Option 2: Configure individual backends
     // queue: {
-    //   name: 'redis',
+    //   adapter: 'redis',
     //   redis: { host: '127.0.0.1', port: 6379 },
     // },
     // state: {
-    //   name: 'redis',
+    //   adapter: 'redis',
     //   redis: { host: '127.0.0.1', port: 6379 },
     // },
     // eventStore: {
-    //   name: 'redis',
+    //   adapter: 'redis',
     //   redis: { host: '127.0.0.1', port: 6379 },
     // },
     
@@ -408,7 +408,7 @@ Response:
 // nuxt.config.ts
 queue: {
   store: {
-    name: 'redis',
+    adapter: 'redis',
     redis: { host: '127.0.0.1', port: 6379 },
   },
   queue: {
@@ -597,7 +597,7 @@ export const config = defineQueueConfig({
 export default defineNuxtConfig({
   queue: {
     store: {
-      name: 'redis',
+      adapter: 'redis',
       redis: {
         host: '127.0.0.1',
         port: 6379,
@@ -666,7 +666,7 @@ The `store` shortcut provides a convenient way to configure all backends at once
 export default defineNuxtConfig({
   queue: {
     store: {
-      name: 'redis',
+      adapter: 'redis',
       redis: {
         host: '127.0.0.1',
         port: 6379,
@@ -677,9 +677,9 @@ export default defineNuxtConfig({
 ```
 
 This automatically configures:
-- `queue.name` = 'redis' with `queue.redis` config
-- `state.name` = 'redis' with `state.redis` config  
-- `eventStore.name` = 'redis' with `eventStore.redis` config
+- `queue.adapter` = 'redis' with `queue.redis` config
+- `state.adapter` = 'redis' with `state.redis` config  
+- `eventStore.adapter` = 'redis' with `eventStore.redis` config
 
 ### With Overrides
 
@@ -689,13 +689,13 @@ Individual backends can override the shortcut:
 export default defineNuxtConfig({
   queue: {
     store: {
-      name: 'redis',
+      adapter: 'redis',
       redis: { host: '127.0.0.1', port: 6379 },
     },
     
     // Override: use memory for eventStore in development
     eventStore: {
-      name: 'memory',
+      adapter: 'memory',
     },
   },
 })
@@ -707,7 +707,7 @@ export default defineNuxtConfig({
 export default defineNuxtConfig({
   queue: {
     store: {
-      name: 'postgres',
+      adapter: 'postgres',
       postgres: {
         connectionString: 'postgresql://localhost:5432/myapp',
       },

@@ -49,7 +49,7 @@ export default defineNuxtConfig({
     ui: true,  // Enable dev UI
     // Shortcut: Configure all backends with one setting
     store: {
-      name: 'redis',
+      adapter: 'redis',
       redis: {
         host: '127.0.0.1',
         port: 6379,
@@ -57,16 +57,16 @@ export default defineNuxtConfig({
     },
     // Or configure individually:
     // queue: {
-    //   name: 'redis',
+    //   adapter: 'redis',
     //   redis: { host: '127.0.0.1', port: 6379 },
     //   defaultConfig: { concurrency: 2 }
     // },
     // state: {
-    //   name: 'redis',
+    //   adapter: 'redis',
     //   redis: { host: '127.0.0.1', port: 6379 }
     // },
     // eventStore: {
-    //   name: 'memory'  // Use memory for events
+    //   adapter: 'memory'  // Use memory for events
     // },
   },
 })

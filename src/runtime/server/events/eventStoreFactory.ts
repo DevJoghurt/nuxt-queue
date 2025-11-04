@@ -29,32 +29,32 @@ let cachedFactory: EventStoreFactory | null = null
 export function getEventStoreFactory(): EventStoreFactory {
   if (cachedFactory) return cachedFactory
   const rc: any = useRuntimeConfig()
-  const name = rc?.queue?.eventStore?.name || 'memory'
+  const adapter = rc?.queue?.eventStore?.adapter || 'memory'
 
-  let adapter: EventStoreAdapter
-  if (name === 'memory') adapter = createMemoryAdapter()
-  else if (name === 'file') adapter = createFileAdapter()
-  else if (name === 'redis') adapter = createRedisAdapter()
-  else adapter = createMemoryAdapter() // fallback to memory
+  let adapterInstance: EventStoreAdapter
+  if (adapter === 'memory') adapterInstance = createMemoryAdapter()
+  else if (adapter === 'file') adapterInstance = createFileAdapter()
+  else if (adapter === 'redis') adapterInstance = createRedisAdapter()
+  else adapterInstance = createMemoryAdapter() // fallback to memory
 
   // Debug logging
   if (process.env.NQ_DEBUG_EVENTS === '1') {
-    console.log('[stream-store-factory] initialized', { name, adapterType: name })
+    console.log('[stream-store-factory] initialized', { adapter, adapterType: adapter })
   }
 
   const names = getStreamNames()
   // v0.3: Wiring registry with simplified flow wiring
-  const wiring = createWiringRegistry({ adapter, names: names as any })
+  const wiring = createWiringRegistry({ adapter: adapterInstance, names: names as any })
 
   const factory: EventStoreFactory = {
-    adapter,
+    adapter: adapterInstance,
     names,
     stream(name: string): EventStoreInstance {
       return {
         name,
-        append: (s, e) => adapter.append(s, e),
-        read: (s, o) => adapter.read(s, o),
-        subscribe: (s, cb) => adapter.subscribe(s, cb),
+        append: (s, e) => adapterInstance.append(s, e),
+        read: (s, o) => adapterInstance.read(s, o),
+        subscribe: (s, cb) => adapterInstance.subscribe(s, cb),
       }
     },
     start(): void {

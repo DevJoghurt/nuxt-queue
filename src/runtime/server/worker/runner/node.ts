@@ -255,13 +255,7 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
     catch {
       // ignore
     }
-    const cleanup = rc?.queue?.state?.cleanup || { strategy: 'never' }
-    if (ctx.flowId && (cleanup.strategy === 'on-complete' || cleanup.strategy === 'immediate')) {
-      const sp = getStateProvider()
-      const prefix = scopeKey('', ctx.flowId)
-      const { keys } = await sp.list(prefix)
-      await Promise.all(keys.map(k => sp.delete(k.replace(/^flow:[^:]*:/, ''))))
-    }
+
     return result
   }
 }

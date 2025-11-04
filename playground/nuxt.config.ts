@@ -16,21 +16,28 @@ export default defineNuxtConfig({
   },
 
   queue: {
-    debug: { events: false },
+    debug: { events: true },
 
     // Shortcut: Configure all backends to use Redis
     store: {
-      name: 'redis',
+      adapter: 'redis',
       redis: {
         host: '127.0.0.1',
         port: 6379,
       },
     },
+    state: {
+      adapter: 'redis',
+      cleanup: {
+        strategy: 'on-complete',
+      },
+    },
     // You can still override individual configs:
-    // eventStore: {
-    //   name: 'memory',  // Use memory for events in development
-    // },
+    eventStore: {
+      adapter: 'file', // Use file for events in development
+    },
     queue: {
+      adapter: 'redis',
       defaultConfig: {
         // Queue options
         prefix: 'nq',

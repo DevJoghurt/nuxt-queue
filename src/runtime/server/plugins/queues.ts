@@ -9,6 +9,8 @@ export default defineNitroPlugin(async (nitroApp) => {
     if (existingProvider) {
       console.info('[queues plugin] Closing existing queue provider before creating new one...')
       await existingProvider.close()
+      // Small delay to ensure connections are fully closed
+      await new Promise(resolve => setTimeout(resolve, 100))
     }
   }
   catch {

@@ -27,9 +27,9 @@ export interface PostgresConfig {
  */
 export interface QueueConfig {
   /**
-   * Queue backend: 'redis' (BullMQ) or 'postgres' (PGBoss)
+   * Queue backend adapter: 'redis' (BullMQ) or 'postgres' (PGBoss)
    */
-  name?: 'redis' | 'postgres'
+  adapter?: 'redis' | 'postgres'
 
   /**
    * Redis connection config (when using BullMQ)
@@ -80,7 +80,7 @@ export interface QueueConfig {
  * State provider configuration
  */
 export interface StateConfig {
-  name?: 'redis' | 'postgres'
+  adapter?: 'redis' | 'postgres'
   namespace?: string
   autoScope?: 'always' | 'flow' | 'never'
   cleanup?: {
@@ -95,7 +95,7 @@ export interface StateConfig {
  * Event store configuration
  */
 export interface EventStoreConfig {
-  name?: 'redis' | 'postgres' | 'memory' | 'file'
+  adapter?: 'redis' | 'postgres' | 'memory' | 'file'
   streams?: any
   options?: {
     file?: {
@@ -113,17 +113,17 @@ export interface EventStoreConfig {
  */
 export interface StoreShortcut {
   /**
-   * Storage backend to use for everything
+   * Storage backend adapter to use for everything
    */
-  name: 'redis' | 'postgres'
+  adapter: 'redis' | 'postgres'
 
   /**
-   * Redis config (used when name is 'redis')
+   * Redis config (used when adapter is 'redis')
    */
   redis?: RedisConfig
 
   /**
-   * Postgres config (used when name is 'postgres')
+   * Postgres config (used when adapter is 'postgres')
    */
   postgres?: PostgresConfig
 }
@@ -180,4 +180,5 @@ export interface QueueModuleConfig {
   queue: Required<QueueConfig>
   state: Required<StateConfig>
   eventStore: Required<EventStoreConfig>
+  rootDir?: string
 }

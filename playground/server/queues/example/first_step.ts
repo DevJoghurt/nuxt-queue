@@ -41,6 +41,9 @@ export default defineQueueWorker(
       attempt: ctx.attempt,
     })
 
+    // add state
+    ctx.state.set('first_step_started_at', new Date().toISOString())
+
     // Test retry mechanism: fail on first 2 attempts
     const shouldFail = input?.testRetry && ctx.attempt && ctx.attempt < 3
     if (shouldFail) {

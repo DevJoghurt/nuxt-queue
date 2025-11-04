@@ -2,7 +2,17 @@
 
 > **Version**: v0.6.2 (State), v0.7.0 (Logging)  
 > **Status**: 📋 Planning  
-> **Last Updated**: 2025-10-30
+> **Last Updated**: 2025-11-04
+
+## Overview
+
+v0.6 introduces major improvements to state management and adds distributed flow completion tracking to support horizontal scaling.
+
+### Key Additions
+
+1. **Unified State and Stream Store** - Simplifies architecture
+2. **Enhanced Logging** - Better observability
+
 
 ## 1. Unified State and Stream Store
 

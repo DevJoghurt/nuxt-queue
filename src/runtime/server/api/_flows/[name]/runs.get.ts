@@ -1,4 +1,4 @@
-import { defineEventHandler, getRouterParam, getQuery, useStreamStore } from '#imports'
+import { defineEventHandler, getRouterParam, getQuery, useEventStore } from '#imports'
 
 /**
  * GET /api/_flows/:name/runs?limit=50&offset=0
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
     return { error: 'Missing flow name' }
   }
 
-  const store = useStreamStore()
+  const store = useEventStore()
   const names = store.names()
 
   try {

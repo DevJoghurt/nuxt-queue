@@ -1,10 +1,28 @@
 import type { EventStoreAdapter, EventReadOptions, EventSubscription } from '../types'
 import type { EventRecord } from '../../../types'
 
+// Store data in globalThis to survive HMR reloads
+interface MemoryAdapterStore {
+  events: Map<string, EventRecord[]>
+  listeners: Map<string, Set<(e: EventRecord) => void>>
+  indices: Map<string, Array<{ id: string, score: number }>>
+}
+
+const GLOBAL_KEY = '__nuxt_queue_memory_adapter__'
+
+function getStore(): MemoryAdapterStore {
+  if (!(globalThis as any)[GLOBAL_KEY]) {
+    (globalThis as any)[GLOBAL_KEY] = {
+      events: new Map<string, EventRecord[]>(),
+      listeners: new Map<string, Set<(e: EventRecord) => void>>(),
+      indices: new Map<string, Array<{ id: string, score: number }>>(),
+    }
+  }
+  return (globalThis as any)[GLOBAL_KEY]
+}
+
 export function createMemoryAdapter(): EventStoreAdapter {
-  const events = new Map<string, EventRecord[]>()
-  const listeners = new Map<string, Set<(e: EventRecord) => void>>()
-  const indices = new Map<string, Array<{ id: string, score: number }>>()
+  const { events, listeners, indices } = getStore()
 
   return {
     async append(stream: string, e: Omit<EventRecord, 'id' | 'ts'>): Promise<EventRecord> {

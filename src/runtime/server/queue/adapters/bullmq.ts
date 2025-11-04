@@ -178,12 +178,27 @@ export class BullMQProvider implements QueueProvider {
   }
 
   async close(): Promise<void> {
-    for (const { queue, events } of this.queues.values()) {
-      await Promise.allSettled([
-        queue.close(),
-        events.close(),
-      ])
+    const closePromises: Promise<void>[] = []
+
+    for (const [queueName, { queue, events }] of this.queues.entries()) {
+      // Close queue and events, ignoring EPIPE errors during HMR
+      closePromises.push(
+        queue.close().catch((err) => {
+          if (err.code !== 'EPIPE' && !err.message?.includes('Connection is closed')) {
+            console.warn(`[BullMQProvider] Error closing queue "${queueName}":`, err.message)
+          }
+        }),
+      )
+      closePromises.push(
+        events.close().catch((err) => {
+          if (err.code !== 'EPIPE' && !err.message?.includes('Connection is closed')) {
+            console.warn(`[BullMQProvider] Error closing events for queue "${queueName}":`, err.message)
+          }
+        }),
+      )
     }
+
+    await Promise.allSettled(closePromises)
     this.queues.clear()
   }
 

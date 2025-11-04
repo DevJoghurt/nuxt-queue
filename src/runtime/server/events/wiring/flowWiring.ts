@@ -1,10 +1,10 @@
-import type { StreamAdapter } from '../types'
+import type { EventStoreAdapter } from '../types'
 import type { EventRecord } from '../../../types'
 import { getEventBus } from '../eventBus'
-import { useStreamStore } from '#imports'
+import { useEventStore } from '#imports'
 
 export interface FlowWiringDeps {
-  adapter: StreamAdapter
+  adapter: EventStoreAdapter
 }
 
 /**
@@ -26,7 +26,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
    */
   const indexFlowRun = async (flowName: string, flowId: string, timestamp: number) => {
     try {
-      const store = useStreamStore()
+      const store = useEventStore()
       const names = store.names()
       // Use centralized naming function
       const indexKey = names.flowIndex(flowName)
@@ -47,7 +47,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
     wired = true
 
     // Get stream names utility
-    const store = useStreamStore()
+    const store = useEventStore()
     const names = store.names()
 
     // Subscribe to internal bus with a wildcard-like approach using subscribeRunId

@@ -225,7 +225,7 @@ export default defineNuxtConfig({
 runtimeConfig: {
   queue: {
     state: {
-      name: 'redis',
+      adapter: 'redis',
       namespace: 'nq',
       autoScope: 'always',
       cleanup: {
@@ -234,7 +234,7 @@ runtimeConfig: {
       }
     },
     eventStore: {
-      name: 'redis',
+      adapter: 'redis',
       mode: 'streams',
       options: {
         redisStreams: {

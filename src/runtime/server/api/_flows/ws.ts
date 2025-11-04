@@ -1,6 +1,6 @@
 import {
   defineWebSocketHandler,
-  useStreamStore,
+  useEventStore,
   registerWsPeer,
   unregisterWsPeer,
 } from '#imports'
@@ -136,7 +136,7 @@ export default defineWebSocketHandler({
         return
       }
 
-      const store = useStreamStore()
+      const store = useEventStore()
       const names = store.names()
       const flowStream = names.flow(runId)
       const subscriptionKey = `${flowName}:${runId}`
