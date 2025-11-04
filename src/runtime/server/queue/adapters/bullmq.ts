@@ -24,62 +24,81 @@ export class BullMQProvider implements QueueProvider {
     const { publishBus } = useEventManager()
     const rc = useRuntimeConfig() as any
     const connection = rc.queue?.redis
-    // Derive provider-agnostic queue options from registry (defaultJobOptions, prefix)
+    // Derive provider-agnostic queue options from registry (defaultJobOptions, prefix, limiter)
     let queueDefaults: any = undefined
     let prefix: string | undefined
+    let limiter: any = undefined
     try {
       const registry: any = $useQueueRegistry()
       if (registry && Array.isArray(registry.workers)) {
-        const w = registry.workers.find((w: any) => w?.queue === name && w?.queueCfg)
-        if (w?.queueCfg) {
-          queueDefaults = w.queueCfg.defaultJobOptions
-          prefix = w.queueCfg.prefix
+        const w = registry.workers.find((w: any) => w?.queue?.name === name)
+        if (w?.queue) {
+          queueDefaults = w.queue.defaultJobOptions
+          prefix = w.queue.prefix
+          limiter = w.queue.limiter
         }
       }
     }
     catch {
       // ignore registry access errors
     }
-    const queue = new Queue(name, { connection, prefix, defaultJobOptions: queueDefaults })
-    const events = new QueueEvents(name, { connection })
+
+    // Build BullMQ-specific queue options
+    const queueOpts: any = { connection, prefix, defaultJobOptions: queueDefaults }
+
+    // Map generic limiter config to BullMQ limiter format
+    if (limiter) {
+      queueOpts.limiter = {
+        max: limiter.max,
+        duration: limiter.duration,
+        groupKey: limiter.groupKey,
+      }
+    }
+
+    const queue = new Queue(name, queueOpts)
+    const events = new QueueEvents(name, { connection, prefix })
+
+    // Increase max listeners to prevent warnings during development (HMR can cause multiple subscriptions)
+    events.setMaxListeners(50)
+
     cached = { queue, events, wired: false, defaults: queueDefaults }
     this.queues.set(name, cached)
-    // Wire event forwarding once per queue
-    if (!cached.wired) {
-      const forward = async (kind: string, payload: any) => {
-        // Publish ONLY to the in-proc bus. Do NOT persist queue/job/global events in the stream store.
-        // v0.4: Use type instead of kind, try to extract runId from job data if available
-        const jobId = (payload as any)?.jobId || 'unknown'
 
-        // Try to fetch the job to get flowId/runId from data
-        let runId = ''
-        try {
-          if (jobId && jobId !== 'unknown') {
-            const job = await queue.getJob(jobId)
-            if (job?.data?.flowId) {
-              runId = job.data.flowId
-            }
+    // Wire event forwarding once per queue
+    const forward = async (kind: string, payload: any) => {
+      // Publish ONLY to the in-proc bus. Do NOT persist queue/job/global events in the stream store.
+      // Try to extract runId from job data if available
+      const jobId = (payload as any)?.jobId || 'unknown'
+
+      // Try to fetch the job to get flowId/runId from data
+      let runId = ''
+      try {
+        if (jobId && jobId !== 'unknown') {
+          const job = await queue.getJob(jobId)
+          if (job?.data?.flowId) {
+            runId = job.data.flowId
           }
         }
-        catch {
-          // Ignore errors fetching job, use empty runId
-        }
+      }
+      catch {
+        // Ignore errors fetching job, use empty runId
+      }
 
-        const rec = {
-          type: `job.${kind}`,
-          runId,
-          data: { ...payload, queue: name, jobId },
-        }
-        // Publish directly to the in-proc bus via EventManager abstraction
-        await publishBus(rec as any)
+      const rec = {
+        type: `job.${kind}`,
+        runId,
+        data: { ...payload, queue: name, jobId },
       }
-      for (const ev of ['waiting', 'active', 'progress', 'completed', 'failed', 'delayed'] as const) {
-        events.on(ev as any, (p: any) => {
-          void forward(ev, p)
-        })
-      }
-      cached.wired = true
+      // Publish directly to the in-proc bus via EventManager abstraction
+      await publishBus(rec as any)
     }
+    for (const ev of ['waiting', 'active', 'progress', 'completed', 'failed', 'delayed'] as const) {
+      events.on(ev as any, (p: any) => {
+        void forward(ev, p)
+      })
+    }
+    cached.wired = true
+
     return cached
   }
 

@@ -33,14 +33,19 @@ export async function loadJsConfig(absPath: string): Promise<ConfigMeta> {
   }
 
   const queueCfg = (cfg?.queue && typeof cfg.queue === 'object')
-    ? { name: cfg.queue.name, defaultJobOptions: cfg.queue.defaultJobOptions, prefix: cfg.queue.prefix }
+    ? {
+        name: cfg.queue.name,
+        defaultJobOptions: cfg.queue.defaultJobOptions,
+        prefix: cfg.queue.prefix,
+        limiter: cfg.queue.limiter,
+      }
     : undefined
 
-  const workerOpts = (cfg?.worker && typeof cfg.worker === 'object')
+  const workerCfg = (cfg?.worker && typeof cfg.worker === 'object')
     ? { ...cfg.worker }
     : undefined
 
   const hasDefaultExport = !!(mod && mod.default)
 
-  return { queueName, flow, runtype, queueCfg, workerOpts, hasDefaultExport }
+  return { queueName, flow, runtype, queue: queueCfg, worker: workerCfg, hasDefaultExport }
 }

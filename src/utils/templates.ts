@@ -35,7 +35,7 @@ export function generateHandlersTemplate(registry: any): string {
       // Import using the real absolute path including extension to avoid resolution issues
       const importPath = String(src)
       lines.push(`import ${varName} from '${importPath}'`)
-      const queue = String(w?.name || w?.queue || `w${i}`)
+      const queue = String(w?.queue?.name || `w${i}`)
       const id = String(w?.id || `w${i}`)
       const absPath = importPath
       entries.push(`{ queue: '${queue}', id: '${id}', absPath: '${absPath}', handler: ${varName} }`)
@@ -69,8 +69,8 @@ export function generateAnalyzedFlowsTemplate(registry: any): string {
     workerMetaMap.set(worker.id, {
       runtime: worker.kind === 'py' ? 'python' : 'nodejs',
       runtype: (worker as any).runtype,
-      queueCfg: (worker as any).queueCfg,
-      workerOpts: (worker as any).worker,
+      queue: (worker as any).queue,
+      worker: (worker as any).worker,
       emits: (worker.flow as any)?.emits,
     })
   }

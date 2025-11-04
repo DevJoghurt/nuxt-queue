@@ -1,6 +1,6 @@
 export const config = defineQueueConfig({
   queue: {
-    name: 'example_queue_1',
+    name: 'example_queue',
   },
   // Optional: let queue name default to file name ("second_step")
   flow: {

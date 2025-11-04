@@ -9,10 +9,31 @@ export interface QueueCounts {
   paused: number
 }
 
+export interface QueueConfig {
+  queue: {
+    prefix?: string
+    defaultJobOptions?: Record<string, any>
+    limiter?: {
+      max?: number
+      duration?: number
+      groupKey?: string
+    }
+  }
+  worker: {
+    concurrency?: number
+    lockDurationMs?: number
+    maxStalledCount?: number
+    drainDelayMs?: number
+    autorun?: boolean
+    pollingIntervalMs?: number
+  }
+}
+
 export interface QueueInfo {
   name: string
   counts: QueueCounts
   isPaused: boolean
+  config?: QueueConfig
 }
 
 /**

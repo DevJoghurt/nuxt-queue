@@ -41,12 +41,10 @@ export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Pr
 
         if (ext === '.js' || ext === '.mjs' || ext === '.cjs') {
           const meta = await loadJsConfig(abs)
-          queueName = meta.queueName
           flow = meta.flow
           const hasDefaultExport = !!meta.hasDefaultExport
           if (hasDefaultExport) {
             const kind: WorkerEntry['kind'] = 'ts'
-            const queueKey = String(queueName || (id.split('/').pop() || id))
             const virtualPath = relative(layer.serverDir, abs).replace(/\\/g, '/')
             workerByVirtualPath.set(virtualPath, {
               id,
@@ -54,9 +52,13 @@ export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Pr
               filePath: virtualPath,
               absPath: abs,
               exportName: 'default',
-              queue: queueKey,
-              queueCfg: meta.queueCfg,
-              worker: meta.workerOpts,
+              queue: {
+                name: String((meta.queue?.name || meta.queueName) || (id.split('/').pop() || id)),
+                defaultJobOptions: meta.queue?.defaultJobOptions,
+                prefix: meta.queue?.prefix,
+                limiter: meta.queue?.limiter,
+              },
+              worker: meta.worker,
               flow,
               runtype: meta.runtype,
             })
@@ -64,10 +66,8 @@ export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Pr
         }
         else if (ext === '.py') {
           const meta = await loadPyConfig(abs, logger)
-          queueName = meta.queueName
           flow = meta.flow
           const kind: WorkerEntry['kind'] = 'py'
-          const queueKey = String(queueName || (id.split('/').pop() || id))
           const virtualPath = relative(layer.serverDir, abs).replace(/\\/g, '/')
           workerByVirtualPath.set(virtualPath, {
             id,
@@ -75,7 +75,12 @@ export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Pr
             filePath: virtualPath,
             absPath: abs,
             exportName: 'default',
-            queue: queueKey,
+            queue: {
+              name: String((meta.queue?.name || meta.queueName) || (id.split('/').pop() || id)),
+              defaultJobOptions: meta.queue?.defaultJobOptions,
+              prefix: meta.queue?.prefix,
+              limiter: meta.queue?.limiter,
+            },
             flow,
           })
         }
@@ -83,12 +88,10 @@ export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Pr
           // TS and variants
           try {
             const meta = await loadTsConfig(abs)
-            queueName = meta.queueName
             flow = meta.flow
             const hasDefaultExport = !!meta.hasDefaultExport
             if (hasDefaultExport) {
               const kind: WorkerEntry['kind'] = 'ts'
-              const queueKey = String(queueName || (id.split('/').pop() || id))
               const virtualPath = relative(layer.serverDir, abs).replace(/\\/g, '/')
               workerByVirtualPath.set(virtualPath, {
                 id,
@@ -96,9 +99,13 @@ export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Pr
                 filePath: virtualPath,
                 absPath: abs,
                 exportName: 'default',
-                queue: queueKey,
-                queueCfg: meta.queueCfg,
-                worker: meta.workerOpts,
+                queue: {
+                  name: String((meta.queue?.name || meta.queueName) || (id.split('/').pop() || id)),
+                  defaultJobOptions: meta.queue?.defaultJobOptions,
+                  prefix: meta.queue?.prefix,
+                  limiter: meta.queue?.limiter,
+                },
+                worker: meta.worker,
                 flow,
                 runtype: meta.runtype,
               })

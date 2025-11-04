@@ -84,6 +84,15 @@
         </div>
       </template>
     </div>
+
+    <!-- Config Details Slideover -->
+    <QueueConfigDetails
+      v-if="selectedQueueForConfig"
+      v-model:open="configDetailsOpen"
+      :queue-name="selectedQueueForConfig.name"
+      :queue-config="selectedQueueForConfig.config?.queue"
+      :worker-config="selectedQueueForConfig.config?.worker"
+    />
   </div>
 </template>
 
@@ -95,6 +104,7 @@ import { UTable, UButton, UPagination } from '#components'
 import { useQueues, type QueueInfo } from '../../composables/useQueues'
 import { useQueuesLive } from '../../composables/useQueuesLive'
 import { useComponentRouter } from '../../composables/useComponentRouter'
+import QueueConfigDetails from '../../components/QueueConfigDetails.vue'
 
 const UBadgeComponent = resolveComponent('UBadge')
 const UButtonComponent = resolveComponent('UButton')
@@ -109,6 +119,14 @@ const pagination = ref({
   pageSize: 10,
 })
 
+const configDetailsOpen = ref(false)
+const selectedQueueForConfig = ref<QueueInfo | null>(null)
+
+const openConfigDetails = (queue: QueueInfo) => {
+  selectedQueueForConfig.value = queue
+  configDetailsOpen.value = true
+}
+
 const columns: TableColumn<QueueInfo>[] = [
   {
     accessorKey: 'name',
@@ -120,6 +138,7 @@ const columns: TableColumn<QueueInfo>[] = [
       }, row.original.name)
     },
   },
+
   {
     accessorKey: 'counts.waiting',
     header: 'Waiting',
@@ -198,6 +217,23 @@ const columns: TableColumn<QueueInfo>[] = [
         label: row.original.isPaused ? 'Paused' : 'Running',
         color: row.original.isPaused ? 'warning' : 'success',
         variant: 'subtle',
+      })
+    },
+  },
+  {
+    id: 'config',
+    header: 'Config',
+    cell: ({ row }) => {
+      return h(UButtonComponent, {
+        icon: 'i-lucide-settings',
+        size: 'xs',
+        color: 'neutral',
+        variant: 'ghost',
+        square: true,
+        title: 'View configuration',
+        onClick: () => {
+          openConfigDetails(row.original)
+        },
       })
     },
   },

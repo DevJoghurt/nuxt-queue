@@ -9,9 +9,13 @@ export type WorkerEntry = {
   filePath: string
   absPath: string
   exportName?: string
-  queue: string
-  queueCfg?: { name: string, defaultJobOptions?: any, prefix?: string }
-  worker?: { concurrency?: number, lockDurationMs?: number, maxStalledCount?: number, drainDelayMs?: number, autorun?: boolean }
+  queue: {
+    name: string
+    defaultJobOptions?: any
+    prefix?: string
+    limiter?: any
+  }
+  worker?: { concurrency?: number, lockDurationMs?: number, maxStalledCount?: number, drainDelayMs?: number, autorun?: boolean, pollingIntervalMs?: number }
   // Optional per-worker runtype override for TS runner isolation (e.g., 'inprocess' | 'task')
   runtype?: 'inprocess' | 'task'
   flow?: {
@@ -59,8 +63,8 @@ export type ConfigMeta = {
   queueName?: string
   flow?: WorkerEntry['flow']
   runtype?: 'inprocess' | 'task'
-  queueCfg?: { name: string, defaultJobOptions?: any, prefix?: string }
-  workerOpts?: { concurrency?: number, lockDurationMs?: number, maxStalledCount?: number, drainDelayMs?: number, autorun?: boolean }
+  queue?: { name?: string, defaultJobOptions?: any, prefix?: string, limiter?: any }
+  worker?: { concurrency?: number, lockDurationMs?: number, maxStalledCount?: number, drainDelayMs?: number, autorun?: boolean, pollingIntervalMs?: number }
   hasDefaultExport?: boolean
 }
 

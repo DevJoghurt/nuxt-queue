@@ -18,7 +18,7 @@ export default defineNitroPlugin(async (nitroApp) => {
       const { queue, id, handler } = entry as any
 
       // Match exact worker by id; fallback to queue + absPath if needed
-      const w = (registry.workers as any[]).find(rw => (rw?.id === id) || (rw?.queue === queue && rw?.absPath === entry.absPath))
+      const w = (registry.workers as any[]).find(rw => (rw?.id === id) || (rw?.queue?.name === queue && rw?.absPath === entry.absPath))
 
       // Determine job name: use flow.step from config if available, otherwise extract from id
       let jobName: string
@@ -40,6 +40,10 @@ export default defineNitroPlugin(async (nitroApp) => {
         if (typeof cfg.maxStalledCount === 'number') opts.maxStalledCount = cfg.maxStalledCount
         if (typeof cfg.drainDelayMs === 'number') opts.drainDelay = cfg.drainDelayMs
         if (typeof cfg.autorun === 'boolean') opts.autorun = cfg.autorun
+        // Include prefix from queue config so Worker and Queue use the same Redis keys
+        if (w?.queue?.prefix) opts.prefix = w.queue.prefix
+        // Note: pollingIntervalMs is not directly supported by BullMQ (uses blocking wait)
+        // but we keep it in WorkerConfig for future PGBoss compatibility
         await registerTsWorker(queue, jobName, handler as any, opts)
       }
     }

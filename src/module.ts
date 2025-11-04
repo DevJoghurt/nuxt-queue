@@ -36,6 +36,49 @@ export interface ModuleOptions {
     url?: string
   }
   debug?: Record<string, any>
+  /**
+   * Default queue configuration applied to all queues.
+   * Can be overridden per-queue using defineQueueConfig.
+   */
+  defaultQueueConfig?: {
+    /**
+     * Default job options for all queues.
+     */
+    defaultJobOptions?: {
+      attempts?: number
+      backoff?: number | { type: 'fixed' | 'exponential', delay: number }
+      delay?: number
+      priority?: number
+      timeout?: number
+      lifo?: boolean
+      removeOnComplete?: boolean | number
+      removeOnFail?: boolean | number
+    }
+    /**
+     * Rate limiting configuration.
+     */
+    limiter?: {
+      max?: number
+      duration?: number
+      groupKey?: string
+    }
+    /**
+     * Prefix for queue keys.
+     */
+    prefix?: string
+  }
+  /**
+   * Default worker configuration applied to all workers.
+   * Can be overridden per-worker using defineQueueConfig.
+   */
+  defaultWorkerConfig?: {
+    concurrency?: number
+    lockDurationMs?: number
+    maxStalledCount?: number
+    drainDelayMs?: number
+    autorun?: boolean
+    pollingIntervalMs?: number
+  }
 }
 
 declare module '@nuxt/schema' {
@@ -68,6 +111,10 @@ declare module '@nuxt/schema' {
           }
         }
       }
+      // Default queue configuration from nuxt.config
+      defaultQueueConfig?: ModuleOptions['defaultQueueConfig']
+      // Default worker configuration from nuxt.config
+      defaultWorkerConfig?: ModuleOptions['defaultWorkerConfig']
     }
   }
 }
@@ -148,6 +195,8 @@ export default defineNuxtModule<ModuleOptions>({
       workers: [],
       state: { name: 'redis', namespace: 'nq', autoScope: 'always', cleanup: { strategy: 'never' } },
       eventStore: { name: 'redis' },
+      defaultQueueConfig: options.defaultQueueConfig || {},
+      defaultWorkerConfig: options.defaultWorkerConfig || {},
     }) as any
 
     // Build real registry snapshot from disk
@@ -155,7 +204,14 @@ export default defineNuxtModule<ModuleOptions>({
       rootDir: l.config.rootDir,
       serverDir: l.config?.serverDir || join(l.config.rootDir, 'server'),
     }))
-    const compiledRegistry = await compileRegistryFromServerWorkers(layerInfos, options?.dir || 'queues')
+
+    // Prepare default configs from module options
+    const defaultConfigs = {
+      queue: options.defaultQueueConfig,
+      worker: options.defaultWorkerConfig,
+    }
+
+    const compiledRegistry = await compileRegistryFromServerWorkers(layerInfos, options?.dir || 'queues', defaultConfigs)
     // augment with defaults and metadata
     const compiledWithMeta = defu(compiledRegistry, {
       version: 1,
@@ -218,7 +274,7 @@ export default defineNuxtModule<ModuleOptions>({
     // Small helper to refresh registry and re-generate app (dev)
     const refreshRegistry = async (reason: string, changedPath?: string) => {
       const queuesRel = options?.dir || 'queues'
-      const updatedRegistry = await compileRegistryFromServerWorkers(layerInfos, queuesRel)
+      const updatedRegistry = await compileRegistryFromServerWorkers(layerInfos, queuesRel, defaultConfigs)
       // No merging: the compiled registry is the single source of truth
       lastCompiledRegistry = JSON.parse(JSON.stringify(defu(updatedRegistry, {
         version: 1,

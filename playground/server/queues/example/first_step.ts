@@ -2,14 +2,21 @@ export const config = defineQueueConfig({
   queue: {
     name: 'example_queue',
     defaultJobOptions: {
-      attempts: 3, // Retry up to 3 times
+      attempts: 5, // Override default: retry up to 5 times instead of 3
       backoff: {
         type: 'exponential',
-        delay: 1000, // Start with 1 second delay, doubles each retry
+        delay: 2000, // Override: start with 2 second delay
       },
     },
+    limiter: {
+      max: 10, // Max 10 jobs
+      duration: 60000, // per 60 seconds
+    },
   },
-  // Optional: let queue name default to file name ("first_step")
+  worker: {
+    concurrency: 4, // Override default: process 3 jobs concurrently instead of 2
+    lockDurationMs: 60000, // Override: increase lock duration to 60s
+  },
   flow: {
     // Declare one or more flow names this step belongs to
     name: ['example-flow'],

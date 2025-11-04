@@ -29,5 +29,24 @@ export default defineNuxtConfig({
 
   queue: {
     debug: { events: true },
+    // Default configurations for all queues
+    defaultQueueConfig: {
+      prefix: 'nq',
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 1000,
+        },
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      },
+    },
+    // Default configurations for all workers
+    defaultWorkerConfig: {
+      concurrency: 2,
+      lockDurationMs: 30000,
+      maxStalledCount: 1,
+    },
   },
 })
