@@ -120,12 +120,13 @@
                       {{ formatTime(r.createdAt) }}
                     </div>
                   </div>
-                  <!-- Status badge for run -->
+                  <!-- Status badge for run (only show for selected run) -->
                   <FlowRunStatusBadge
-                    :is-running="selectedRunId === r.id && flowState.isRunning.value"
-                    :is-completed="selectedRunId === r.id && flowState.isCompleted.value"
-                    :is-failed="selectedRunId === r.id && flowState.isFailed.value"
-                    :is-reconnecting="selectedRunId === r.id && isReconnecting"
+                    v-if="selectedRunId === r.id"
+                    :is-running="flowState.isRunning.value"
+                    :is-completed="flowState.isCompleted.value"
+                    :is-failed="flowState.isFailed.value"
+                    :is-reconnecting="isReconnecting"
                   />
                 </div>
               </div>
