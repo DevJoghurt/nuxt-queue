@@ -1,79 +1,159 @@
-# Nuxt Queue Architecture (v0.4) - Current Implementation
+# Nuxt Queue Architecture
 
-This directory contains the complete specification for v0.4 - the current implementation of nuxt-queue, a BullMQ-based queue and flow orchestration system for Nuxt with integrated event sourcing and real-time monitoring.
+This directory contains the complete specification for nuxt-queue, a BullMQ-based queue and flow orchestration system for Nuxt with integrated event sourcing and real-time monitoring.
 
-**Core Architecture**: Stream-based event sourcing with Redis Pub/Sub for real-time distribution via WebSocket, BullMQ for queue management, unified flow orchestration engine, and cron-based flow scheduling.
+## 🎯 The Vision: Unified Event-Based Architecture
 
-## 📚 Documents
+**Everything is an Event in EventStore** - The architecture is evolving towards a single source of truth where state, logs, registry, and flow events all live as events in Redis Streams. This creates a unified, auditable, and scalable system.
 
-1. **[v0.4/current-implementation.md](./v0.4/current-implementation.md)** ⭐️ START HERE
-   - Complete architecture specification
+📖 **Read**: [UNIFIED-ARCHITECTURE.md](./UNIFIED-ARCHITECTURE.md) for the complete vision
+
+## 📚 Documents by Version
+
+### Current Implementation
+
+1. **[v0.4/current-implementation.md](./v0.4/current-implementation.md)** ⭐️ **START HERE**
+   - Complete architecture specification (current version)
    - Event sourcing with stream store
    - Flow orchestration engine
    - Real-time distribution via Redis Pub/Sub + WebSocket
    - Worker context and runtime
    - Flow scheduling system
 
-2. **[v0.4/event-schema.md](./v0.4/event-schema.md)** 📋 EVENTS
+### Planned Enhancements
+
+2. **[UNIFIED-ARCHITECTURE.md](./UNIFIED-ARCHITECTURE.md)** 🎯 **THE VISION**
+   - Unified event-based architecture overview
+   - Single source of truth approach
+   - Triggers, state, logs, and registry as events
+   - Migration path and benefits
+
+3. **[v0.5/trigger-system.md](./v0.5/trigger-system.md)** 🎪 **v0.5**
+   - Universal trigger system (events, webhooks, schedules)
+   - Entry triggers to start flows
+   - Await triggers for human-in-the-loop patterns
+   - Type-safe with Zod schemas
+   - Replaces v0.4 simple scheduling
+
+4. **[v0.6/combined-state-management.md](./v0.6/combined-state-management.md)** 📋 **v0.6**
+   - State as events in `nq:flow:{runId}` stream
+   - Event sourcing for state management
+   - Cache layer for performance
+   - Eliminates separate state provider
+
+5. **[v0.8/distributed-architecture.md](./v0.8/distributed-architecture.md)** 🌐 **v0.8**
+   - Registry as events in `nq:registry` stream
+   - Always-on distributed architecture
+   - Instance/worker discovery via events
+   - Reuses eventStore infrastructure
+
+6. **[v0.9/logging-enhancements.md](./v0.9/logging-enhancements.md)** 📊 **v0.9**
+   - Logs as events in `nq:flow:{runId}` stream
+   - Flexible routing (internal/external/both)
+   - Complete timeline with events + state + logs
+   - Adapter-based external logging
+
+### Reference Documents
+
+7. **[v0.4/event-schema.md](./v0.4/event-schema.md)** 📋 EVENTS
    - Event types and schema
    - Flow lifecycle events
    - Step execution events
    - State and logging events
    - Real-time distribution
 
-3. **[v0.4/flow-scheduling.md](./v0.4/flow-scheduling.md)** ⏰ SCHEDULING
-   - Flow scheduling with cron patterns
+8. **[v0.4/flow-scheduling.md](./v0.4/flow-scheduling.md)** ⏰ SCHEDULING
+   - Flow scheduling with cron patterns (v0.4 - replaced by v0.5 triggers)
    - Delay-based scheduling
    - Schedule management API
    - UI integration
 
-4. **[v0.4/quick-reference.md](./v0.4/quick-reference.md)** 📖 QUICK REFERENCE
+9. **[v0.4/quick-reference.md](./v0.4/quick-reference.md)** 📖 QUICK REFERENCE
    - API overview
    - Key concepts
    - Common patterns
    - Code examples
 
-5. **[roadmap.md](./roadmap.md)** 🗺️ FUTURE
+10. **[roadmap.md](./roadmap.md)** 🗺️ FUTURE
    - Next steps and vision
    - Planned features
    - Architecture improvements
    - Migration paths
 
-## 🎯 What's in v0.4
-
-### Current Features
-
-✅ **Stream-based Event Sourcing** - Single stream per flow run with full event history  
-✅ **Real-time Distribution** - Redis Pub/Sub + WebSocket for <100ms update latency  
-✅ **Flow Orchestration** - Define multi-step workflows with TypeScript  
-✅ **Flow Scheduling** - Cron patterns and delay-based scheduling with BullMQ repeatable jobs  
-✅ **BullMQ Integration** - Reliable queue management with retry support  
-✅ **Worker Context** - Rich runtime context with state, logging, and event emission  
-✅ **Registry System** - Auto-discovery of queues and flows from filesystem  
-✅ **Horizontal Scaling** - Stateless architecture, scale workers independently  
-✅ **Development UI** - Real-time monitoring with Vue Flow diagrams and WebSocket updates  
-✅ **State Management** - Per-flow state with Redis backend  
-✅ **Metrics & Logging** - Integrated observability  
-
 ## 🚀 Quick Start
 
-### 1. Read Current Implementation (15 minutes)
+### 1. Understand the Vision (10 minutes)
 
-Start with [v0.4/current-implementation.md](./v0.4/current-implementation.md) for architecture overview and [v0.4/event-schema.md](./v0.4/event-schema.md) for event details.
+Read [UNIFIED-ARCHITECTURE.md](./UNIFIED-ARCHITECTURE.md) to understand where we're going with the event-based architecture.
 
-### 2. Learn Flow Scheduling (5 minutes)
+### 2. Learn Current Implementation (15 minutes)
 
-See [v0.4/flow-scheduling.md](./v0.4/flow-scheduling.md) to schedule flows with cron patterns or delays.
+Start with [v0.4/current-implementation.md](./v0.4/current-implementation.md) for the current architecture and [v0.4/event-schema.md](./v0.4/event-schema.md) for event details.
 
-### 3. Check the Roadmap (5 minutes)
+### 3. Explore Planned Features (15 minutes)
 
-See [roadmap.md](./roadmap.md) to understand planned features and improvements.
+- **v0.5**: [Universal trigger system](./v0.5/trigger-system.md) - Events, webhooks, schedules, await patterns
+- **v0.6**: [State as events](./v0.6/combined-state-management.md) - Single source of truth for flow data
+- **v0.8**: [Registry as events](./v0.8/distributed-architecture.md) - Distributed architecture with event-based discovery
+- **v0.9**: [Logs as events](./v0.9/logging-enhancements.md) - Complete timeline with unified logging
 
-### 4. Use the Quick Reference
+### 4. Check the Roadmap (5 minutes)
 
-Use [v0.4/quick-reference.md](./v0.4/quick-reference.md) for API patterns and common use cases.
+See [roadmap.md](./roadmap.md) to understand the full vision and timeline.
 
-## 🏗️ Architecture Overview
+## 🏗️ Architecture Evolution
+
+### v0.4 (Current): Foundation
+
+```
+Redis Streams (Events) + Redis KV (State) + Custom Registry + External Logs
+```
+
+**What we have**:
+- Stream-based event sourcing for flows
+- Real-time WebSocket updates
+- BullMQ for queue management
+- Flow orchestration and scheduling
+- Basic cron-based triggers
+
+### v0.5-v0.9 (Planned): Unified EventStore
+
+```
+Redis Streams (Everything is an Event)
+├─ nq:flow:{runId}  → events + state + logs + trigger awaits
+├─ nq:registry      → instances + workers
+└─ nq:triggers      → trigger registry + fired events
+```
+
+**What we're building**:
+- Universal trigger system (v0.5) - Events, webhooks, schedules, await patterns
+- State as events (v0.6) - Eliminate separate state storage
+- Registry as events (v0.8) - Always-on distributed architecture  
+- Logs as events (v0.9) - Complete timeline in single stream
+
+**Benefits**:
+- ✅ Single source of truth
+- ✅ Complete audit trail
+- ✅ Time travel debugging
+- ✅ 90% fewer Redis keys
+- ✅ Simpler architecture
+- ✅ Better performance (cache layer)
+- ✅ Human-in-the-loop patterns (approvals, delays)
+└─ nq:registry      → instances + workers
+```
+
+**What we're building**:
+- State as events (v0.6) - Eliminate separate state storage
+- Registry as events (v0.8) - Always-on distributed architecture  
+- Logs as events (v0.9) - Complete timeline in single stream
+
+**Benefits**:
+- ✅ Single source of truth
+- ✅ Complete audit trail
+- ✅ Time travel debugging
+- ✅ 90% fewer Redis keys
+- ✅ Simpler architecture
+- ✅ Better performance (cache layer)
 
 ```
 ┌─────────────┐         ┌──────────────┐        ┌─────────────────┐

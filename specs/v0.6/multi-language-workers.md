@@ -1,69 +1,84 @@
-# Multi-Language Workers with Child Process Manager
+# Multi-Language Workers (Python & Isolated Node.js)
 
-> **Version**: v0.6.0  
+> **Version**: v0.6.5  
 > **Status**: 📋 Planning  
-> **Last Updated**: 2025-10-30
+> **Last Updated**: 2025-11-05  
+> **Integrates With**: v0.6 (Worker Execution), v0.8 (Registry)
 
 ## Goal
 
-Enable Python and isolated Node.js workers via child processes, using standard queue management.
+Enable Python and isolated Node.js workers via child processes, integrated into the WorkerManager architecture.
 
 ## Architecture
 
-Instead of maintaining a separate process pool, we spawn child processes per job execution. This provides:
-- **Process Isolation**: Each job runs in its own process
-- **Standard Queue Management**: Uses existing BullMQ/PgBoss without changes
-- **Multi-Language**: Supports Python, Node.js, or any executable
-- **Resource Efficiency**: Spawn on demand, cleanup after completion
-- **Simpler Design**: No separate process pool to manage
+Multi-language support is implemented as an **extension of WorkerManager**, not a separate system. Workers are registered normally via the registry, and the WorkerManager transparently spawns child processes when needed.
+
+### Key Design Principles
+
+- **Integrated with WorkerManager**: Multi-runtime workers use the same registration flow as standard Node.js workers
+- **Transparent to Application**: Worker code doesn't know if it's running in-process or as child process
+- **Same Context API**: Python workers have same `ctx.state`, `ctx.logger`, `ctx.flow` as Node.js workers
+- **Child Process per Job**: Spawn on demand, cleanup after completion (no process pools)
+- **RPC Communication**: Context methods (state, logger, emit) forwarded via JSON-RPC
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                   BullMQ / PgBoss Queue                      │
-│              (Standard Node.js Queue System)                 │
+│                 Application Layer (Registry)                 │
+│  server/queues/hello.ts         (runtime: 'node')            │
+│  server/queues/ml/train.py      (runtime: 'python')          │
+│  server/queues/heavy/compute.ts (runtime: 'node-isolated')   │
 └────────────────────────┬─────────────────────────────────────┘
-                         │
-                         │ Job Picked Up
                          │
                          ▼
 ┌──────────────────────────────────────────────────────────────┐
-│              Worker Wrapper (Node.js Parent)                 │
-│                                                              │
-│  ┌────────────────────────────────────────────────────┐    │
-│  │  Process Manager                                   │    │
-│  │  - Spawn child process (Python/Node.js)           │    │
-│  │  - Setup RPC communication                         │    │
-│  │  - Forward context (state, logger, emit)          │    │
-│  │  - Handle timeouts & errors                       │    │
-│  │  - Collect result                                  │    │
-│  │  - Cleanup process                                 │    │
-│  └────────────────────────────────────────────────────┘    │
-│                                                              │
+│           Nitro Plugin (plugins/workers.ts)                  │
+│  Registers all workers via WorkerManager                     │
 └────────────────────────┬─────────────────────────────────────┘
-                         │
-                         │ Spawn & RPC
                          │
                          ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                   Child Process                              │
+│                    WorkerManager                             │
+│  (BullMQ/Memory/File - all support multi-runtime)           │
 │                                                              │
-│  ┌──────────────┐     OR      ┌──────────────┐            │
-│  │   Python     │              │   Node.js    │            │
-│  │   Worker     │              │   Worker     │            │
-│  │              │              │  (isolated)  │            │
-│  └──────────────┘              └──────────────┘            │
-│                                                              │
-│  - Receives job via RPC                                     │
-│  - Has full context (state, logger, emit)                   │
-│  - Executes worker code                                     │
-│  - Returns result via RPC                                   │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+│  registerWorker(queue, job, handler, opts)                  │
+│  • Check opts.runtime                                       │
+│  • If 'python' or 'node-isolated':                          │
+│    → Wrap handler in ChildProcessRunner                     │
+│  • Register wrapped handler                                 │
+└────────────────────────┬─────────────────────────────────────┘
+                         │
+         ┌───────────────┴───────────────┐
+         │                               │
+         ▼                               ▼
+┌────────────────────┐         ┌─────────────────────────┐
+│  Standard Node.js  │         │  Child Process Runner   │
+│  Handler           │         │                         │
+│  (in-process)      │         │  Spawns:               │
+│                    │         │  • Python process      │
+│  • Direct call     │         │  • Isolated Node.js    │
+│  • Same thread     │         │                         │
+│                    │         │  • RPC communication   │
+│                    │         │  • Context forwarding  │
+└────────────────────┘         └─────────────────────────┘
+```
+
+### Flow Comparison
+
+**Standard Node.js Worker**:
+```
+Job enqueued → Worker dispatcher → Handler executes (in-process) → Result returned
+```
+
+**Python/Isolated Worker**:
+```
+Job enqueued → Worker dispatcher → ChildProcessRunner spawns process
+            → RPC setup → Handler executes (child process) 
+            → Context calls via RPC → Result via RPC → Process cleanup → Result returned
 ```
 
 ## Worker Registration
 
-Workers are registered normally, with a `runtime` field indicating execution environment:
+Workers declare their runtime in config, registry detects it, WorkerManager handles execution:
 
 ### Python Worker
 
@@ -75,7 +90,7 @@ async def handler(job: dict, ctx: RunContext):
     """Train ML model with data from previous step"""
     data = job['data']
     
-    # Full context support via RPC
+    # Full context support via RPC (transparent to worker)
     ctx.logger.info('Training model', {'samples': len(data['samples'])})
     
     # State management (RPC to parent)
@@ -97,7 +112,7 @@ async def handler(job: dict, ctx: RunContext):
 
 # Worker config
 config = define_config({
-    'runtime': 'python',              # Indicates Python child process
+    'runtime': 'python',              # ← Indicates Python child process
     'concurrency': 2,
     'flow': {
         'role': 'step',
@@ -107,9 +122,12 @@ config = define_config({
 })
 ```
 
+**Key Point**: Worker code is identical to how it would be if running in-process. The `runtime: 'python'` in config triggers child process execution transparently.
+```
+
 ### Isolated Node.js Worker
 
-Runs in child process:
+Runs in child process for isolation (heavy computation, unreliable packages):
 
 ```typescript
 // server/queues/heavy-processing/compute.ts
@@ -123,7 +141,7 @@ export default defineQueueWorker(async (job, ctx) => {
 })
 
 export const config = defineQueueConfig({
-  runtime: 'node-isolated',           // Run in child process
+  runtime: 'node-isolated',           // ← Run in child process
   timeout: 600000,                    // 10 minute timeout
   concurrency: 1,
   flow: {
@@ -136,7 +154,7 @@ export const config = defineQueueConfig({
 
 ### Standard Node.js Worker
 
-Runs in worker pool:
+Runs in worker pool (default, no child process):
 
 ```typescript
 // server/queues/tasks/send-email.ts
@@ -146,64 +164,64 @@ export default defineQueueWorker(async (job, ctx) => {
 })
 
 export const config = defineQueueConfig({
-  // No runtime specified = runs in standard worker pool
+  // No runtime specified = runs in standard worker pool (in-process)
   concurrency: 10
 })
 ```
 
-## Worker Wrapper Implementation
+## ChildProcessRunner Implementation
 
-The wrapper manages child process lifecycle:
+The WorkerManager wraps multi-runtime handlers with ChildProcessRunner:
 
 ```typescript
-// src/runtime/server/worker/childProcessRunner.ts
-import { spawn } from 'child_process'
-import { JSONRPCServer, JSONRPCClient } from 'json-rpc-2.0'
+// src/runtime/server/worker/runner/child-process.ts
 
+import { spawn, ChildProcess } from 'child_process'
+import { JSONRPCServer, JSONRPCClient } from 'json-rpc-2.0'
+import type { WorkerHandler, RunContext } from '../types'
+
+/**
+ * ChildProcessRunner: Executes worker in isolated child process
+ * 
+ * Wraps a handler to run in child process with RPC communication
+ * Provides transparent context forwarding (state, logger, flow)
+ */
 export class ChildProcessRunner {
   private process: ChildProcess | null = null
   private rpcServer = new JSONRPCServer()
-  private rpcClient = new JSONRPCClient((request) => {
-    // Send RPC request to child process
-    this.process?.stdin?.write(JSON.stringify(request) + '\n')
-  })
+  private rpcClient: JSONRPCClient
   
   constructor(
     private workerPath: string,
     private runtime: 'python' | 'node-isolated',
-    private context: WorkerContext
+    private timeout: number = 300000 // 5 minutes default
   ) {
-    this.setupRPCMethods()
-  }
-  
-  private setupRPCMethods() {
-    // Child process can call these via RPC
-    this.rpcServer.addMethod('ctx.state.get', async (params) => {
-      return await this.context.state.get(params.key)
-    })
-    
-    this.rpcServer.addMethod('ctx.state.set', async (params) => {
-      return await this.context.state.set(params.key, params.value)
-    })
-    
-    this.rpcServer.addMethod('ctx.logger.log', async (params) => {
-      this.context.logger.log(params.level, params.message, params.metadata)
-    })
-    
-    this.rpcServer.addMethod('ctx.emit', async (params) => {
-      return await this.context.emit(params.event)
+    // RPC client sends requests to child process
+    this.rpcClient = new JSONRPCClient((request) => {
+      if (this.process?.stdin) {
+        this.process.stdin.write(JSON.stringify(request) + '\n')
+      }
     })
   }
   
-  async execute(job: Job): Promise<any> {
+  /**
+   * Create a wrapped handler that executes in child process
+   * This handler is registered with WorkerManager like any other handler
+   */
+  createHandler(): WorkerHandler {
+    return async (input: any, ctx: RunContext) => {
+      return this.execute(input, ctx)
+    }
+  }
+  
+  private async execute(input: any, ctx: RunContext): Promise<any> {
+    // Setup RPC methods (context forwarding)
+    this.setupRPCMethods(ctx)
+    
     // Spawn child process
     this.process = spawn(
       this.runtime === 'python' ? 'python3' : 'node',
-      [
-        this.runtime === 'python' 
-          ? this.workerPath 
-          : '-e', `require('${this.workerPath}').default`
-      ],
+      this.getProcessArgs(),
       {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
@@ -213,8 +231,61 @@ export class ChildProcessRunner {
       }
     )
     
-    // Setup RPC communication
-    this.process.stdout?.on('data', (data) => {
+    // Setup communication
+    this.setupProcessIO()
+    
+    try {
+      // Send job to child process via RPC
+      const result = await Promise.race([
+        this.rpcClient.request('execute', {
+          job: input,
+          context: {
+            jobId: ctx.jobId,
+            queue: ctx.queue,
+            flowId: ctx.flowId,
+            flowName: ctx.flowName,
+            stepName: ctx.stepName,
+            stepId: ctx.stepId,
+            attempt: ctx.attempt
+          }
+        }),
+        this.createTimeout()
+      ])
+      
+      return result
+    } finally {
+      // Cleanup
+      await this.cleanup()
+    }
+  }
+  
+  private setupRPCMethods(ctx: RunContext) {
+    // Child process can call these via RPC
+    
+    this.rpcServer.addMethod('ctx.state.get', async (params: { key: string }) => {
+      return await ctx.state.get(params.key)
+    })
+    
+    this.rpcServer.addMethod('ctx.state.set', async (params: { key: string, value: any, opts?: any }) => {
+      return await ctx.state.set(params.key, params.value, params.opts)
+    })
+    
+    this.rpcServer.addMethod('ctx.state.delete', async (params: { key: string }) => {
+      return await ctx.state.delete(params.key)
+    })
+    
+    this.rpcServer.addMethod('ctx.logger.log', async (params: { level: string, message: string, metadata?: any }) => {
+      ctx.logger.log(params.level as any, params.message, params.metadata)
+    })
+    
+    this.rpcServer.addMethod('ctx.flow.emit', async (params: { trigger: string, payload: any }) => {
+      return await ctx.flow.emit(params.trigger, params.payload)
+    })
+  }
+  
+  private setupProcessIO() {
+    // Handle stdout (RPC responses)
+    this.process!.stdout?.on('data', (data) => {
       const lines = data.toString().split('\n')
       for (const line of lines) {
         if (!line.trim()) continue
@@ -222,15 +293,15 @@ export class ChildProcessRunner {
         try {
           const message = JSON.parse(line)
           
-          // Handle RPC request from child
+          // Handle RPC request from child (context calls)
           if (message.method) {
             this.rpcServer.receive(message).then((response) => {
-              if (response) {
-                this.process?.stdin?.write(JSON.stringify(response) + '\n')
+              if (response && this.process?.stdin) {
+                this.process.stdin.write(JSON.stringify(response) + '\n')
               }
             })
           }
-          // Handle RPC response to parent
+          // Handle RPC response to parent (job result)
           else if (message.result !== undefined || message.error) {
             this.rpcClient.receive(message)
           }
@@ -241,24 +312,27 @@ export class ChildProcessRunner {
       }
     })
     
-    this.process.stderr?.on('data', (data) => {
+    // Handle stderr
+    this.process!.stderr?.on('data', (data) => {
       console.error('[child error]', data.toString())
     })
-    
-    // Send job to child process via RPC
-    const result = await this.rpcClient.request('execute', {
-      job: job.data,
-      context: {
-        flowId: this.context.flowId,
-        flowName: this.context.flowName,
-        stepName: this.context.stepName
-      }
+  }
+  
+  private getProcessArgs(): string[] {
+    if (this.runtime === 'python') {
+      return [this.workerPath]
+    } else {
+      // node-isolated: Run TypeScript file via ts-node or direct node
+      return ['-r', 'tsx/cjs', this.workerPath]
+    }
+  }
+  
+  private createTimeout(): Promise<never> {
+    return new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Worker timeout after ${this.timeout}ms`))
+      }, this.timeout)
     })
-    
-    // Cleanup
-    await this.cleanup()
-    
-    return result
   }
   
   private async cleanup() {
@@ -269,6 +343,72 @@ export class ChildProcessRunner {
   }
 }
 ```
+
+## WorkerManager Integration
+
+WorkerManager detects `runtime` in config and wraps handler automatically:
+
+```typescript
+// src/runtime/server/worker/adapters/bullmq.ts (extended)
+
+export class BullMQWorkerManager implements WorkerManager {
+  async registerWorker(
+    queueName: string,
+    jobName: string,
+    handler: WorkerHandler,
+    opts?: WorkerOptions
+  ): Promise<void> {
+    const runtime = opts?.runtime || 'node'
+    
+    // Wrap handler if multi-runtime
+    const finalHandler = (runtime === 'python' || runtime === 'node-isolated')
+      ? this.wrapChildProcessHandler(handler, runtime, opts)
+      : handler
+    
+    // Register wrapped/original handler with BullMQ
+    // (same code as before)
+    let info = this.registeredWorkers.get(queueName)
+    if (info) {
+      info.handlers.set(jobName, finalHandler)
+      return
+    }
+    
+    // ... create Worker with dispatcher ...
+  }
+  
+  private wrapChildProcessHandler(
+    handler: WorkerHandler,
+    runtime: 'python' | 'node-isolated',
+    opts?: WorkerOptions
+  ): WorkerHandler {
+    // Get worker path from registry
+    const registry = $useQueueRegistry() as any
+    const workerMeta = registry.workers.find((w: any) => 
+      w.queue?.name === queueName && w.flow?.step === jobName
+    )
+    
+    if (!workerMeta?.absPath) {
+      throw new Error(`Cannot find worker path for ${queueName}/${jobName}`)
+    }
+    
+    // Create ChildProcessRunner
+    const runner = new ChildProcessRunner(
+      workerMeta.absPath,
+      runtime,
+      opts?.timeout || 300000
+    )
+    
+    // Return wrapped handler
+    return runner.createHandler()
+  }
+}
+```
+
+**Key Points**:
+- ✅ Worker registration flow is identical for all runtimes
+- ✅ WorkerManager transparently wraps multi-runtime handlers
+- ✅ Same dispatcher pattern works for all handlers
+- ✅ Child process execution is hidden from application code
 
 ## RPC Protocol
 
@@ -480,7 +620,7 @@ export default defineNuxtConfig({
 
 ## Registry Integration
 
-The registry scanner detects the runtime and registers accordingly:
+The registry scanner detects runtime from config and passes it to WorkerManager:
 
 ```typescript
 // Registry scans Python files
@@ -488,33 +628,48 @@ The registry scanner detects the runtime and registers accordingly:
   kind: 'py',
   name: 'train_model',
   path: '/server/queues/ml-flow/train_model.py',
-  runtime: 'python',
-  config: {
+  absPath: '/full/path/to/server/queues/ml-flow/train_model.py',
+  worker: {
+    runtime: 'python',  // ← Detected from config
     concurrency: 2,
-    timeout: 300000,
-    flow: { ... }
-  }
+    timeout: 300000
+  },
+  config: { ... }
 }
 
+// Nitro plugin registration:
+const workerManager = getWorkerManager()
+await workerManager.registerWorker(
+  'ml-flow',              // queue
+  'train_model',          // job name
+  handler,                // loaded handler (Python SDK entry point)
+  {
+    runtime: 'python',    // ← Triggers child process wrapping
+    concurrency: 2,
+    timeout: 300000
+  }
+)
+
 // When job is processed:
-// 1. BullMQ picks up job
-// 2. Worker wrapper sees runtime: 'python'
-// 3. Spawns child process: python3 train_model.py
-// 4. RPC communication for context
-// 5. Collect result and complete job
+// 1. Queue picks up job (BullMQ/Memory/File)
+// 2. Dispatcher routes to handler
+// 3. Handler is ChildProcessRunner (wrapped)
+// 4. Spawns: python3 /full/path/to/train_model.py
+// 5. RPC communication for context
+// 6. Collect result and complete job
 ```
 
 ## Benefits
 
-✅ **Standard Queue System**: Uses BullMQ/PgBoss without modification  
-✅ **Process Isolation**: Each job in own process  
-✅ **Multi-Language**: Python, Node.js, or any runtime  
+✅ **Integrated Architecture**: Multi-runtime support is part of WorkerManager, not separate system  
+✅ **Transparent Execution**: Application code doesn't know if handler runs in-process or child process  
+✅ **Standard Queue System**: Uses BullMQ/Memory/File without modification  
+✅ **Process Isolation**: Each job in own process (Python/isolated Node.js)  
+✅ **Full Context**: State, logger, flow engine via RPC  
 ✅ **Resource Efficient**: Spawn per job, no idle processes  
-✅ **Full Context**: State, logger, emit via RPC  
-✅ **Simple Design**: No separate process pool  
-✅ **Works with Nitro Tasks**: Can spawn isolated Node.js processes  
 ✅ **Error Handling**: Process crashes don't affect other jobs  
-✅ **Timeout Control**: Kill processes that run too long
+✅ **Timeout Control**: Kill processes that run too long  
+✅ **Same Events**: step.started/completed/failed work identically for all runtimes
 
 ## Use Cases
 
@@ -531,3 +686,52 @@ The registry scanner detects the runtime and registers accordingly:
 - Unreliable 3rd party packages
 - Experimental code that might crash
 - Long-running operations
+
+## Implementation Checklist
+
+- [ ] Create `ChildProcessRunner` class
+- [ ] Add RPC communication layer (json-rpc-2.0)
+- [ ] Extend BullMQWorkerManager with child process wrapping
+- [ ] Extend MemoryWorkerManager with child process wrapping
+- [ ] Create Python SDK (nuxt_queue package)
+  - [ ] RPC client/server
+  - [ ] RunContext implementation
+  - [ ] Worker entry point
+- [ ] Update registry to detect Python files
+- [ ] Update worker plugin to pass runtime to WorkerManager
+- [ ] Add timeout handling
+- [ ] Add error handling and cleanup
+- [ ] Write tests for child process execution
+- [ ] Write tests for RPC communication
+- [ ] Document Python SDK usage
+
+## Configuration
+
+```typescript
+// nuxt.config.ts
+export default defineNuxtConfig({
+  queue: {
+    runtimes: {
+      python: {
+        enabled: true,
+        command: 'python3',           // Python executable
+        venv: '.venv',                // Optional virtualenv path
+        timeout: 300000,              // 5 minute default timeout
+      },
+      'node-isolated': {
+        enabled: true,
+        command: 'node',
+        timeout: 600000,              // 10 minute default timeout
+      }
+    }
+  }
+})
+```
+
+## Future Enhancements
+
+- **Worker Pools**: Maintain pool of Python processes to avoid spawn overhead
+- **Hot Reload**: Reload Python worker code without process restart
+- **Binary Protocol**: Replace JSON-RPC with faster binary protocol (MessagePack)
+- **Streaming**: Support streaming responses from child processes
+- **Other Languages**: Go, Ruby, Rust workers using same pattern
