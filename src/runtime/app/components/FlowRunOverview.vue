@@ -1,71 +1,74 @@
 <template>
-  <div class="space-y-6 px-6 py-6">
-    <!-- Run Stats -->
-    <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <div class="text-xs text-gray-500 mb-1">
-            Status
-          </div>
-          <div class="flex items-center gap-2">
-            <div
-              class="w-2 h-2 rounded-full"
-              :class="getStatusColor(runStatus)"
-            />
-            <span class="text-sm font-medium capitalize">
-              {{ runStatus || 'unknown' }}
-            </span>
-          </div>
+  <div class="flex flex-col h-full">
+    <!-- Fixed Header with Run Stats -->
+    <div class="px-6 py-[17px] border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 shrink-0">
+      <div class="flex items-center gap-4 text-xs">
+        <!-- Status -->
+        <div class="flex items-center gap-1.5">
+          <div
+            class="w-1.5 h-1.5 rounded-full"
+            :class="getStatusColor(runStatus)"
+          />
+          <span class="text-gray-700 dark:text-gray-300 font-medium capitalize">
+            {{ runStatus || 'unknown' }}
+          </span>
         </div>
-        <div>
-          <div class="text-xs text-gray-500 mb-1">
-            Total Steps
-          </div>
-          <div class="text-sm font-medium">
-            {{ steps.length }}
-          </div>
+
+        <!-- Divider -->
+        <div class="w-px h-3 bg-gray-300 dark:bg-gray-700" />
+
+        <!-- Total Steps -->
+        <div class="flex items-center gap-1.5">
+          <UIcon
+            name="i-lucide-layers"
+            class="w-3 h-3 text-gray-500"
+          />
+          <span class="text-gray-700 dark:text-gray-300">
+            {{ steps.length }} {{ steps.length === 1 ? 'step' : 'steps' }}
+          </span>
         </div>
-        <div>
-          <div class="text-xs text-gray-500 mb-1">
-            Started
-          </div>
-          <div class="text-sm font-medium">
-            {{ startedAt ? formatTime(startedAt) : '—' }}
-          </div>
+
+        <!-- Divider -->
+        <div class="w-px h-3 bg-gray-300 dark:bg-gray-700" />
+
+        <!-- Started -->
+        <div class="flex items-center gap-1.5">
+          <UIcon
+            name="i-lucide-clock"
+            class="w-3 h-3 text-gray-500"
+          />
+          <span class="text-gray-600 dark:text-gray-400">
+            {{ startedAt ? formatTime(startedAt) : 'Not started' }}
+          </span>
         </div>
-        <div>
-          <div class="text-xs text-gray-500 mb-1">
-            Duration
-          </div>
-          <div class="text-sm font-medium">
+
+        <!-- Divider -->
+        <div class="w-px h-3 bg-gray-300 dark:bg-gray-700" />
+
+        <!-- Duration -->
+        <div class="flex items-center gap-1.5">
+          <UIcon
+            name="i-lucide-timer"
+            class="w-3 h-3 text-gray-500"
+          />
+          <span class="text-gray-600 dark:text-gray-400">
             {{ getDuration(startedAt, completedAt) }}
-          </div>
+          </span>
         </div>
       </div>
     </div>
 
-    <!-- Steps List -->
-    <div>
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-sm font-medium">
-          Steps
-        </h3>
-        <span class="text-xs text-gray-500">
-          {{ steps.length }} total
-        </span>
-      </div>
-
+    <!-- Scrollable Steps List -->
+    <div class="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
       <div
         v-if="steps.length === 0"
-        class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-12 text-center"
+        class="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500"
       >
         <UIcon
           name="i-lucide-layers"
-          class="w-8 h-8 mx-auto text-gray-300 mb-2"
+          class="w-12 h-12 mb-3 opacity-50"
         />
-        <p class="text-sm text-gray-400">
-          No steps executed yet
-        </p>
+        <span class="text-sm">No steps executed yet</span>
       </div>
 
       <div
@@ -185,6 +188,8 @@
 </template>
 
 <script setup lang="ts">
+import { UIcon } from '#components'
+
 defineProps<{
   runStatus?: string
   startedAt?: string

@@ -37,7 +37,7 @@
               Runs
             </h2>
             <div class="flex items-center gap-2">
-            <UButton
+              <UButton
                 v-if="selectedFlow"
                 icon="i-lucide-play"
                 size="xs"
@@ -109,35 +109,23 @@
               <div
                 class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer"
                 :class="{ 'bg-gray-50 dark:bg-gray-900': selectedRunId === r.id }"
-                @click="selectedRunId = r.id"
+                @click="selectRun(r.id)"
               >
                 <div class="flex items-start justify-between gap-3">
                   <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2">
-                      <div class="text-xs font-mono text-gray-900 dark:text-gray-100 truncate">
-                        {{ r.id?.substring(0, 8) }}...{{ r.id?.substring(r.id?.length - 4) }}
-                      </div>
-                      <!-- Status indicator for selected run -->
-                      <FlowRunStatusBadge
-                        v-if="selectedRunId === r.id"
-                        :is-running="flowState.isRunning.value"
-                        :is-completed="flowState.isCompleted.value"
-                        :is-failed="flowState.isFailed.value"
-                        :is-reconnecting="isReconnecting"
-                      />
+                    <div class="text-xs font-mono text-gray-900 dark:text-gray-100 truncate">
+                      {{ r.id?.substring(0, 8) }}...{{ r.id?.substring(r.id?.length - 4) }}
                     </div>
                     <div class="text-xs text-gray-500 mt-1">
                       {{ formatTime(r.createdAt) }}
                     </div>
                   </div>
-                  <UButton
-                    icon="i-lucide-panels-right-bottom"
-                    size="xs"
-                    color="neutral"
-                    variant="ghost"
-                    square
-                    title="Open timeline"
-                    @click.stop="openRunTimeline(r.id)"
+                  <!-- Status badge for run -->
+                  <FlowRunStatusBadge
+                    :is-running="selectedRunId === r.id && flowState.isRunning.value"
+                    :is-completed="selectedRunId === r.id && flowState.isCompleted.value"
+                    :is-failed="selectedRunId === r.id && flowState.isFailed.value"
+                    :is-reconnecting="selectedRunId === r.id && isReconnecting"
                   />
                 </div>
               </div>
@@ -169,50 +157,56 @@
             v-if="selectedFlow"
             class="border-t border-gray-200 dark:border-gray-800 shrink-0"
           >
-            <div class="px-4 py-2 bg-gray-50 dark:bg-gray-900/50">
-              <div class="flex items-center justify-between">
-                <h3 class="text-xs font-medium text-gray-700 dark:text-gray-300">
-                  Schedules
-                </h3>
-                <UButton
-                  icon="i-lucide-chevron-down"
-                  size="xs"
-                  color="neutral"
-                  variant="ghost"
-                  square
-                  :class="{ 'rotate-180': showSchedules }"
-                  @click="showSchedules = !showSchedules"
-                />
-              </div>
-            </div>
-            <div
-              v-if="showSchedules"
-              class="max-h-48 overflow-y-auto"
+            <UAccordion
+              :items="scheduleAccordionItems"
+              :ui="{
+                root: 'w-full',
+                trigger: 'px-4 py-2 bg-gray-50 dark:bg-gray-900/50',
+                content: 'max-h-48 overflow-y-auto',
+              }"
             >
-              <FlowSchedulesList
-                v-if="selectedFlow"
-                ref="schedulesListRef"
-                :flow-name="selectedFlow"
-                class="px-4 py-3"
-                @updated="handleSchedulesUpdated"
-              />
-            </div>
+              <template #item>
+                <FlowSchedulesList
+                  v-if="selectedFlow"
+                  ref="schedulesListRef"
+                  :flow-name="selectedFlow"
+                  class="px-4 py-3"
+                  @updated="handleSchedulesUpdated"
+                />
+              </template>
+            </UAccordion>
           </div>
         </div>
 
-        <!-- Flow Diagram -->
+        <!-- Main Content Area with Tabs -->
         <div class="flex-1 bg-white dark:bg-gray-950 flex flex-col min-h-0">
-          <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
+          <div class="px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 shrink-0">
             <div class="flex items-center justify-between">
-              <h2 class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                Flow Diagram
-              </h2>
+              <UTabs
+                v-model="mainTab"
+                :items="mainTabs"
+                size="xs"
+                :ui="{
+                  root: 'gap-0',
+                  trigger: 'px-2 py-0.5',
+                }"
+              />
               <div class="flex items-center gap-2">
                 <span
                   v-if="selectedRunId"
-                  class="text-xs text-gray-500"
+                  class="text-xs text-gray-500 flex items-center gap-2"
                 >
-                  Run: {{ selectedRunId.substring(0, 8) }}...
+                  <span>Run: {{ selectedRunId.substring(0, 8) }}...</span>
+                  <div
+                    v-if="isReconnecting || (isConnected && flowState.isRunning.value)"
+                    class="flex items-center gap-1.5"
+                  >
+                    <div
+                      class="w-1.5 h-1.5 rounded-full"
+                      :class="isReconnecting ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 animate-pulse'"
+                    />
+                    <span>{{ isReconnecting ? 'Reconnecting' : 'Live' }}</span>
+                  </div>
                 </span>
                 <span
                   v-else-if="selectedFlow"
@@ -224,103 +218,59 @@
             </div>
           </div>
           <div class="flex-1 min-h-0">
+            <!-- Diagram Tab -->
             <div
-              v-if="!selectedFlow"
-              class="h-full flex items-center justify-center text-sm text-gray-400"
+              v-if="mainTab === 'diagram'"
+              class="h-full"
             >
-              Select a flow to view diagram
+              <div
+                v-if="!selectedFlow"
+                class="h-full flex items-center justify-center text-sm text-gray-400"
+              >
+                Select a flow to view diagram
+              </div>
+              <FlowDiagram
+                v-else
+                :flow="selectedFlowMeta"
+                :show-controls="true"
+                :show-background="true"
+                :step-states="diagramStepStates"
+                height-class="h-full"
+                @node-action="handleNodeAction"
+              />
             </div>
-            <FlowDiagram
-              v-else
-              :flow="selectedFlowMeta"
-              :show-controls="true"
-              :show-background="true"
-              :step-states="diagramStepStates"
-              height-class="h-full"
-              @node-action="handleNodeAction"
-            />
+
+            <!-- Timeline Tab -->
+            <div
+              v-else-if="mainTab === 'timeline'"
+              class="h-full flex gap-px bg-gray-200 dark:bg-gray-800"
+            >
+              <!-- Left: Overview -->
+              <div class="w-1/2 bg-white dark:bg-gray-950 flex flex-col min-h-0">
+                <div class="flex-1 overflow-y-auto min-h-0">
+                  <FlowRunOverview
+                    :run-status="runSnapshot.status"
+                    :started-at="runSnapshot.startedAt"
+                    :completed-at="runSnapshot.completedAt"
+                    :steps="flowState.stepList.value"
+                  />
+                </div>
+              </div>
+
+              <!-- Right: Combined Logs & Events -->
+              <div class="w-1/2 bg-white dark:bg-gray-950 flex flex-col min-h-0">
+                <FlowRunTimeline
+                  :events="timeline"
+                  :logs="flowState.state.value.logs"
+                  :is-live="isConnected"
+                  @export="exportTimelineJson"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- Timeline Slideover -->
-    <USlideover
-      v-model:open="timelineOpen"
-      :ui="{
-        body: 'p-0 sm:p-0',
-      }"
-    >
-      <template #title>
-        <div class="flex items-center justify-between w-full pr-4">
-          <div>
-            <div class="text-sm font-semibold">
-              Flow Timeline
-            </div>
-            <div class="text-xs font-mono text-gray-500 mt-0.5">
-              {{ selectedRunId.substring(0, 8) }}...{{ selectedRunId.substring(selectedRunId.length - 4) }}
-            </div>
-          </div>
-          <div
-            v-if="isReconnecting || (isConnected && flowState.isRunning.value)"
-            class="flex items-center gap-2 text-xs"
-          >
-            <div
-              class="w-2 h-2 rounded-full"
-              :class="isReconnecting ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 animate-pulse'"
-            />
-            <span class="text-gray-500">{{ isReconnecting ? 'Reconnecting' : 'Live' }}</span>
-          </div>
-          <div
-            v-else-if="flowState.isCompleted.value"
-            class="flex items-center gap-2 text-xs"
-          >
-            <div class="w-2 h-2 rounded-full bg-emerald-500" />
-            <span class="text-gray-500">Completed</span>
-          </div>
-          <div
-            v-else-if="flowState.isFailed.value"
-            class="flex items-center gap-2 text-xs"
-          >
-            <div class="w-2 h-2 rounded-full bg-red-500" />
-            <span class="text-gray-500">Failed</span>
-          </div>
-        </div>
-      </template>
-      <template #body>
-        <!-- Fixed Tabs Header -->
-        <div class="sticky top-0 z-10 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 px-6 pt-2">
-          <UTabs
-            v-model="selectedTab"
-            :items="tabs"
-          />
-        </div>
-
-        <!-- Scrollable Content Area -->
-        <div class="flex-1 overflow-y-auto overflow-x-hidden">
-          <FlowRunOverview
-            v-if="selectedTab === 'overview'"
-            :run-status="runSnapshot.status"
-            :started-at="runSnapshot.startedAt"
-            :completed-at="runSnapshot.completedAt"
-            :steps="flowState.stepList.value"
-          />
-
-          <FlowRunLogs
-            v-else-if="selectedTab === 'logs'"
-            :logs="flowState.state.value.logs"
-          />
-
-          <FlowRunTimeline
-            v-else-if="selectedTab === 'timeline'"
-            :events="timeline"
-            :is-live="isConnected"
-            @export="exportTimelineJson"
-            @clear="clearTimeline"
-          />
-        </div>
-      </template>
-    </USlideover>
 
     <!-- Start Flow Modal -->
     <UModal v-model:open="startFlowModalOpen">
@@ -407,7 +357,6 @@
 import { ref, computed, watch } from '#imports'
 import FlowDiagram from '../../components/FlowDiagram.vue'
 import FlowRunOverview from '../../components/FlowRunOverview.vue'
-import FlowRunLogs from '../../components/FlowRunLogs.vue'
 import FlowRunTimeline from '../../components/FlowRunTimeline.vue'
 import FlowRunStatusBadge from '../../components/FlowRunStatusBadge.vue'
 import FlowSchedulesList from '../../components/FlowSchedulesList.vue'
@@ -418,10 +367,10 @@ import {
   UIcon,
   UButton,
   UModal,
-  USlideover,
   UTextarea,
   UTabs,
   UDropdownMenu,
+  UAccordion,
 } from '#components'
 
 // Composables
@@ -432,7 +381,31 @@ import { useFlowRunTimeline } from '../../composables/useFlowRunTimeline'
 import { useFlowRunsPolling } from '../../composables/useFlowRunsPolling'
 
 // Navigation state (synced with URL)
-const { selectedFlow, selectedRunId, timelineOpen, selectedTab } = useFlowsNavigation()
+const { selectedFlow, selectedRunId } = useFlowsNavigation()
+
+// Main tab state (Diagram or Timeline)
+const mainTab = ref<'diagram' | 'timeline'>('diagram')
+
+// Tab configurations
+const mainTabs = computed(() => [
+  { label: 'Diagram', value: 'diagram', icon: 'i-lucide-git-branch' },
+  {
+    label: 'Timeline',
+    value: 'timeline',
+    icon: 'i-lucide-activity',
+    disabled: !selectedRunId.value,
+  },
+])
+
+// Watch for run selection changes - switch to timeline tab when a run is selected
+watch(selectedRunId, (newRunId, oldRunId) => {
+  if (newRunId && newRunId !== oldRunId) {
+    mainTab.value = 'timeline'
+  }
+  else if (!newRunId) {
+    mainTab.value = 'diagram'
+  }
+})
 
 // Get analyzed flows (with HMR support)
 const flows = useAnalyzedFlows()
@@ -464,9 +437,17 @@ const jsonError = ref('')
 const startingFlow = ref(false)
 
 // Schedules state
-const showSchedules = ref(true)
 const schedulesListRef = ref()
 const clearingHistory = ref(false)
+
+// Accordion items for schedules
+const scheduleAccordionItems = [
+  {
+    label: 'Schedules',
+    slot: 'item',
+    defaultOpen: false,
+  },
+]
 
 // Confirm dialog state
 const confirmDialogOpen = ref(false)
@@ -503,13 +484,6 @@ watch(flowInputJson, (value) => {
     jsonError.value = err instanceof Error ? err.message : 'Invalid JSON'
   }
 })
-
-// Tab configuration
-const tabs = [
-  { label: 'Overview', value: 'overview', icon: 'i-lucide-layout-dashboard' },
-  { label: 'Logs', value: 'logs', icon: 'i-lucide-file-text' },
-  { label: 'Timeline', value: 'timeline', icon: 'i-lucide-activity' },
-]
 
 // Ref for scroll container
 const runsScrollContainer = ref<HTMLElement | null>(null)
@@ -571,21 +545,13 @@ const diagramStepStates = computed(() => {
   return flowState.state.value.steps
 })
 
-// Open the timeline slideover for a run
-const openRunTimeline = async (runId: string) => {
-  // Manually trigger router navigation and wait for it
-  const router = useRouter()
-  const route = useRoute()
-
-  await router.push({
-    query: {
-      ...route.query,
-      run: runId,
-      timeline: 'true',
-    },
-  })
+// Select a run and switch to timeline view
+const selectRun = (runId: string) => {
+  selectedRunId.value = runId
+  mainTab.value = 'timeline'
 }
 
+// Timeline export function
 const exportTimelineJson = () => {
   const blob = new Blob([JSON.stringify(flowState.events.value, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -598,10 +564,6 @@ const exportTimelineJson = () => {
   URL.revokeObjectURL(url)
 }
 
-const clearTimeline = () => {
-  flowState.reset()
-}
-
 // Handle node card button actions
 const handleNodeAction = async (payload: { id: string, action: 'run' | 'logs' | 'details' }) => {
   const _stepName = payload.id.split(':')[1] // Extract step name from "entry:stepName" or "step:stepName"
@@ -612,18 +574,8 @@ const handleNodeAction = async (payload: { id: string, action: 'run' | 'logs' | 
     return
   }
 
-  switch (payload.action) {
-    case 'logs':
-      timelineOpen.value = true
-      selectedTab.value = 'logs'
-      // TODO: Add step filtering to logs view
-      break
-    
-    case 'details':
-      timelineOpen.value = true
-      selectedTab.value = 'overview'
-      break
-  }
+  // Switch to timeline view for both logs and details actions
+  mainTab.value = 'timeline'
 }
 
 const openStartFlowModal = () => {
@@ -661,9 +613,10 @@ const startFlowRun = async () => {
     startFlowModalOpen.value = false
     flowInputJson.value = '{}'
 
-    // Open the new run timeline first
+    // Select the new run and switch to timeline view
     if (result?.flowId) {
-      await openRunTimeline(result.flowId)
+      selectedRunId.value = result.flowId
+      mainTab.value = 'timeline'
     }
 
     // Then refresh runs list to show the new run
@@ -713,7 +666,7 @@ const clearFlowHistory = async () => {
 
     // Reset UI state
     selectedRunId.value = ''
-    timelineOpen.value = false
+    mainTab.value = 'diagram'
 
     // Refresh runs list (should be empty now)
     await refreshRuns()
@@ -723,7 +676,7 @@ const clearFlowHistory = async () => {
   }
   catch (err) {
     console.error('Failed to clear history:', err)
-    
+
     // Show error in confirm dialog by updating config
     confirmDialogConfig.value = {
       title: 'Error Clearing History',
