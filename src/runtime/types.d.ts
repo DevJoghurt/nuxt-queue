@@ -87,6 +87,19 @@ export interface StepFailedEvent extends StepEvent {
   }
 }
 
+export interface StepRetryEvent extends StepEvent {
+  type: 'step.retry'
+  data?: {
+    stepName: string
+    queue: string
+    error?: string
+    stack?: string
+    attempt: number
+    maxAttempts: number
+    nextAttempt: number
+  }
+}
+
 export interface LogEvent extends StepEvent {
   type: 'log'
   data: {
@@ -114,6 +127,6 @@ export interface StateEvent extends StepEvent {
   }
 }
 
-export type FlowEvent = FlowStartEvent | FlowCompletedEvent | FlowFailedEvent | StepStartedEvent | StepCompletedEvent | StepFailedEvent | LogEvent | EmitEvent | StateEvent
+export type FlowEvent = FlowStartEvent | FlowCompletedEvent | FlowFailedEvent | StepStartedEvent | StepCompletedEvent | StepFailedEvent | StepRetryEvent | LogEvent | EmitEvent | StateEvent
 
 export type EventRecord = FlowEvent

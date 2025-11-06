@@ -160,6 +160,7 @@ export function analyzeFlowCompletion(
 
   const completedSteps = new Set<string>()
   const failedSteps = new Set<string>()
+  const retriedSteps = new Map<string, number>() // Track retry attempts
   let startedAt = 0
   let completedAt = 0
 
@@ -170,21 +171,111 @@ export function analyzeFlowCompletion(
     if (event.type === 'step.completed' && 'stepName' in event) {
       completedSteps.add(event.stepName)
     }
+    if (event.type === 'step.retry' && 'stepName' in event) {
+      // Track retry attempts to distinguish from final failures
+      const currentAttempts = retriedSteps.get(event.stepName) || 0
+      retriedSteps.set(event.stepName, currentAttempts + 1)
+    }
     if (event.type === 'step.failed' && 'stepName' in event) {
+      // Only count as failed if this is NOT followed by a retry
+      // We'll check this after processing all events
       failedSteps.add(event.stepName)
     }
   }
 
+  // Remove steps from failedSteps if they were retried (not final failure)
+  // A step is only permanently failed if it has a step.failed event but no subsequent retry
+  const finalFailedSteps = new Set<string>()
+  for (const stepName of failedSteps) {
+    // Check if there was a step.failed event after the last step.retry
+    let lastRetryIndex = -1
+    let lastFailedIndex = -1
+
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i]
+      if ('stepName' in event && event.stepName === stepName) {
+        if (event.type === 'step.retry') {
+          lastRetryIndex = i
+        }
+        if (event.type === 'step.failed') {
+          lastFailedIndex = i
+        }
+      }
+    }
+
+    // If the last failed event is after the last retry, it's a final failure
+    if (lastFailedIndex > lastRetryIndex) {
+      finalFailedSteps.add(stepName)
+    }
+  }
+
   const totalSteps = allSteps.length
-  const hasFailures = failedSteps.size > 0
+  const hasFinalFailures = finalFailedSteps.size > 0
+
+  // Check if any failed step blocks the flow from completing
+  // A failed step blocks the flow if:
+  // 1. It has emits that other steps depend on (those steps can never run)
+  // 2. Other steps are waiting for those emits
+  let hasBlockingFailure = false
+
+  if (hasFinalFailures) {
+    for (const failedStepName of finalFailedSteps) {
+      const failedStepDef = flowSteps[failedStepName] as any
+
+      // Check if this failed step has emits
+      if (failedStepDef?.emits && failedStepDef.emits.length > 0) {
+        // Check if any other step depends on these emits
+        for (const [stepName, stepDef] of Object.entries(flowSteps)) {
+          const step = stepDef as any
+
+          // Skip the failed step itself
+          if (stepName === failedStepName) continue
+
+          // Check if this step subscribes to any of the failed step's emits
+          if (step.subscribes && step.subscribes.length > 0) {
+            const dependsOnFailedStep = step.subscribes.some((sub: string) => {
+              // Check if subscription matches any emit from failed step
+              // Emit names are typically "{stepName}.{eventName}"
+              return failedStepDef.emits.some((emit: string) =>
+                sub === `${failedStepName}.${emit}` || sub === emit,
+              )
+            })
+
+            if (dependsOnFailedStep && !completedSteps.has(stepName)) {
+              // This step depends on the failed step and hasn't completed
+              // So the flow is blocked
+              hasBlockingFailure = true
+              break
+            }
+          }
+        }
+      }
+
+      if (hasBlockingFailure) break
+    }
+  }
+
+  // Flow fails if there's a blocking failure
+  if (hasBlockingFailure) {
+    return {
+      status: 'failed',
+      totalSteps,
+      completedSteps: completedSteps.size,
+      startedAt,
+      completedAt: Date.now(),
+    }
+  }
+
+  // Flow completes when all steps are done (completed or failed)
+  // Failed steps without blocking emits are OK
   const allCompleted = allSteps.every(step =>
-    completedSteps.has(step) || failedSteps.has(step),
+    completedSteps.has(step) || finalFailedSteps.has(step),
   )
 
   let status: 'running' | 'completed' | 'failed' = 'running'
 
   if (allCompleted) {
-    status = hasFailures ? 'failed' : 'completed'
+    status = 'completed'
     completedAt = Date.now()
   }
 

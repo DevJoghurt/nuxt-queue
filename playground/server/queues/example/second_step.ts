@@ -32,6 +32,7 @@ export default defineQueueWorker(
     for (let i = 0; i < 5; i++) {
       ctx.logger.log('info', `Second step progress ${i + 1}/5`, { progress: i + 1 })
       await wait(2000)
+      throw new Error('Simulated error in second step')
     }
 
     // Emit data for next steps

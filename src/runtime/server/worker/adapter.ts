@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq'
 import { createBullMQProcessor, type NodeHandler } from './runner/node'
-import { useRuntimeConfig, useEventManager, useServerLogger } from '#imports'
+import { useRuntimeConfig, useServerLogger } from '#imports'
 
 // Track registered workers AND their handlers
 interface QueueWorkerInfo {
@@ -95,26 +95,12 @@ export async function registerTsWorker(queueName: string, jobName: string, handl
       stack: err.stack,
     })
 
-    // Also send as step.failed event if this is a flow job
-    // This handles errors that occur outside the handler (e.g., in dispatcher)
-    const flowId = job?.data?.flowId
-    const flowName = job?.data?.flowName || 'unknown'
-    if (flowId) {
-      const eventMgr = useEventManager()
-      eventMgr.publishBus({
-        type: 'step.failed',
-        runId: flowId,
-        flowName,
-        stepName: job.name,
-        stepId: `${flowId}__${job.name}__worker-error`,
-        data: {
-          error: err.message,
-          stack: err.stack,
-        },
-      } as any).catch(() => {
-        // ignore if event publish fails
-      })
-    }
+    // NOTE: We don't emit step.failed here because the processor in runner/node.ts
+    // already handles emitting step.retry or step.failed events based on attempt count.
+    // This 'failed' event fires for ALL failures, including retries, so emitting here
+    // would create duplicates.
+    // Only dispatcher-level errors (no handler found) should reach here without
+    // already having events emitted by the processor.
   })
 
   info = { worker, handlers }

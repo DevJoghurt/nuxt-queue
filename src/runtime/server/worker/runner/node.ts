@@ -198,8 +198,27 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
       // Determine if this is a retry or final failure
       const willRetry = !isFinalAttempt
 
+      // v0.4: Always emit step.failed for every failed attempt
+      try {
+        await eventMgr.publishBus({
+          type: 'step.failed',
+          runId: flowId || 'unknown',
+          flowName,
+          stepName: job.name,
+          stepId: stepRunId,
+          attempt,
+          data: {
+            error: String((err as any)?.message || err),
+            stack: (err as any)?.stack,
+          },
+        })
+      }
+      catch {
+        // ignore
+      }
+
+      // v0.4: If retrying, also emit step.retry event
       if (willRetry) {
-        // v0.4: Emit step.retry event
         try {
           await eventMgr.publishBus({
             type: 'step.retry' as any,
@@ -223,27 +242,7 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
           // ignore
         }
       }
-      else {
-        // v0.4: Emit step.failed event (final failure)
-        try {
-          const eventMgr = useEventManager()
-          await eventMgr.publishBus({
-            type: 'step.failed',
-            runId: flowId || 'unknown',
-            flowName,
-            stepName: job.name,
-            stepId: stepRunId,
-            attempt,
-            data: {
-              error: String((err as any)?.message || err),
-              stack: (err as any)?.stack,
-            },
-          })
-        }
-        catch {
-          // ignore
-        }
-      }
+
       throw err
     }
     // v0.4: Emit step.completed event

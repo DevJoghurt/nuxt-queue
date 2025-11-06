@@ -134,9 +134,15 @@ export default defineNuxtModule<ModuleOptions>({
     let lastCompiledRegistry = compiledSnapshot
 
     // Template filenames for reference
-    const REGISTRY_TEMPLATE = 'queue-registry.mjs'
-    const HANDLERS_TEMPLATE = 'worker-handlers.mjs'
-    const ANALYZED_FLOWS_TEMPLATE = 'analyzed-flows.mjs'
+    const REGISTRY_TEMPLATE = 'queue-registry.ts'
+    const HANDLERS_TEMPLATE = 'worker-handlers.ts'
+    const ANALYZED_FLOWS_TEMPLATE = 'analyzed-flows.ts'
+
+    // add dynamic ts files to build transpile list
+    for (const templateName of [REGISTRY_TEMPLATE, HANDLERS_TEMPLATE, ANALYZED_FLOWS_TEMPLATE] as const) {
+      const templatePath = resolve(nuxt.options.buildDir, templateName)
+      nuxt.options.build.transpile.push(templatePath)
+    }
 
     // Emit a template so changes trigger HMR/rebuilds even if only runtimeConfig changes
     addTemplate({

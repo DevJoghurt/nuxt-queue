@@ -1,27 +1,25 @@
 import type { ConfigMeta } from '../types'
-import { createJiti } from 'jiti'
+import { readFile } from 'node:fs/promises'
+import { parseModule } from 'magicast'
 
 export async function loadTsConfig(absPath: string): Promise<ConfigMeta> {
-  // Stub auto-imported helpers so requiring config doesn't throw
-  const prevDQW = (globalThis as any).defineQueueWorker
-  const prevDQC = (globalThis as any).defineQueueConfig
-  ;(globalThis as any).defineQueueWorker = (meta: any, processor: any) => processor
-  ;(globalThis as any).defineQueueConfig = (cfg: any) => cfg
-
   try {
-    const jiti = createJiti(import.meta.url, {
-      cache: false, // Disable cache
-      requireCache: false, // Also disable require cache
-      interopDefault: true,
-    })
+    // Read and parse the file using magicast (AST parsing, no execution)
+    const source = await readFile(absPath, 'utf-8')
+    const mod = parseModule(source)
 
-    // Clear any cached version of this specific file
-    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-    delete jiti.cache[absPath]
+    // Check for default export
+    const hasDefaultExport = !!mod.exports.default
 
-    const mod = await jiti.import(absPath) as any
+    // Extract the config export
+    const configExport = mod.exports.config
+    if (!configExport) {
+      return { hasDefaultExport }
+    }
 
-    const cfg = mod?.config
+    // Parse the config - it's wrapped in defineQueueConfig({ ... })
+    const cfg = extractConfigValue(configExport)
+
     const queueName = (cfg && typeof cfg.queue === 'object' && cfg.queue) ? cfg.queue?.name : undefined
 
     const isolate: any = cfg?.runner?.ts?.isolate || cfg?.runner?.isolate || cfg?.isolate
@@ -60,12 +58,64 @@ export async function loadTsConfig(absPath: string): Promise<ConfigMeta> {
       ? { ...cfg.worker }
       : undefined
 
-    const hasDefaultExport = !!(mod && mod.default)
-
     return { queueName, flow, runtype, queue: queueCfg, worker: workerCfg, hasDefaultExport }
   }
-  finally {
-    ;(globalThis as any).defineQueueWorker = prevDQW
-    ;(globalThis as any).defineQueueConfig = prevDQC
+  catch (error) {
+    throw new Error(`Failed to parse config from ${absPath}: ${error}`)
+  }
+}
+
+// Helper to extract config value from magicast proxy
+function extractConfigValue(value: any): any {
+  // If it's a magicast proxy with $ast, we need to extract the actual value
+  if (value && typeof value === 'object' && '$ast' in value) {
+    return astToValue(value.$ast)
+  }
+  return value
+}
+
+// Convert AST nodes to plain JavaScript values
+function astToValue(node: any): any {
+  if (!node) return undefined
+
+  switch (node.type) {
+    case 'CallExpression':
+      // defineQueueConfig({ ... }) - extract the first argument
+      if (node.arguments?.length > 0) {
+        return astToValue(node.arguments[0])
+      }
+      return undefined
+
+    case 'ObjectExpression':
+      return node.properties?.reduce((obj: any, prop: any) => {
+        if (prop.type === 'ObjectProperty' || prop.type === 'Property') {
+          const key = prop.key.type === 'Identifier' ? prop.key.name : prop.key.value
+          obj[key] = astToValue(prop.value)
+        }
+        return obj
+      }, {}) || {}
+
+    case 'ArrayExpression':
+      return node.elements?.map((el: any) => astToValue(el)) || []
+
+    case 'Literal':
+    case 'StringLiteral':
+    case 'NumericLiteral':
+    case 'BooleanLiteral':
+      return node.value
+
+    case 'Identifier':
+      // Can't resolve variable references
+      return undefined
+
+    case 'TemplateLiteral':
+      // Simple template without expressions
+      if (node.expressions?.length === 0 && node.quasis?.length === 1) {
+        return node.quasis[0].value.cooked
+      }
+      return undefined
+
+    default:
+      return undefined
   }
 }
