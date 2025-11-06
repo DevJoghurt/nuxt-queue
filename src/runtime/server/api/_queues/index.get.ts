@@ -1,4 +1,6 @@
-import { defineEventHandler, useRuntimeConfig, $useQueueRegistry, useQueue } from '#imports'
+import { defineEventHandler, useRuntimeConfig, $useQueueRegistry, useQueue, useServerLogger } from '#imports'
+
+const logger = useServerLogger('api-queues-index')
 
 export default defineEventHandler(async () => {
   const rc: any = useRuntimeConfig()
@@ -46,7 +48,7 @@ export default defineEventHandler(async () => {
         }
       }
       catch (err) {
-        console.error(`Failed to get counts for queue ${name}:`, err)
+        logger.error(`Failed to get counts for queue ${name}:`, { error: err })
         return {
           name,
           counts: {

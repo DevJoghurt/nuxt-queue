@@ -1,10 +1,12 @@
-import { useRuntimeConfig } from '#imports'
+import { useRuntimeConfig, useServerLogger } from '#imports'
 import { getStreamNames } from './streamNames'
 import { createRedisAdapter } from './adapters/redis/redisAdapter'
 import { createMemoryAdapter } from './adapters/memoryAdapter'
 import { createFileAdapter } from './adapters/fileAdapter'
 import type { EventStoreAdapter } from './types'
 import { createWiringRegistry } from './wiring/registry'
+
+const logger = useServerLogger('event-store-factory')
 
 export interface EventStoreInstance {
   name: string
@@ -37,10 +39,7 @@ export function getEventStoreFactory(): EventStoreFactory {
   else if (adapter === 'redis') adapterInstance = createRedisAdapter()
   else adapterInstance = createMemoryAdapter() // fallback to memory
 
-  // Debug logging
-  if (process.env.NQ_DEBUG_EVENTS === '1') {
-    console.log('[stream-store-factory] initialized', { adapter, adapterType: adapter })
-  }
+  logger.debug('Event store initialized', { adapter, adapterType: adapter })
 
   const names = getStreamNames()
   // v0.3: Wiring registry with simplified flow wiring

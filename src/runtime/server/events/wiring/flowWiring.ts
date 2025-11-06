@@ -1,7 +1,9 @@
 import type { EventStoreAdapter } from '../types'
 import type { EventRecord, EmitEvent } from '../../../types'
 import { getEventBus } from '../eventBus'
-import { useEventStore, $useAnalyzedFlows, $useQueueRegistry, useQueue } from '#imports'
+import { useServerLogger, useEventStore, $useAnalyzedFlows, $useQueueRegistry, useQueue } from '#imports'
+
+const logger = useServerLogger('flow-wiring')
 
 export interface FlowWiringDeps {
   adapter: EventStoreAdapter
@@ -113,7 +115,7 @@ async function checkAndTriggerPendingSteps(
           try {
             await enqueue(stepMeta.queue, { name: stepName, data: payload, opts: { jobId } })
 
-            console.log('[flow-wiring] triggered pending step:', {
+            logger.debug('Triggered pending step', {
               flowName,
               runId,
               step: stepName,
@@ -128,7 +130,7 @@ async function checkAndTriggerPendingSteps(
     }
   }
   catch (err) {
-    console.warn('[flow-wiring] failed to check pending steps:', {
+    logger.warn('Failed to check pending steps', {
       flowName,
       runId,
       error: (err as any)?.message,
@@ -221,12 +223,10 @@ export function createFlowWiring(deps: FlowWiringDeps) {
 
       await store.indexAdd(indexKey, flowId, timestamp, metadata)
 
-      if (process.env.NQ_DEBUG_EVENTS === '1') {
-        console.log('[flow-wiring] indexed run', { flowName, flowId, indexKey, timestamp, metadata })
-      }
+      logger.debug('Indexed run', { flowName, flowId, indexKey, timestamp, metadata })
     }
     catch (err) {
-      console.error('[flow-wiring] failed to index run:', err)
+      logger.error('Failed to index run', { error: err })
     }
   }
 
@@ -276,8 +276,15 @@ export function createFlowWiring(deps: FlowWiringDeps) {
         // Append to stream
         await adapter.append(streamName, eventData)
 
-        if (process.env.NQ_DEBUG_EVENTS === '1' || e.type === 'flow.completed' || e.type === 'flow.failed') {
-          console.log('[flow-wiring][PERSISTENCE] stored event to stream', {
+        if (e.type === 'flow.completed' || e.type === 'flow.failed') {
+          logger.info('Stored terminal event to stream', {
+            type: e.type,
+            flowName,
+            runId,
+          })
+        }
+        else {
+          logger.debug('Stored event to stream', {
             type: e.type,
             flowName,
             runId,
@@ -286,7 +293,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
         }
       }
       catch (err) {
-        console.error('[flow-wiring] ERROR persisting event:', {
+        logger.error('ERROR persisting event', {
           type: e.type,
           runId: e.runId,
           flowName: e.flowName,
@@ -338,7 +345,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
             // Use atomic increment to avoid race conditions in parallel steps
             const newCount = await store.indexIncrement(indexKey, runId, 'completedSteps', 1)
 
-            console.log('[flow-wiring] incremented completedSteps', {
+            logger.debug('Incremented completedSteps', {
               flowName,
               runId,
               stepName: 'stepName' in e ? e.stepName : 'unknown',
@@ -346,7 +353,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
             })
           }
           catch (err) {
-            console.warn('[flow-wiring] Failed to update completedSteps', {
+            logger.warn('Failed to update completedSteps', {
               flowName,
               runId,
               error: (err as any)?.message,
@@ -362,7 +369,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
           const eventName = (emitEvent.data as any)?.name || emitEvent.data?.topic
 
           if (!eventName) {
-            console.warn('[flow-wiring] emit event missing name/topic', { flowName, runId, data: emitEvent.data })
+            logger.warn('Emit event missing name/topic', { flowName, runId, data: emitEvent.data })
           }
           else {
             try {
@@ -377,7 +384,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
                   emittedEvents: [...emittedEvents, eventName],
                 })
 
-                console.log('[flow-wiring] tracked emit event', {
+                logger.debug('Tracked emit event', {
                   flowName,
                   runId,
                   name: eventName,
@@ -386,7 +393,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
               }
             }
             catch (err) {
-              console.warn('[flow-wiring] Failed to track emitted event', {
+              logger.warn('Failed to track emitted event', {
                 flowName,
                 runId,
                 event: eventName,
@@ -446,16 +453,14 @@ export function createFlowWiring(deps: FlowWiringDeps) {
                 )
 
                 if (terminalEventExists) {
-                  if (process.env.NQ_DEBUG_EVENTS === '1') {
-                    console.log('[flow-wiring][ORCHESTRATION] terminal event already exists, skipping publish', {
-                      flowName,
-                      runId,
-                      eventType,
-                    })
-                  }
+                  logger.debug('Terminal event already exists, skipping publish', {
+                    flowName,
+                    runId,
+                    eventType,
+                  })
                 }
                 else {
-                  console.log('[flow-wiring][ORCHESTRATION] publishing terminal event to bus', {
+                  logger.info('Publishing terminal event to bus', {
                     flowName,
                     runId,
                     eventType,
@@ -473,7 +478,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
             }
           }
           catch (err) {
-            console.warn('[flow-wiring] Failed to analyze flow completion', {
+            logger.warn('Failed to analyze flow completion', {
               flowName,
               runId,
               error: (err as any)?.message,
@@ -482,7 +487,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
         }
       }
       catch (err) {
-        console.error('[flowWiring] ERROR handling event:', {
+        logger.error('ERROR handling event', {
           type: e.type,
           runId: e.runId,
           flowName: e.flowName,
@@ -523,9 +528,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
 
     wired = false
 
-    if (process.env.NQ_DEBUG_EVENTS === '1') {
-      console.log('[flow-wiring] stopped')
-    }
+    logger.debug('Flow wiring stopped')
   }
 
   return { start, stop }

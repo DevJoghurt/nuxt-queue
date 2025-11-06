@@ -1,8 +1,10 @@
 import type { EventStoreAdapter, EventReadOptions, EventSubscription } from '../../types'
 import type { EventRecord } from '../../../../types'
-import { useRuntimeConfig } from '#imports'
+import { useRuntimeConfig, useServerLogger } from '#imports'
 import IORedis from 'ioredis'
 import { RedisPubSubGateway } from './redisPubSubGateway'
+
+const logger = useServerLogger('redis-adapter')
 
 function nowIso() {
   return new Date().toISOString()
@@ -130,7 +132,7 @@ export function createRedisAdapter(): EventStoreAdapter {
       await redis.publish(channel, id)
 
       if (process.env.NQ_DEBUG_EVENTS === '1') {
-        console.log('[redis-streams] appended and published', { stream, id, channel, type: (e as any).type })
+        logger.info('[redis-streams] appended and published', { stream, id, channel, type: (e as any).type })
       }
 
       const rec = { ...(e as any), id, ts, subject }
@@ -172,7 +174,7 @@ export function createRedisAdapter(): EventStoreAdapter {
       let running = true
 
       if (process.env.NQ_DEBUG_EVENTS === '1') {
-        console.log('[redis-streams] subscribing', { stream, channel })
+        logger.info('[redis-streams] subscribing', { stream, channel })
       }
 
       // Create handler for this subscription
@@ -187,7 +189,7 @@ export function createRedisAdapter(): EventStoreAdapter {
             const rec = parseFieldsToRecord(id, arr)
 
             if (process.env.NQ_DEBUG_EVENTS === '1') {
-              console.log('[redis-streams] received event', { stream, id, type: rec.type })
+              logger.info('[redis-streams] received event', { stream, id, type: rec.type })
             }
 
             onEvent(rec)
@@ -195,7 +197,7 @@ export function createRedisAdapter(): EventStoreAdapter {
         }
         catch (err) {
           if (process.env.NQ_DEBUG_EVENTS === '1') {
-            console.error('[redis-streams] message handling error:', err)
+            logger.error('[redis-streams] message handling error:', err)
           }
         }
       }

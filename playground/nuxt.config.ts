@@ -16,7 +16,10 @@ export default defineNuxtConfig({
   },
 
   queue: {
-    debug: { events: true },
+    debug: {
+      // Global log level: 'debug' | 'info' | 'warn' | 'error' | 'silent'
+      level: 'warn',
+    },
 
     // Shortcut: Configure all backends to use Redis
     store: {

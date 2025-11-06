@@ -1,8 +1,10 @@
 import { Queue, QueueEvents } from 'bullmq'
 import type { JobsOptions, Job as BullJob } from 'bullmq'
 import defu from 'defu'
-import { useRuntimeConfig, $useQueueRegistry, useEventManager } from '#imports'
+import { useServerLogger, useRuntimeConfig, $useQueueRegistry, useEventManager } from '#imports'
 import type { QueueProvider, JobInput, Job, JobsQuery, ScheduleOptions, QueueEvent, JobCounts } from '../types'
+
+const logger = useServerLogger('bullmq-adapter')
 
 interface QueueCache {
   queue: Queue
@@ -185,14 +187,14 @@ export class BullMQProvider implements QueueProvider {
       closePromises.push(
         queue.close().catch((err) => {
           if (err.code !== 'EPIPE' && !err.message?.includes('Connection is closed')) {
-            console.warn(`[BullMQProvider] Error closing queue "${queueName}":`, err.message)
+            logger.warn('Error closing queue', { queueName, error: err })
           }
         }),
       )
       closePromises.push(
         events.close().catch((err) => {
           if (err.code !== 'EPIPE' && !err.message?.includes('Connection is closed')) {
-            console.warn(`[BullMQProvider] Error closing events for queue "${queueName}":`, err.message)
+            logger.warn('Error closing events for queue', { queueName, error: err })
           }
         }),
       )

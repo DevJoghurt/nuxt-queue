@@ -51,7 +51,6 @@ export default defineEventHandler(async (event) => {
     }
   }
   catch (error) {
-    console.error('[clear-history] error:', error)
     throw createError({
       statusCode: 500,
       statusMessage: 'Failed to clear flow history',

@@ -5,13 +5,16 @@ import {
   setShuttingDown,
   clearAllPeers,
   isServerShuttingDown,
+  useServerLogger,
 } from '#imports'
+
+const logger = useServerLogger('plugin-ws-lifecycle')
 
 /**
  * Nitro plugin to handle graceful WebSocket shutdown during HMR
  */
 export default defineNitroPlugin((nitroApp) => {
-  console.log('[ws-lifecycle] WebSocket lifecycle plugin initialized')
+  logger.info('[ws-lifecycle] WebSocket lifecycle plugin initialized')
 
   // Suppress WebSocket ECONNRESET errors during shutdown
   // These are expected when we're closing connections
@@ -23,11 +26,11 @@ export default defineNitroPlugin((nitroApp) => {
 
     const peerCount = getActivePeerCount()
     if (peerCount === 0) {
-      console.log('[ws-lifecycle] No active WebSocket connections to close')
+      logger.info('[ws-lifecycle] No active WebSocket connections to close')
       return
     }
 
-    console.log(`[ws-lifecycle] Closing ${peerCount} active WebSocket connections...`)
+    logger.info(`[ws-lifecycle] Closing ${peerCount} active WebSocket connections...`)
 
     const closePromises: Promise<void>[] = []
     const peers = getActivePeers()
@@ -69,7 +72,7 @@ export default defineNitroPlugin((nitroApp) => {
 
     await Promise.all(closePromises)
     clearAllPeers()
-    console.log('[ws-lifecycle] All WebSocket connections closed')
+    logger.info('[ws-lifecycle] All WebSocket connections closed')
 
     // Reset shutdown flag after a delay
     setTimeout(() => {

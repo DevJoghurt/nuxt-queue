@@ -3,6 +3,7 @@ import {
   useQueue,
   registerWsPeer,
   unregisterWsPeer,
+  useServerLogger,
 } from '#imports'
 
 interface PeerContext {
@@ -10,6 +11,8 @@ interface PeerContext {
 }
 
 const peerContexts = new WeakMap<any, PeerContext>()
+
+const logger = useServerLogger('api-queues-ws')
 
 /**
  * Safely send a message to a peer, ignoring connection errors
@@ -73,7 +76,7 @@ function safeSend(peer: any, data: any): boolean {
  */
 export default defineWebSocketHandler({
   open(peer) {
-    console.log('[ws:queues] client connected:', peer.id)
+    logger.info('[ws:queues] client connected:', peer.id)
 
     // Register peer for graceful shutdown during HMR
     registerWsPeer(peer)
@@ -93,7 +96,7 @@ export default defineWebSocketHandler({
   async message(peer, message) {
     const context = peerContexts.get(peer)
     if (!context) {
-      console.error('[ws:queues] no context for peer:', peer.id)
+      logger.error('[ws:queues] no context for peer:', peer.id)
       return
     }
 
@@ -129,7 +132,7 @@ export default defineWebSocketHandler({
           existingUnsub()
         }
         catch (err) {
-          console.error('[ws:queues] error unsubscribing:', err)
+          logger.error('[ws:queues] error unsubscribing:', err)
         }
       }
 
@@ -165,7 +168,7 @@ export default defineWebSocketHandler({
               })
             }
             catch (err) {
-              console.error('[ws:queues] error fetching counts after event:', err)
+              logger.error('[ws:queues] error fetching counts after event:', err)
             }
           }
         }),
@@ -178,7 +181,7 @@ export default defineWebSocketHandler({
             u()
           }
           catch (err) {
-            console.error('[ws:queues] error unsubscribing:', err)
+            logger.error('[ws:queues] error unsubscribing:', err)
           }
         }
       }
@@ -195,7 +198,7 @@ export default defineWebSocketHandler({
         })
       }
       catch (err) {
-        console.error('[ws:queues] error fetching counts:', err)
+        logger.error('[ws:queues] error fetching counts:', err)
       }
 
       // Confirm subscription
@@ -226,7 +229,7 @@ export default defineWebSocketHandler({
           })
         }
         catch (err) {
-          console.error('[ws:queues] error unsubscribing:', err)
+          logger.error('[ws:queues] error unsubscribing:', err)
           safeSend(peer, {
             type: 'error',
             message: 'Failed to unsubscribe',
@@ -251,7 +254,11 @@ export default defineWebSocketHandler({
   close(peer, event) {
     const isNormalClosure = event?.code === 1000 || event?.code === 1001
     if (!isNormalClosure) {
-      console.log('[ws:queues] client disconnected:', peer.id, event?.code, event?.reason)
+      logger.info('[ws:queues] client disconnected:', {
+        peerId: peer.id,
+        code: event?.code,
+        reason: event?.reason,
+      })
     }
 
     // Unregister peer from lifecycle tracking
@@ -266,7 +273,7 @@ export default defineWebSocketHandler({
         }
         catch (err) {
           if (!isNormalClosure) {
-            console.error('[ws:queues] error unsubscribing on close:', err)
+            logger.error('[ws:queues] error unsubscribing on close:', err)
           }
         }
       }
@@ -276,7 +283,10 @@ export default defineWebSocketHandler({
   },
 
   error(peer, error) {
-    console.error('[ws:queues] error for peer:', peer.id, error)
+    logger.error('[ws:queues] error for peer:', {
+      peerId: peer.id,
+      error,
+    })
 
     // Unregister peer from lifecycle tracking
     unregisterWsPeer(peer)
@@ -289,7 +299,7 @@ export default defineWebSocketHandler({
           unsub()
         }
         catch (err) {
-          console.error('[ws:queues] error unsubscribing on error:', err)
+          logger.error('[ws:queues] error unsubscribing on error:', { error: err })
         }
       }
       context.subscriptions.clear()

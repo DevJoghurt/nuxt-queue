@@ -1,6 +1,8 @@
-import { useRuntimeConfig } from '#imports'
 import { getEventBus } from '../events/eventBus'
 import type { EventRecord } from '../../types'
+import { useServerLogger } from '#imports'
+
+const logger = useServerLogger('event-manager')
 
 export interface EventManager {
   /**
@@ -20,8 +22,6 @@ declare global {
 export function useEventManager(): EventManager {
   if (globalThis.__nq_event_manager) return globalThis.__nq_event_manager
   const bus = getEventBus()
-  const rc: any = useRuntimeConfig()
-  const DEBUG = rc?.queue?.debug?.events || process.env.NQ_DEBUG_EVENTS === '1'
 
   const publishBus: EventManager['publishBus'] = async (evt) => {
     const rec: EventRecord = {
@@ -30,9 +30,7 @@ export function useEventManager(): EventManager {
     } as EventRecord
 
     bus.publish(rec)
-    if (DEBUG) {
-      console.log('[nq][event-manager.publishBus]', { type: rec.type, runId: rec.runId })
-    }
+    logger.debug('Published event to bus', { type: rec.type, runId: rec.runId })
   }
 
   const subscribeRunId: EventManager['subscribeRunId'] = (runId: string, handler: (e: EventRecord) => void) => {

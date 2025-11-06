@@ -10,7 +10,9 @@
  * is handled by flowWiring.ts which subscribes to emit/step.completed events
  */
 
-import { defineNitroPlugin, useEventManager, $useQueueRegistry, useQueue } from '#imports'
+import { defineNitroPlugin, useEventManager, $useQueueRegistry, useQueue, useServerLogger } from '#imports'
+
+const logger = useServerLogger('plugin-flow-management')
 
 export default defineNitroPlugin((nitro) => {
   const { onType, publishBus } = useEventManager()
@@ -79,7 +81,7 @@ export default defineNitroPlugin((nitro) => {
           })
 
           if (process.env.NQ_DEBUG_EVENTS === '1') {
-            console.log('[flow-lifecycle] started new flow:', {
+            logger.info('[flow-lifecycle] started new flow:', {
               flowName: targetFlowName,
               runId: newRunId,
               entryStep: t.step,
@@ -91,7 +93,7 @@ export default defineNitroPlugin((nitro) => {
         }
       }
       catch (err) {
-        console.warn('[flow-lifecycle] failed to start flow:', {
+        logger.warn('[flow-lifecycle] failed to start flow:', {
           step: t.step,
           error: (err as any)?.message,
         })

@@ -1,7 +1,9 @@
 import type { Job as BullJob } from 'bullmq'
 import { randomUUID } from 'node:crypto'
 import { getStateProvider } from '../../state/stateFactory'
-import { useRuntimeConfig, useLogs, useFlowEngine, useEventManager } from '#imports'
+import { useRuntimeConfig, useLogs, useFlowEngine, useEventManager, useServerLogger } from '#imports'
+
+const logger = useServerLogger('node-runner')
 
 export interface RunLogger {
   log: (level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any) => void
@@ -117,7 +119,7 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
         }
       }
       catch (err: any) {
-        console.error('[scheduled-flow] Failed to start flow:', err)
+        logger.error('[scheduled-flow] Failed to start flow:', err)
         throw err
       }
     }
@@ -184,7 +186,7 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
     }
     catch (err) {
       // Log the error to console for debugging
-      console.error(`[worker] Job failed: ${job.name} (${job.id})`, {
+      logger.error(`[worker] Job failed: ${job.name} (${job.id})`, {
         queue: queueName,
         flowId,
         flowName,

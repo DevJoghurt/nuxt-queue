@@ -1,4 +1,6 @@
-import { defineEventHandler, getRouterParam, getQuery, useEventStore } from '#imports'
+import { defineEventHandler, getRouterParam, getQuery, useEventStore, useServerLogger } from '#imports'
+
+const logger = useServerLogger('api-flows-runs')
 
 /**
  * GET /api/_flows/:name/runs?limit=50&offset=0
@@ -75,7 +77,7 @@ export default defineEventHandler(async (event) => {
     }
   }
   catch (err) {
-    console.error('[flows/runs] error:', err)
+    logger.error('[flows/runs] error:', { error: err })
     return {
       error: 'Failed to list runs',
       message: err instanceof Error ? err.message : String(err),

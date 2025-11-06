@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq'
 import { createBullMQProcessor, type NodeHandler } from './runner/node'
-import { useRuntimeConfig, useEventManager } from '#imports'
+import { useRuntimeConfig, useEventManager, useServerLogger } from '#imports'
 
 // Track registered workers AND their handlers
 interface QueueWorkerInfo {
@@ -10,6 +10,8 @@ interface QueueWorkerInfo {
 
 const registeredWorkers = new Map<string, QueueWorkerInfo>()
 
+const logger = useServerLogger('worker-adapter')
+
 // Close all workers (called on HMR reload or server shutdown)
 export async function closeAllWorkers() {
   const closePromises: Promise<void>[] = []
@@ -18,7 +20,7 @@ export async function closeAllWorkers() {
       info.worker.close().catch((err) => {
         // Ignore EPIPE and connection errors during close - they're expected during HMR
         if (err.code !== 'EPIPE' && !err.message?.includes('Connection is closed')) {
-          console.warn(`[closeAllWorkers] Error closing worker for queue "${queueName}":`, err.message)
+          logger.warn('Error closing worker for queue', { queueName, error: err })
         }
       }),
     )
@@ -26,7 +28,7 @@ export async function closeAllWorkers() {
   await Promise.allSettled(closePromises)
   registeredWorkers.clear()
 
-  console.info('[closeAllWorkers] All workers closed')
+  logger.info('[closeAllWorkers] All workers closed')
 }
 
 // Register a handler for a specific job on a queue
@@ -37,14 +39,14 @@ export async function registerTsWorker(queueName: string, jobName: string, handl
   if (info) {
     // Worker already exists for this queue - just add the handler
 
-    console.info(`[registerTsWorker] Adding handler for job "${jobName}" to existing worker for queue "${queueName}"`)
+    logger.info(`[registerTsWorker] Adding handler for job "${jobName}" to existing worker for queue "${queueName}"`)
     info.handlers.set(jobName, handler)
     return info.worker
   }
 
   // Create new worker for this queue with a dispatcher
 
-  console.info(`[registerTsWorker] Creating new worker for queue: ${queueName}`)
+  logger.info(`[registerTsWorker] Creating new worker for queue: ${queueName}`)
 
   const handlers = new Map<string, NodeHandler>()
   handlers.set(jobName, handler)
@@ -54,7 +56,7 @@ export async function registerTsWorker(queueName: string, jobName: string, handl
     const handler = handlers.get(job.name)
     if (!handler) {
       const error = `[Worker] No handler registered for job "${job.name}" on queue "${queueName}". Available handlers: ${Array.from(handlers.keys()).join(', ')}`
-      console.error(error)
+      logger.error(error)
       throw new Error(error)
     }
 
@@ -74,19 +76,19 @@ export async function registerTsWorker(queueName: string, jobName: string, handl
   // Pause worker if autorun is disabled
   if (shouldPause) {
     await worker.pause()
-    console.info(`[registerTsWorker] Worker for queue "${queueName}" created but paused (autorun: false)`)
+    logger.info(`[registerTsWorker] Worker for queue "${queueName}" created but paused (autorun: false)`)
   }
   else {
-    console.info(`[registerTsWorker] Worker for queue "${queueName}" created and running`)
+    logger.info(`[registerTsWorker] Worker for queue "${queueName}" created and running`)
   }
 
   // Add error handler to catch worker-level errors
   worker.on('error', (err) => {
-    console.error(`[Worker] Error in worker for queue "${queueName}":`, err)
+    logger.error(`[Worker] Error in worker for queue "${queueName}":`, err)
   })
 
   worker.on('failed', (job, err) => {
-    console.error(`[Worker] Job failed in worker for queue "${queueName}":`, {
+    logger.error(`[Worker] Job failed in worker for queue "${queueName}":`, {
       jobId: job?.id,
       jobName: job?.name,
       error: err.message,

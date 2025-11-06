@@ -3,11 +3,14 @@ import {
   useEventStore,
   registerWsPeer,
   unregisterWsPeer,
+  useServerLogger,
 } from '#imports'
 
 interface PeerContext {
   subscriptions: Map<string, () => void> // streamName -> unsubscribe function
 }
+
+const logger = useServerLogger('api-flows-ws')
 
 const peerContexts = new WeakMap<any, PeerContext>()
 
@@ -87,7 +90,7 @@ function safeSend(peer: any, data: any): boolean {
  */
 export default defineWebSocketHandler({
   open(peer) {
-    console.log('[ws] client connected:', peer.id)
+    logger.info('[ws] client connected:', { peerId: peer.id })
 
     // Register peer for graceful shutdown during HMR
     registerWsPeer(peer)
@@ -107,7 +110,7 @@ export default defineWebSocketHandler({
   async message(peer, message) {
     const context = peerContexts.get(peer)
     if (!context) {
-      console.error('[ws] no context for peer:', peer.id)
+      logger.error('[ws] no context for peer:', { peerId: peer.id })
       return
     }
 
@@ -148,7 +151,7 @@ export default defineWebSocketHandler({
           existingUnsub()
         }
         catch (err) {
-          console.error('[ws] error unsubscribing:', err)
+          logger.error('[ws] error unsubscribing:', { error: err })
         }
       }
 
@@ -187,7 +190,7 @@ export default defineWebSocketHandler({
         })
       }
       catch (err) {
-        console.error('[ws] error sending history:', err)
+        logger.error('[ws] error sending history:', { error: err })
         safeSend(peer, {
           type: 'error',
           message: 'Failed to load history',
@@ -225,7 +228,7 @@ export default defineWebSocketHandler({
           })
         }
         catch (err) {
-          console.error('[ws] error unsubscribing:', err)
+          logger.error('[ws] error unsubscribing:', { error: err })
           safeSend(peer, {
             type: 'error',
             message: 'Failed to unsubscribe',
@@ -250,7 +253,7 @@ export default defineWebSocketHandler({
   close(peer, event) {
     const isNormalClosure = event?.code === 1000 || event?.code === 1001
     if (!isNormalClosure) {
-      console.log('[ws] client disconnected:', peer.id, event?.code, event?.reason)
+      logger.info('[ws] client disconnected:', { peerId: peer.id, code: event?.code, reason: event?.reason })
     }
 
     // Unregister peer from lifecycle tracking
@@ -266,7 +269,7 @@ export default defineWebSocketHandler({
         catch (err) {
           // Suppress errors during normal closure
           if (!isNormalClosure) {
-            console.error('[ws] error unsubscribing on close:', err)
+            logger.error('[ws] error unsubscribing on close:', { error: err })
           }
         }
       }
@@ -276,7 +279,7 @@ export default defineWebSocketHandler({
   },
 
   error(peer, error) {
-    console.error('[ws] error for peer:', peer.id, error)
+    logger.error('[ws] error for peer:', { peerId: peer.id, error })
 
     // Unregister peer from lifecycle tracking
     unregisterWsPeer(peer)
@@ -289,7 +292,7 @@ export default defineWebSocketHandler({
           unsub()
         }
         catch (err) {
-          console.error('[ws] error unsubscribing on error:', err)
+          logger.error('[ws] error unsubscribing on error:', { error: err })
         }
       }
       context.subscriptions.clear()

@@ -1,4 +1,7 @@
 import type IORedis from 'ioredis'
+import { useServerLogger } from '#imports'
+
+const logger = useServerLogger('redis-adapter')
 
 /**
  * Gateway pattern for Redis Pub/Sub
@@ -26,7 +29,7 @@ export class RedisPubSubGateway {
         }
         catch (err) {
           if (process.env.NQ_DEBUG_EVENTS === '1') {
-            console.error('[redis-pubsub-gateway] Handler error:', err)
+            logger.error('[redis-pubsub-gateway] Handler error:', err)
           }
         }
       }
@@ -45,9 +48,9 @@ export class RedisPubSubGateway {
       this.channelSubscribers.set(channel, new Set())
       // Subscribe to Redis channel if this is the first subscriber
       await this.subscriber.subscribe(channel)
-      
+
       if (process.env.NQ_DEBUG_EVENTS === '1') {
-        console.log('[redis-pubsub-gateway] Subscribed to channel:', channel)
+        logger.info('[redis-pubsub-gateway] Subscribed to channel:', channel)
       }
     }
     this.channelSubscribers.get(channel)!.add(handler)
@@ -64,9 +67,9 @@ export class RedisPubSubGateway {
           this.subscriber.unsubscribe(channel).catch(() => {
             // ignore
           })
-          
+
           if (process.env.NQ_DEBUG_EVENTS === '1') {
-            console.log('[redis-pubsub-gateway] Unsubscribed from channel:', channel)
+            logger.info('[redis-pubsub-gateway] Unsubscribed from channel:', channel)
           }
         }
       }
@@ -97,7 +100,7 @@ export class RedisPubSubGateway {
   async cleanup() {
     const channels = Array.from(this.channelSubscribers.keys())
     this.channelSubscribers.clear()
-    
+
     if (channels.length > 0) {
       await this.subscriber.unsubscribe(...channels).catch(() => {
         // ignore

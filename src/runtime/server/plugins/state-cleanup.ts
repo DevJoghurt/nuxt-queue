@@ -1,5 +1,7 @@
-import { defineNitroPlugin, useEventManager, useRuntimeConfig } from '#imports'
+import { useServerLogger, defineNitroPlugin, useEventManager, useRuntimeConfig } from '#imports'
 import { getStateProvider } from '../state/stateFactory'
+
+const logger = useServerLogger('plugin-state-cleanup')
 
 /**
  * State Cleanup Plugin
@@ -34,15 +36,23 @@ export default defineNitroPlugin(() => {
         const { keys } = await sp.list(prefix)
 
         if (keys.length > 0) {
-          await Promise.all(keys.map((k: string) => sp.delete(k.replace(prefix, ''))))
+          // Keys from list() include the namespace (e.g., 'nq:flow:123:key')
+          // We need to strip the namespace prefix before calling delete()
+          const rc: any = useRuntimeConfig()
+          const ns = rc?.queue?.state?.namespace || 'nq'
+          const nsPrefix = `${ns}:`
 
-          if (process.env.NQ_DEBUG_STATE === '1') {
-            console.log(`[state-cleanup] Cleaned up ${keys.length} state keys after flow completion (on-complete strategy)`)
-          }
+          await Promise.all(keys.map((k: string) => {
+            // Remove namespace prefix to get the actual key
+            const keyWithoutNs = k.startsWith(nsPrefix) ? k.substring(nsPrefix.length) : k
+            return sp.delete(keyWithoutNs)
+          }))
+
+          logger.info(`Cleaned up ${keys.length} state keys after flow completion`, { flowId, keys })
         }
       }
       catch (error) {
-        console.error(`[state-cleanup] Error cleaning up state after flow completion:`, error)
+        logger.error('Error cleaning up state after flow completion', { flowId, error })
       }
     }))
 
@@ -57,21 +67,27 @@ export default defineNitroPlugin(() => {
         const { keys } = await sp.list(prefix)
 
         if (keys.length > 0) {
-          await Promise.all(keys.map((k: string) => sp.delete(k.replace(prefix, ''))))
+          // Keys from list() include the namespace (e.g., 'nq:flow:123:key')
+          // We need to strip the namespace prefix before calling delete()
+          const rc: any = useRuntimeConfig()
+          const ns = rc?.queue?.state?.namespace || 'nq'
+          const nsPrefix = `${ns}:`
 
-          if (process.env.NQ_DEBUG_STATE === '1') {
-            console.log(`[state-cleanup] Cleaned up ${keys.length} state keys after flow failure (on-complete strategy)`)
-          }
+          await Promise.all(keys.map((k: string) => {
+            // Remove namespace prefix to get the actual key
+            const keyWithoutNs = k.startsWith(nsPrefix) ? k.substring(nsPrefix.length) : k
+            return sp.delete(keyWithoutNs)
+          }))
+
+          logger.info(`Cleaned up ${keys.length} state keys after flow failure`, { flowId, keys })
         }
       }
       catch (error) {
-        console.error(`[state-cleanup] Error cleaning up state after flow failure:`, error)
+        logger.error('Error cleaning up state after flow failure', { flowId, error })
       }
     }))
 
-    if (process.env.NQ_DEBUG_STATE === '1') {
-      console.log('[state-cleanup] Plugin initialized with strategy: on-complete')
-    }
+    logger.debug('Plugin initialized with strategy: on-complete')
   }
 
   // Cleanup immediately after each step completes
@@ -86,21 +102,27 @@ export default defineNitroPlugin(() => {
         const { keys } = await sp.list(prefix)
 
         if (keys.length > 0) {
-          await Promise.all(keys.map((k: string) => sp.delete(k.replace(prefix, ''))))
+          // Keys from list() include the namespace (e.g., 'nq:flow:123:key')
+          // We need to strip the namespace prefix before calling delete()
+          const rc: any = useRuntimeConfig()
+          const ns = rc?.queue?.state?.namespace || 'nq'
+          const nsPrefix = `${ns}:`
 
-          if (process.env.NQ_DEBUG_STATE === '1') {
-            console.log(`[state-cleanup] Cleaned up ${keys.length} state keys after step completion (immediate strategy)`)
-          }
+          await Promise.all(keys.map((k: string) => {
+            // Remove namespace prefix to get the actual key
+            const keyWithoutNs = k.startsWith(nsPrefix) ? k.substring(nsPrefix.length) : k
+            return sp.delete(keyWithoutNs)
+          }))
+
+          logger.info(`Cleaned up ${keys.length} state keys after step completion`, { flowId, keys })
         }
       }
       catch (error) {
-        console.error(`[state-cleanup] Error cleaning up state after step:`, error)
+        logger.error('Error cleaning up state after step', { flowId, error })
       }
     }))
 
-    if (process.env.NQ_DEBUG_STATE === '1') {
-      console.log('[state-cleanup] Plugin initialized with strategy: immediate')
-    }
+    logger.debug('Plugin initialized with strategy: immediate')
   }
 
   return {

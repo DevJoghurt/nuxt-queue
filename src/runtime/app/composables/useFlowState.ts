@@ -91,7 +91,11 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
             attempt: 1,
           }
         }
-        state.steps[stepKey].status = 'running'
+        // Don't overwrite terminal states if step.started arrives out of order
+        const currentStatus = state.steps[stepKey].status
+        if (currentStatus !== 'completed' && currentStatus !== 'failed' && currentStatus !== 'timeout') {
+          state.steps[stepKey].status = 'running'
+        }
         state.steps[stepKey].startedAt = e.ts
         state.steps[stepKey].attempt = e.attempt || state.steps[stepKey].attempt || 1
         break

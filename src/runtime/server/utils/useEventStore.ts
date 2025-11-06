@@ -1,6 +1,9 @@
 import { getEventStoreFactory } from '../events/eventStoreFactory'
 import type { EventReadOptions, EventSubscription } from '../events/types'
 import type { EventRecord } from '../../types'
+import { useServerLogger } from '#imports'
+
+const logger = useServerLogger('event-store')
 
 export function useEventStore() {
   const factory = getEventStoreFactory()
@@ -77,27 +80,19 @@ export function useEventStore() {
   }
 
   function subscribe(stream: string, handler: (e: EventRecord) => void): () => void {
-    if (process.env.NQ_DEBUG_EVENTS === '1') {
-      console.log('[use-stream-store] subscribing to', { stream })
-    }
+    logger.debug('Subscribing to stream', { stream })
     let sub: EventSubscription | null = null
     let active = true
     ;(async () => {
       try {
         sub = await factory.adapter.subscribe(stream, (e) => {
-          if (process.env.NQ_DEBUG_EVENTS === '1') {
-            console.log('[use-stream-store] event received', { stream, id: e?.id, type: e?.type })
-          }
+          logger.debug('Event received', { stream, id: e?.id, type: e?.type })
           handler(e)
         })
-        if (process.env.NQ_DEBUG_EVENTS === '1') {
-          console.log('[use-stream-store] subscription active', { stream })
-        }
+        logger.debug('Subscription active', { stream })
       }
       catch (err) {
-        if (process.env.NQ_DEBUG_EVENTS === '1') {
-          console.error('[use-stream-store] subscription error', { stream, err })
-        }
+        logger.error('Subscription error', { stream, error: err })
       }
       if (!active && sub) {
         try {

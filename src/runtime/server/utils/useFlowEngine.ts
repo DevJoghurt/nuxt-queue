@@ -1,5 +1,7 @@
-import { $useQueueRegistry, useQueue, useEventManager } from '#imports'
+import { $useQueueRegistry, useQueue, useEventManager, useServerLogger } from '#imports'
 import { randomUUID } from 'node:crypto'
+
+const logger = useServerLogger('flow-engine')
 
 export const useFlowEngine = () => {
   const registry = $useQueueRegistry()
@@ -33,7 +35,7 @@ export const useFlowEngine = () => {
     const flowName = payload?.flowName || 'unknown'
 
     if (!flowId) {
-      console.warn('[useFlowEngine] emit called without flowId, trigger may not work:', trigger)
+      logger.warn('emit called without flowId, trigger may not work', { trigger })
     }
 
     // Extract flowId/flowName from payload and store the rest as the actual emit data
@@ -51,7 +53,7 @@ export const useFlowEngine = () => {
       } as any)
     }
     catch (err) {
-      console.error('[useFlowEngine] failed to emit trigger event:', err)
+      logger.error('Failed to emit trigger event', { trigger, error: err })
     }
 
     // Return empty array since actual enqueueing happens in flows plugin
