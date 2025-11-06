@@ -49,6 +49,10 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<Omit<Mo
           pollMs: 1000,
         },
       },
+      retention: {
+        eventTTL: 604800, // 7 days
+        metadataTTL: 2592000, // 30 days
+      },
     },
   }
 

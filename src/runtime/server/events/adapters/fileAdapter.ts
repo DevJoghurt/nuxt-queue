@@ -39,7 +39,19 @@ export function createFileAdapter(): EventStoreAdapter {
   const subscribers = new Map<string, Set<(e: EventRecord) => void>>()
   const timers = new Map<string, NodeJS.Timeout>()
   const lastIds = new Map<string, string | undefined>()
-  const indices = new Map<string, Array<{ id: string, score: number }>>()
+
+  interface FileIndexEntry {
+    id: string
+    score: number
+    status?: 'running' | 'completed' | 'failed'
+    startedAt?: number
+    completedAt?: number
+    stepCount?: number
+    completedSteps?: number
+    emittedEvents?: string[]
+  }
+
+  const indices = new Map<string, FileIndexEntry[]>()
 
   const streamPath = (stream: string) => join(dirRoot, sanitize(stream) + ext)
   const indexPath = (key: string) => join(dirRoot, 'indices', sanitize(key) + '.json')
@@ -221,7 +233,7 @@ export function createFileAdapter(): EventStoreAdapter {
         // ignore if doesn't exist
       }
     },
-    async indexAdd(key: string, id: string, score: number): Promise<void> {
+    async indexAdd(key: string, id: string, score: number, metadata?: Record<string, any>): Promise<void> {
       // Load existing index from memory cache
       let data = indices.get(key)
 
@@ -231,7 +243,7 @@ export function createFileAdapter(): EventStoreAdapter {
         if (await fileExists(p)) {
           try {
             const content = await fsp.readFile(p, 'utf8')
-            data = JSON.parse(content) as Array<{ id: string, score: number }>
+            data = JSON.parse(content) as FileIndexEntry[]
           }
           catch {
             data = []
@@ -246,10 +258,10 @@ export function createFileAdapter(): EventStoreAdapter {
       // Update or add entry
       const existing = data.findIndex(entry => entry.id === id)
       if (existing >= 0) {
-        data[existing].score = score
+        data[existing] = { ...data[existing], score, ...metadata }
       }
       else {
-        data.push({ id, score })
+        data.push({ id, score, ...metadata })
       }
 
       // Persist to file
@@ -267,7 +279,7 @@ export function createFileAdapter(): EventStoreAdapter {
         if (await fileExists(p)) {
           try {
             const content = await fsp.readFile(p, 'utf8')
-            data = JSON.parse(content) as Array<{ id: string, score: number }>
+            data = JSON.parse(content) as FileIndexEntry[]
             indices.set(key, data)
           }
           catch {
@@ -285,7 +297,197 @@ export function createFileAdapter(): EventStoreAdapter {
       const offset = opts?.offset || 0
       const limit = opts?.limit || 50
 
-      return sorted.slice(offset, offset + limit)
+      return sorted.slice(offset, offset + limit).map(entry => ({
+        id: entry.id,
+        score: entry.score,
+        metadata: {
+          status: entry.status,
+          startedAt: entry.startedAt,
+          completedAt: entry.completedAt,
+          stepCount: entry.stepCount,
+          completedSteps: entry.completedSteps,
+          emittedEvents: entry.emittedEvents,
+        },
+      }))
+    },
+    async indexGet(key: string, id: string) {
+      // Load from memory cache first
+      let data = indices.get(key)
+
+      // If not in memory, try to load from file
+      if (!data) {
+        const p = indexPath(key)
+        if (await fileExists(p)) {
+          try {
+            const content = await fsp.readFile(p, 'utf8')
+            data = JSON.parse(content) as FileIndexEntry[]
+            indices.set(key, data)
+          }
+          catch {
+            data = []
+          }
+        }
+        else {
+          data = []
+        }
+      }
+
+      const entry = data.find(e => e.id === id)
+      if (!entry) return null
+
+      return {
+        id: entry.id,
+        score: entry.score,
+        metadata: {
+          status: entry.status,
+          startedAt: entry.startedAt,
+          completedAt: entry.completedAt,
+          stepCount: entry.stepCount,
+          completedSteps: entry.completedSteps,
+          emittedEvents: entry.emittedEvents,
+        },
+      }
+    },
+    async indexUpdate(key: string, id: string, metadata: Record<string, any>): Promise<boolean> {
+      // Load existing index from memory cache
+      let data = indices.get(key)
+
+      // If not in memory, try to load from file
+      if (!data) {
+        const p = indexPath(key)
+        if (await fileExists(p)) {
+          try {
+            const content = await fsp.readFile(p, 'utf8')
+            data = JSON.parse(content) as FileIndexEntry[]
+          }
+          catch {
+            data = []
+          }
+        }
+        else {
+          data = []
+        }
+        indices.set(key, data)
+      }
+
+      // Find and update entry
+      const entry = data.find(e => e.id === id)
+      if (!entry) return false
+
+      // Simple merge - no version check needed (single instance)
+      Object.assign(entry, metadata)
+
+      // Persist to file
+      const p = indexPath(key)
+      await ensureDir(dirname(p))
+      await fsp.writeFile(p, JSON.stringify(data, null, 2), 'utf8')
+
+      return true
+    },
+    async indexUpdateWithRetry(
+      key: string,
+      id: string,
+      metadata: Record<string, any>,
+      maxRetries = 3,
+    ): Promise<void> {
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const success = await this.indexUpdate!(key, id, metadata)
+
+        if (success) return
+
+        // Retry with exponential backoff
+        await new Promise(resolve => setTimeout(resolve, 10 * Math.pow(2, attempt)))
+      }
+
+      throw new Error(`Failed to update index after ${maxRetries} retries`)
+    },
+    async indexIncrement(key: string, id: string, field: string, increment = 1): Promise<number> {
+      // Load existing index from memory cache
+      let data = indices.get(key)
+
+      // If not in memory, try to load from file
+      if (!data) {
+        const p = indexPath(key)
+        if (await fileExists(p)) {
+          try {
+            const content = await fsp.readFile(p, 'utf8')
+            data = JSON.parse(content) as FileIndexEntry[]
+          }
+          catch {
+            data = []
+          }
+        }
+        else {
+          data = []
+        }
+        indices.set(key, data)
+      }
+
+      // Find entry
+      const entry = data.find(e => e.id === id)
+      if (!entry) return 0
+
+      // Increment the field
+      const currentValue = (entry as any)[field] || 0
+      const newValue = currentValue + increment
+      ;(entry as any)[field] = newValue
+
+      // Persist to file
+      const p = indexPath(key)
+      await ensureDir(dirname(p))
+      await fsp.writeFile(p, JSON.stringify(data, null, 2), 'utf8')
+
+      return newValue
+    },
+    async cleanupCompletedFlows(key: string, retentionSeconds: number): Promise<number> {
+      // Load existing index from memory cache
+      let data = indices.get(key)
+
+      // If not in memory, try to load from file
+      if (!data) {
+        const p = indexPath(key)
+        if (await fileExists(p)) {
+          try {
+            const content = await fsp.readFile(p, 'utf8')
+            data = JSON.parse(content) as FileIndexEntry[]
+          }
+          catch {
+            data = []
+          }
+        }
+        else {
+          data = []
+        }
+        indices.set(key, data)
+      }
+
+      const now = Date.now()
+      const cutoffTime = now - (retentionSeconds * 1000)
+
+      // Filter out completed/failed flows older than retention period
+      const originalLength = data.length
+      const filtered = data.filter((entry) => {
+        const isTerminal = entry.status === 'completed' || entry.status === 'failed'
+        const isOld = entry.completedAt ? entry.completedAt < cutoffTime : false
+        return !(isTerminal && isOld)
+      })
+
+      const removedCount = originalLength - filtered.length
+
+      if (removedCount > 0) {
+        indices.set(key, filtered)
+
+        // Persist to file
+        const p = indexPath(key)
+        await ensureDir(dirname(p))
+        await fsp.writeFile(p, JSON.stringify(filtered, null, 2), 'utf8')
+      }
+
+      return removedCount
+    },
+    async setMetadataTTL(_key: string, _id: string, _ttlSeconds: number): Promise<void> {
+      // File adapter doesn't use TTL - cleanup is handled by cleanupCompletedFlows
+      // This is a no-op for file storage
     },
     async close(): Promise<void> {
       for (const t of timers.values()) {

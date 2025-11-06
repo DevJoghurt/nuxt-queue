@@ -57,6 +57,14 @@ export interface FlowCompletedEvent extends BaseEvent {
   }
 }
 
+export interface FlowFailedEvent extends BaseEvent {
+  type: 'flow.failed'
+  data?: {
+    error?: string
+    stack?: string
+  }
+}
+
 export interface StepStartedEvent extends StepEvent {
   type: 'step.started'
   data?: {
@@ -106,6 +114,6 @@ export interface StateEvent extends StepEvent {
   }
 }
 
-export type FlowEvent = FlowStartEvent | FlowCompletedEvent | StepStartedEvent | StepCompletedEvent | StepFailedEvent | LogEvent | EmitEvent | StateEvent
+export type FlowEvent = FlowStartEvent | FlowCompletedEvent | FlowFailedEvent | StepStartedEvent | StepCompletedEvent | StepFailedEvent | LogEvent | EmitEvent | StateEvent
 
 export type EventRecord = FlowEvent

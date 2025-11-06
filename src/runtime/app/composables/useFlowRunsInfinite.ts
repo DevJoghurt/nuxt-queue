@@ -4,7 +4,12 @@ import type { Ref } from 'vue'
 interface FlowRun {
   id: string
   flowName: string
+  status: 'running' | 'completed' | 'failed' | 'unknown'
   createdAt: string
+  startedAt?: string
+  completedAt?: string
+  stepCount: number
+  completedSteps: number
 }
 
 interface FlowRunsResponse {
@@ -113,7 +118,7 @@ export function useFlowRunsInfinite(flowId: Ref<string>) {
         `/api/_flows/${encodeURIComponent(flowId.value)}/runs`,
         {
           query: {
-            limit: 10, // Only check the first 10 runs
+            limit: Math.max(items.value.length, 10), // Fetch at least as many as we have loaded
             offset: 0,
             _t: Date.now(),
           },
@@ -124,25 +129,37 @@ export function useFlowRunsInfinite(flowId: Ref<string>) {
 
       const latestRunId = response.items[0]!.id
 
-      // Check if we have new runs
-      if (newestRunId.value && latestRunId !== newestRunId.value) {
-        // Find runs that aren't in our current list
-        const newRuns = response.items.filter(
-          newRun => !items.value.some(existingRun => existingRun.id === newRun.id),
-        )
+      // Update metadata for existing runs and add new ones
+      const updatedItems = [...items.value]
+      const newRuns: FlowRun[] = []
 
-        if (newRuns.length > 0) {
-          // Prepend new runs to the beginning
-          items.value = [...newRuns, ...items.value]
-          newestRunId.value = latestRunId
-          total.value = response.total
-          // Don't update offset - we added to the beginning
+      for (const freshRun of response.items) {
+        const existingIndex = updatedItems.findIndex(r => r.id === freshRun.id)
+
+        if (existingIndex >= 0) {
+          // Update existing run with fresh metadata
+          updatedItems[existingIndex] = freshRun
+        }
+        else {
+          // New run - add to list
+          newRuns.push(freshRun)
         }
       }
-      else if (!newestRunId.value) {
-        // First time - just track the newest
+
+      // Prepend new runs to the beginning
+      if (newRuns.length > 0) {
+        items.value = [...newRuns, ...updatedItems]
         newestRunId.value = latestRunId
-        total.value = response.total
+      }
+      else {
+        // Just update metadata
+        items.value = updatedItems
+      }
+
+      total.value = response.total
+
+      if (!newestRunId.value) {
+        newestRunId.value = latestRunId
       }
     }
     catch (err) {

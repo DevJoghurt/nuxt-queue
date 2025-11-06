@@ -8,39 +8,36 @@ export const config = defineQueueConfig({
     name: ['example-flow'],
     role: 'step',
     // This worker handles the "second_step" job name
-    step: 'second_step',
+    step: 'finish',
     // Must match the emit from first_step
-    subscribes: ['first_step.completed'],
+    subscribes: ['test.completed', 'parallel_test.completed'],
   },
 })
 
-// wait function
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
 export default defineQueueWorker(
   async (input, ctx) => {
-    // v0.4: Non-entry step - input is keyed by event name
-    const firstStepData = input['first_step.completed']
+    // v0.4: Non-entry step with multiple dependencies - input is keyed by event name
+    const testData = input['test.completed']
+    const parallelTestData = input['parallel_test.completed']
 
     ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, {
       jobId: ctx.jobId,
       flowId: ctx.flowId,
       flowName: ctx.flowName,
-      receivedData: firstStepData,
+      receivedFromTest: testData,
+      receivedFromParallelTest: parallelTestData,
     })
 
-    for (let i = 0; i < 5; i++) {
-      ctx.logger.log('info', `Second step progress ${i + 1}/5`, { progress: i + 1 })
-      await wait(2000)
-    }
-
-    // Emit data for next steps
-    await ctx.flow.emit('second_step.completed', {
-      secondStepResult: 'success',
-      fromFirstStep: firstStepData,
+    ctx.logger.log('info', 'Finish step completed - flow done!', {
+      testResult: testData?.result,
+      parallelTestResult: parallelTestData?.result,
     })
 
     return {
       ok: true,
+      summary: {
+        test: testData,
+        parallelTest: parallelTestData,
+      },
     }
   })

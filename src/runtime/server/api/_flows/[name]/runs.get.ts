@@ -10,6 +10,7 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const limit = Math.min(Number.parseInt(query.limit as string) || 50, 100)
   const offset = Math.max(Number.parseInt(query.offset as string) || 0, 0)
+  const status = query.status as 'running' | 'completed' | 'failed' | undefined
 
   // Prevent caching - always fetch fresh data
   event.node.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
@@ -42,11 +43,25 @@ export default defineEventHandler(async (event) => {
     // Read paginated results from the sorted set index
     const entries = await store.indexRead(runIndexKey, { offset, limit })
 
-    // Build response items
-    const items = entries.map(entry => ({
+    // Filter by status if provided (using metadata)
+    const filteredEntries = status
+      ? entries.filter(e => e.metadata?.status === status)
+      : entries
+
+    // Build response items with status information
+    const items = filteredEntries.map(entry => ({
       id: entry.id,
       flowName,
+      status: entry.metadata?.status || 'unknown',
       createdAt: new Date(entry.score).toISOString(),
+      startedAt: entry.metadata?.startedAt
+        ? new Date(entry.metadata.startedAt).toISOString()
+        : undefined,
+      completedAt: entry.metadata?.completedAt
+        ? new Date(entry.metadata.completedAt).toISOString()
+        : undefined,
+      stepCount: entry.metadata?.stepCount || 0,
+      completedSteps: entry.metadata?.completedSteps || 0,
     }))
 
     return {

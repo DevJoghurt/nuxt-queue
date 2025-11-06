@@ -1,14 +1,13 @@
 /**
- * Flow Lifecycle Management Plugin
+ * Flow Management Plugin
  *
- * Handles flow start events and orchestration:
- * - Processes triggers/emits and starts new flows
+ * Handles NEW flow starts from external triggers:
+ * - Processes external triggers to start new flows
  * - Emits flow.start events for new flow runs
+ * - Maps flowIds to flowNames
  *
- * Note: Flow completion tracking (flow.completed events) is NOT implemented in v0.4
- * because it requires shared state across horizontally-scaled instances.
- * This will be implemented in v0.6 with the new distributed state system.
- * As a result, the 'on-complete' cleanup strategy is not functional in v0.4.
+ * Note: Step orchestration (checking dependencies, triggering next steps)
+ * is handled by flowWiring.ts which subscribes to emit/step.completed events
  */
 
 import { defineNitroPlugin, useEventManager, $useQueueRegistry, useQueue } from '#imports'
@@ -43,9 +42,13 @@ export default defineNitroPlugin((nitro) => {
   const unsubscribes: Array<() => void> = []
 
   // ============================================================================
-  // FLOW START: Handle emit events to trigger flows
+  // FLOW START: Handle EXTERNAL triggers to start NEW flows
   // ============================================================================
+  // Note: Internal flow step triggering is handled by useFlowEngine.startFlow(): Direct programmatic flow starts (API, tests, manual triggers)
   unsubscribes.push(onType('emit', async (e: any) => {
+    // Only handle external triggers (no runId = new flow start)
+    if (e.runId) return
+
     // Extract trigger name from emit event data
     const emitName = (e.data as any)?.name
     if (!emitName) return
@@ -54,43 +57,44 @@ export default defineNitroPlugin((nitro) => {
     const triggers = Object.keys(registry?.eventIndex || {})
     if (!triggers.includes(emitName)) return
 
-    // Lazy load useQueue (only when needed, after queues plugin has initialized)
     const { enqueue } = useQueue()
-
-    // Extract runId and flowName from event
-    const runId = e.runId
-    const flowName = e.flowName
-
     const targets = (registry?.eventIndex as Record<string, Array<{ flowId: string, step: string, queue: string }>>)[emitName] || []
 
     for (const t of targets) {
-      const payload = { ...e.data, flowId: runId, flowName }
-      // Idempotent job id: <runId>__<step> (':' not allowed by BullMQ)
-      const jobId = runId ? `${runId}__${t.step}` : undefined
+      const payload = { ...e.data }
 
       try {
-        const id = await enqueue(t.queue, { name: t.step, data: payload, opts: jobId ? { jobId } : undefined })
+        // Enqueue the entry step (no jobId for new flows)
+        const id = await enqueue(t.queue, { name: t.step, data: payload })
 
-        // Emit flow.start ONLY for trigger-originated NEW runs (no existing runId)
-        // If runId already exists, this is a continuation, not a start
-        if (!runId) {
-          try {
-            const targetFlowName = getFlowNameById(String(t.flowId)) || String(t.flowId)
-            // Publish flow.start annotated to the run trace
-            const newRunId = String(id)
-            await publishBus({ type: 'flow.start', runId: newRunId, flowName: targetFlowName, data: { input: payload } })
+        // Publish flow.start event for the new flow run
+        try {
+          const targetFlowName = getFlowNameById(String(t.flowId)) || String(t.flowId)
+          const newRunId = String(id)
+          await publishBus({
+            type: 'flow.start',
+            runId: newRunId,
+            flowName: targetFlowName,
+            data: { input: payload },
+          })
+
+          if (process.env.NQ_DEBUG_EVENTS === '1') {
+            console.log('[flow-lifecycle] started new flow:', {
+              flowName: targetFlowName,
+              runId: newRunId,
+              entryStep: t.step,
+            })
           }
-          catch {
-            // best-effort
-          }
+        }
+        catch {
+          // best-effort
         }
       }
       catch (err) {
-        // Enqueue failed - likely duplicate jobId (idempotency working correctly)
-        // Silently skip; this is expected when same trigger fires multiple times
-        if (process.env.NQ_DEBUG_EVENTS === '1') {
-          console.log('[flow-lifecycle] enqueue skipped (likely duplicate):', { step: t.step, jobId, error: (err as any)?.message })
-        }
+        console.warn('[flow-lifecycle] failed to start flow:', {
+          step: t.step,
+          error: (err as any)?.message,
+        })
       }
     }
   }))

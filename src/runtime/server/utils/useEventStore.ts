@@ -9,11 +9,39 @@ export function useEventStore() {
     return await factory.adapter.read(stream, opts)
   }
 
-  async function indexAdd(key: string, id: string, score: number): Promise<void> {
+  async function indexAdd(key: string, id: string, score: number, metadata?: Record<string, any>): Promise<void> {
     if (!factory.adapter.indexAdd) {
       throw new Error('Current adapter does not support indexAdd')
     }
-    return await factory.adapter.indexAdd(key, id, score)
+    return await factory.adapter.indexAdd(key, id, score, metadata)
+  }
+
+  async function indexGet(key: string, id: string) {
+    if (!factory.adapter.indexGet) {
+      throw new Error('Current adapter does not support indexGet')
+    }
+    return await factory.adapter.indexGet(key, id)
+  }
+
+  async function indexUpdate(key: string, id: string, metadata: Record<string, any>): Promise<boolean> {
+    if (!factory.adapter.indexUpdate) {
+      throw new Error('Current adapter does not support indexUpdate')
+    }
+    return await factory.adapter.indexUpdate(key, id, metadata)
+  }
+
+  async function indexUpdateWithRetry(key: string, id: string, metadata: Record<string, any>, maxRetries?: number): Promise<void> {
+    if (!factory.adapter.indexUpdateWithRetry) {
+      throw new Error('Current adapter does not support indexUpdateWithRetry')
+    }
+    return await factory.adapter.indexUpdateWithRetry(key, id, metadata, maxRetries)
+  }
+
+  async function indexIncrement(key: string, id: string, field: string, increment?: number): Promise<number> {
+    if (!factory.adapter.indexIncrement) {
+      throw new Error('Current adapter does not support indexIncrement')
+    }
+    return await factory.adapter.indexIncrement(key, id, field, increment)
   }
 
   async function indexRead(key: string, opts?: { offset?: number, limit?: number }) {
@@ -101,6 +129,10 @@ export function useEventStore() {
     read,
     // sorted set index operations
     indexAdd,
+    indexGet,
+    indexUpdate,
+    indexUpdateWithRetry,
+    indexIncrement,
     indexRead,
     // deletion operations
     deleteStream,

@@ -36,13 +36,19 @@ export const useFlowEngine = () => {
       console.warn('[useFlowEngine] emit called without flowId, trigger may not work:', trigger)
     }
 
+    // Extract flowId/flowName from payload and store the rest as the actual emit data
+    const { flowId: _, flowName: __, ...actualPayload } = payload
+
     try {
       await eventsManager.publishBus({
         type: 'emit',
         runId: flowId || 'unknown',
         flowName,
-        data: { name: trigger, ...payload },
-      })
+        data: {
+          name: trigger,
+          payload: actualPayload, // Store actual payload separately
+        },
+      } as any)
     }
     catch (err) {
       console.error('[useFlowEngine] failed to emit trigger event:', err)

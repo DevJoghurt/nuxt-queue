@@ -11,6 +11,7 @@ export const config = defineQueueConfig({
     step: 'test',
     // Must match the emit from first_step
     subscribes: ['parallel'],
+    emits: ['test.completed'],
   },
 })
 
@@ -19,13 +20,25 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 export default defineQueueWorker(
   async (input, ctx) => {
-    // v0.4: Use flowId and flowName from context
-    ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, { jobId: ctx.jobId, flowId: ctx.flowId, flowName: ctx.flowName })
+    // v0.4: Non-entry step - input is keyed by event name
+    const parallelData = input['parallel']
+
+    ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, {
+      jobId: ctx.jobId,
+      flowId: ctx.flowId,
+      flowName: ctx.flowName,
+      receivedData: parallelData,
+    })
 
     for (let i = 0; i < 5; i++) {
       ctx.logger.log('info', `Test progress ${i + 1}/5`, { progress: i + 1 })
       await wait(2000)
     }
+
+    await ctx.flow.emit('test.completed', {
+      result: 'Test step completed',
+      fromParallel: parallelData,
+    })
 
     return {
       ok: true,

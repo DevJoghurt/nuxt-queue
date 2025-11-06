@@ -1,16 +1,16 @@
 # State Cleanup Strategies
 
-## ⚠️ Important Limitation
+## ✅ All Strategies Available
 
-**Currently, `flow.completed` and `flow.failed` events are NOT automatically emitted by the system.** This means the `on-complete` strategy won't work until flow completion tracking is implemented.
+With the implementation of flow lifecycle tracking in v0.4, all cleanup strategies are now fully functional:
 
-**Working strategies:**
-- ✅ `never` - Always works
-- ✅ `immediate` - Works (cleans after each step)
-- ✅ `ttl` - Works if your storage supports it (Redis)
-- ❌ `on-complete` - **NOT WORKING** (requires flow completion tracking)
+**Available strategies:**
+- ✅ `never` - State persists indefinitely
+- ✅ `immediate` - Cleans after each step (not recommended)
+- ✅ `on-complete` - Cleans when flow completes (recommended) ⭐
+- ✅ `ttl` - Automatic expiration via storage (Redis)
 
-**Recommendation until fixed:** Use `ttl` strategy with Redis for automatic cleanup.
+**Recommendation:** Use `on-complete` for production flows to automatically clean up state when flows finish.
 
 ---
 

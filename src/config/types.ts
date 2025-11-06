@@ -106,6 +106,21 @@ export interface EventStoreConfig {
   }
   redis?: RedisConfig
   postgres?: PostgresConfig
+  /**
+   * Retention settings for event lifecycle tracking
+   */
+  retention?: {
+    /**
+     * How long to keep event stream data (in seconds)
+     * @default 604800 (7 days)
+     */
+    eventTTL?: number
+    /**
+     * How long to keep flow metadata after completion/failure (in seconds)
+     * @default 2592000 (30 days)
+     */
+    metadataTTL?: number
+  }
 }
 
 /**

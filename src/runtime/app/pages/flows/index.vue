@@ -116,17 +116,39 @@
                     <div class="text-xs font-mono text-gray-900 dark:text-gray-100 truncate">
                       {{ r.id?.substring(0, 8) }}...{{ r.id?.substring(r.id?.length - 4) }}
                     </div>
-                    <div class="text-xs text-gray-500 mt-1">
-                      {{ formatTime(r.createdAt) }}
+                    <div class="flex items-center gap-3 mt-1.5">
+                      <div class="text-xs text-gray-500">
+                        {{ formatTime(r.createdAt) }}
+                      </div>
+                      <!-- Step progress -->
+                      <div
+                        v-if="r.stepCount > 0"
+                        class="text-xs text-gray-500 flex items-center gap-1"
+                      >
+                        <UIcon
+                          name="i-lucide-list-checks"
+                          class="w-3 h-3"
+                        />
+                        <span>{{ r.completedSteps }}/{{ r.stepCount }}</span>
+                      </div>
+                      <!-- Duration (if completed) -->
+                      <div
+                        v-if="r.completedAt && r.startedAt"
+                        class="text-xs text-gray-500 flex items-center gap-1"
+                      >
+                        <UIcon
+                          name="i-lucide-timer"
+                          class="w-3 h-3"
+                        />
+                        <span>{{ formatDuration(r.startedAt, r.completedAt) }}</span>
+                      </div>
                     </div>
                   </div>
-                  <!-- Status badge for run (only show for selected run) -->
+                  <!-- Status badge -->
                   <FlowRunStatusBadge
-                    v-if="selectedRunId === r.id"
-                    :is-running="flowState.isRunning.value"
-                    :is-completed="flowState.isCompleted.value"
-                    :is-failed="flowState.isFailed.value"
-                    :is-reconnecting="isReconnecting"
+                    :is-running="r.status === 'running'"
+                    :is-completed="r.status === 'completed'"
+                    :is-failed="r.status === 'failed'"
                   />
                 </div>
               </div>
@@ -519,6 +541,26 @@ const formatTime = (timestamp: string | number | Date) => {
   if (minutes > 0) return `${minutes}m ago`
   if (seconds > 10) return `${seconds}s ago`
   return 'just now'
+}
+
+// Helper to format duration
+const formatDuration = (start: string | number, end: string | number) => {
+  const startTime = new Date(start).getTime()
+  const endTime = new Date(end).getTime()
+  const diff = endTime - startTime
+  const seconds = Math.floor(diff / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+
+  if (hours > 0) {
+    const remainingMinutes = minutes % 60
+    return `${hours}h ${remainingMinutes}m`
+  }
+  if (minutes > 0) {
+    const remainingSeconds = seconds % 60
+    return `${minutes}m ${remainingSeconds}s`
+  }
+  return `${seconds}s`
 }
 
 // Computed state from reducer

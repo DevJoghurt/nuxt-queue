@@ -174,8 +174,13 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
     }
     let result: any
     try {
+      // Determine input based on whether this is an entry step or has dependencies
+      // Entry steps: pass job.data directly
+      // Non-entry steps (with subscribes): pass job.data.input (keyed by event name)
+      const workerInput = job.data?.input !== undefined ? job.data.input : job.data
+
       // Pass a context that includes the attempt-aware logger
-      result = await handler(job.data, { ...ctx, logger: attemptLogger })
+      result = await handler(workerInput, { ...ctx, logger: attemptLogger })
     }
     catch (err) {
       // Log the error to console for debugging

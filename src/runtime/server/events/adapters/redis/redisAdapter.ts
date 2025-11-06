@@ -1,4 +1,4 @@
-import type { StreamAdapter, EventReadOptions, EventSubscription } from '../../types'
+import type { EventStoreAdapter, EventReadOptions, EventSubscription } from '../../types'
 import type { EventRecord } from '../../../../types'
 import { useRuntimeConfig } from '#imports'
 import IORedis from 'ioredis'
@@ -8,7 +8,7 @@ function nowIso() {
   return new Date().toISOString()
 }
 
-export function createRedisAdapter(): StreamAdapter {
+export function createRedisAdapter(): EventStoreAdapter {
   const rc: any = useRuntimeConfig()
   const conn = rc?.queue?.eventStore?.redis || {}
   const rsOpts = (rc?.queue?.eventStore?.options?.redisStreams || {}) as {
@@ -210,9 +210,19 @@ export function createRedisAdapter(): StreamAdapter {
         },
       }
     },
-    async indexAdd(key: string, id: string, score: number): Promise<void> {
+    async indexAdd(key: string, id: string, score: number, metadata?: Record<string, any>): Promise<void> {
       if (!redis.status || redis.status === 'end') await redis.connect()
       await redis.zadd(key, score, id)
+
+      if (metadata) {
+        const metaKey = `${key}:meta:${id}`
+        // Store emittedEvents as JSON string in hash
+        const toStore: Record<string, string> = { version: '0' }
+        for (const [k, v] of Object.entries(metadata)) {
+          toStore[k] = Array.isArray(v) ? JSON.stringify(v) : String(v)
+        }
+        await redis.hset(metaKey, toStore)
+      }
     },
     async indexRead(key: string, opts?: { offset?: number, limit?: number }) {
       if (!redis.status || redis.status === 'end') await redis.connect()
@@ -225,15 +235,191 @@ export function createRedisAdapter(): StreamAdapter {
       const results = await redis.zrevrange(key, offset, end, 'WITHSCORES')
 
       // Results alternate between member and score
-      const entries: Array<{ id: string, score: number }> = []
+      const entries: Array<{ id: string, score: number, metadata?: any }> = []
       for (let i = 0; i < results.length; i += 2) {
+        const id = results[i]
+        const score = Number.parseInt(results[i + 1])
+
+        // Fetch metadata for each entry
+        const metaKey = `${key}:meta:${id}`
+        const metadata = await redis.hgetall(metaKey)
+
+        let parsedMetadata: any = undefined
+        if (Object.keys(metadata).length > 0) {
+          // Parse emittedEvents from JSON string and convert numeric strings
+          parsedMetadata = { ...metadata }
+          if (parsedMetadata.emittedEvents) {
+            parsedMetadata.emittedEvents = JSON.parse(parsedMetadata.emittedEvents)
+          }
+          if (parsedMetadata.version !== undefined) {
+            parsedMetadata.version = Number.parseInt(parsedMetadata.version, 10)
+          }
+          if (parsedMetadata.startedAt !== undefined) {
+            parsedMetadata.startedAt = Number.parseInt(parsedMetadata.startedAt, 10)
+          }
+          if (parsedMetadata.completedAt !== undefined) {
+            parsedMetadata.completedAt = Number.parseInt(parsedMetadata.completedAt, 10)
+          }
+          if (parsedMetadata.stepCount !== undefined) {
+            parsedMetadata.stepCount = Number.parseInt(parsedMetadata.stepCount, 10)
+          }
+          if (parsedMetadata.completedSteps !== undefined) {
+            parsedMetadata.completedSteps = Number.parseInt(parsedMetadata.completedSteps, 10)
+          }
+        }
+
         entries.push({
-          id: results[i],
-          score: Number.parseInt(results[i + 1]),
+          id,
+          score,
+          metadata: parsedMetadata,
         })
       }
 
       return entries
+    },
+    async indexGet(key: string, id: string) {
+      if (!redis.status || redis.status === 'end') await redis.connect()
+
+      const score = await redis.zscore(key, id)
+      if (!score) return null
+
+      const metaKey = `${key}:meta:${id}`
+      const metadata = await redis.hgetall(metaKey)
+
+      if (Object.keys(metadata).length === 0) {
+        return { id, score: Number.parseFloat(score) }
+      }
+
+      // Parse emittedEvents from JSON string and convert numeric strings
+      const parsed: any = { ...metadata }
+      if (parsed.emittedEvents) {
+        parsed.emittedEvents = JSON.parse(parsed.emittedEvents)
+      }
+      if (parsed.version !== undefined) {
+        parsed.version = Number.parseInt(parsed.version, 10)
+      }
+      if (parsed.startedAt !== undefined) {
+        parsed.startedAt = Number.parseInt(parsed.startedAt, 10)
+      }
+      if (parsed.completedAt !== undefined) {
+        parsed.completedAt = Number.parseInt(parsed.completedAt, 10)
+      }
+      if (parsed.stepCount !== undefined) {
+        parsed.stepCount = Number.parseInt(parsed.stepCount, 10)
+      }
+      if (parsed.completedSteps !== undefined) {
+        parsed.completedSteps = Number.parseInt(parsed.completedSteps, 10)
+      }
+
+      return {
+        id,
+        score: Number.parseFloat(score),
+        metadata: parsed,
+      }
+    },
+    async indexUpdate(key: string, id: string, metadata: Record<string, any>): Promise<boolean> {
+      if (!redis.status || redis.status === 'end') await redis.connect()
+
+      const metaKey = `${key}:meta:${id}`
+
+      // Get current version
+      const current = await redis.hget(metaKey, 'version')
+      const currentVersion = current ? Number.parseInt(current, 10) : 0
+
+      // Optimistic lock: only update if version matches
+      const script = `
+        local current = redis.call('HGET', KEYS[1], 'version')
+        if current == ARGV[1] then
+          for i = 2, #ARGV, 2 do
+            redis.call('HSET', KEYS[1], ARGV[i], ARGV[i + 1])
+          end
+          redis.call('HSET', KEYS[1], 'version', tonumber(ARGV[1]) + 1)
+          return 1
+        else
+          return 0
+        end
+      `
+
+      // Build arguments: [version, key1, val1, key2, val2, ...]
+      const args = [currentVersion.toString()]
+      for (const [k, v] of Object.entries(metadata)) {
+        // Skip undefined values entirely
+        if (v === undefined) continue
+
+        args.push(k)
+        // Serialize arrays as JSON, skip null values
+        if (Array.isArray(v)) {
+          args.push(JSON.stringify(v.filter(item => item != null)))
+        }
+        else {
+          args.push(String(v))
+        }
+      }
+
+      const result = await redis.eval(script, 1, metaKey, ...args) as number
+      return result === 1
+    },
+    async indexUpdateWithRetry(
+      key: string,
+      id: string,
+      metadata: Record<string, any>,
+      maxRetries = 3,
+    ): Promise<void> {
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const success = await this.indexUpdate!(key, id, metadata)
+
+        if (success) return
+
+        // Version conflict - exponential backoff
+        await new Promise(resolve => setTimeout(resolve, 10 * Math.pow(2, attempt)))
+      }
+
+      throw new Error(`Failed to update index after ${maxRetries} retries`)
+    },
+    async indexIncrement(key: string, id: string, field: string, increment = 1): Promise<number> {
+      if (!redis.status || redis.status === 'end') await redis.connect()
+
+      const metaKey = `${key}:meta:${id}`
+
+      // Use Redis HINCRBY for atomic increment
+      const newValue = await redis.hincrby(metaKey, field, increment)
+
+      // Also increment version for consistency
+      await redis.hincrby(metaKey, 'version', 1)
+
+      return newValue
+    },
+    async setMetadataTTL(flowName: string, runId: string, ttlSeconds: number): Promise<void> {
+      if (!redis.status || redis.status === 'end') await redis.connect()
+
+      const metaKey = `nq:flow:idx:${flowName}:meta:${runId}`
+      await redis.expire(metaKey, ttlSeconds)
+    },
+    async cleanupCompletedFlows(key: string, retentionSeconds: number): Promise<number> {
+      if (!redis.status || redis.status === 'end') await redis.connect()
+
+      const now = Date.now()
+      const cutoffTime = now - (retentionSeconds * 1000)
+
+      // Get all run IDs from the sorted set that are older than cutoff
+      const oldEntries = await redis.zrangebyscore(key, '-inf', cutoffTime)
+
+      let removedCount = 0
+
+      for (const runId of oldEntries) {
+        const metaKey = `${key}:meta:${runId}`
+        const metadata = await redis.hgetall(metaKey)
+
+        if (metadata && (metadata.status === 'completed' || metadata.status === 'failed')) {
+          // Remove from sorted set
+          await redis.zrem(key, runId)
+          // Delete metadata hash
+          await redis.del(metaKey)
+          removedCount++
+        }
+      }
+
+      return removedCount
     },
     async deleteStream(subject: string): Promise<void> {
       if (!redis.status || redis.status === 'end') await redis.connect()

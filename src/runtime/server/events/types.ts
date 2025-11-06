@@ -34,6 +34,15 @@ export interface EventSubscription {
 export interface IndexEntry {
   id: string
   score: number
+  metadata?: {
+    status?: 'running' | 'completed' | 'failed'
+    startedAt?: number
+    completedAt?: number
+    stepCount?: number
+    completedSteps?: number
+    emittedEvents?: string[]
+    version?: number
+  }
 }
 
 export interface IndexReadOptions {
@@ -48,8 +57,16 @@ export interface EventStoreAdapter {
   subscribe(subject: string, onEvent: (e: EventRecord) => void): Promise<EventSubscription>
 
   // Index operations for sorted lists (e.g., flow runs by flow name)
-  indexAdd?(key: string, id: string, score: number): Promise<void>
+  indexAdd?(key: string, id: string, score: number, metadata?: Record<string, any>): Promise<void>
+  indexGet?(key: string, id: string): Promise<IndexEntry | null>
+  indexUpdate?(key: string, id: string, metadata: Record<string, any>): Promise<boolean>
+  indexUpdateWithRetry?(key: string, id: string, metadata: Record<string, any>, maxRetries?: number): Promise<void>
+  indexIncrement?(key: string, id: string, field: string, increment?: number): Promise<number>
   indexRead?(key: string, opts?: IndexReadOptions): Promise<IndexEntry[]>
+
+  // Metadata TTL for lifecycle cleanup
+  setMetadataTTL?(flowName: string, runId: string, ttlSeconds: number): Promise<void>
+  cleanupCompletedFlows?(key: string, retentionSeconds: number): Promise<number>
 
   // Deletion operations
   /** Delete a specific stream/subject */

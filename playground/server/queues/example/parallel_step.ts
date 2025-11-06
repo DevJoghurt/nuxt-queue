@@ -20,15 +20,25 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 export default defineQueueWorker(
   async (input, ctx) => {
-    // v0.4: Use flowId and flowName from context
-    ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, { jobId: ctx.jobId, flowId: ctx.flowId, flowName: ctx.flowName })
+    // v0.4: Non-entry step - input is keyed by event name
+    const firstStepData = input['first_step.completed']
+
+    ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, {
+      jobId: ctx.jobId,
+      flowId: ctx.flowId,
+      flowName: ctx.flowName,
+      receivedData: firstStepData,
+    })
 
     for (let i = 0; i < 5; i++) {
       ctx.logger.log('info', `Parallel step progress ${i + 1}/5`, { progress: i + 1 })
       await wait(2000)
     }
 
-    ctx.flow.emit('parallel')
+    await ctx.flow.emit('parallel', {
+      parallelResult: 'completed',
+      fromFirstStep: firstStepData,
+    })
 
     return {
       ok: true,

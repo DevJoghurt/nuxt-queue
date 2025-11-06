@@ -260,8 +260,8 @@ interface StateProvider {
 - Uses Nitro's `useStorage()` with redis driver
 - Keys scoped by flow: `nq:flow:<runId>:<key>`
 - Optional TTL support
-- Cleanup strategies: never, immediate, ttl
-  - **Note**: `on-complete` strategy not available in v0.4 (requires distributed flow tracking, planned for v0.6)
+- Cleanup strategies: never, immediate, on-complete, ttl
+  - **Note**: `on-complete` strategy now available via flow lifecycle tracking
 
 **Worker Access**:
 ```typescript
@@ -662,7 +662,7 @@ runtimeConfig: {
       namespace: 'nq',
       autoScope: 'always',
       cleanup: {
-        strategy: 'never',  // or 'immediate', 'ttl' (on-complete not available in v0.4)
+        strategy: 'on-complete',  // 'never' | 'immediate' | 'on-complete' | 'ttl'
         ttlMs: 86400000
       }
     },
@@ -676,6 +676,7 @@ runtimeConfig: {
       }
     }
   }
+```
 }
 ```
 
@@ -827,7 +828,7 @@ console.log(useRuntimeConfig().queue.state)
 5. **Handle errors**: Wrap critical code in try/catch
 6. **Set concurrency**: Limit based on resource requirements
 7. **Monitor metrics**: Use the UI to track performance
-8. **Clean up state**: Use TTL or immediate cleanup (on-complete not available in v0.4)
+8. **Clean up state**: Use `on-complete` strategy for automatic cleanup when flows finish
 9. **Document schedules**: Add descriptions to schedule metadata for maintainability
 
 ## Related Documentation
