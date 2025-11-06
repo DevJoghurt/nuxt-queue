@@ -32,7 +32,7 @@
       <div class="h-full flex gap-px bg-gray-200 dark:bg-gray-800">
         <!-- Runs List -->
         <div class="w-1/3 bg-white dark:bg-gray-950 flex flex-col min-h-0">
-          <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
+          <div class="px-4 py-3 min-h-[49px] border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
             <h2 class="text-sm font-medium text-gray-900 dark:text-gray-100">
               Runs
             </h2>

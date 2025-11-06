@@ -134,9 +134,9 @@ export default defineNuxtModule<ModuleOptions>({
     let lastCompiledRegistry = compiledSnapshot
 
     // Template filenames for reference
-    const REGISTRY_TEMPLATE = 'queue-registry.ts'
-    const HANDLERS_TEMPLATE = 'worker-handlers.ts'
-    const ANALYZED_FLOWS_TEMPLATE = 'analyzed-flows.ts'
+    const REGISTRY_TEMPLATE = 'queue-registry.mjs'
+    const HANDLERS_TEMPLATE = 'worker-handlers.mjs'
+    const ANALYZED_FLOWS_TEMPLATE = 'analyzed-flows.mjs'
 
     // Emit a template so changes trigger HMR/rebuilds even if only runtimeConfig changes
     addTemplate({
@@ -145,14 +145,12 @@ export default defineNuxtModule<ModuleOptions>({
       getContents: () => generateRegistryTemplate(lastCompiledRegistry),
     })
 
-    // Template: bundle worker handlers into Nitro context so imports work at runtime
     addTemplate({
       filename: HANDLERS_TEMPLATE,
       write: true,
       getContents: () => generateHandlersTemplate(lastCompiledRegistry),
     })
 
-    // Template: pre-analyze flows at build time
     addTemplate({
       filename: ANALYZED_FLOWS_TEMPLATE,
       write: true,
