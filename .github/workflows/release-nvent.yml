@@ -38,6 +38,7 @@ jobs:
       - name: Publish nvent only
         run: |
           chmod +x ./scripts/release.sh
-          PUBLISH_PACKAGE=nvent ./scripts/release.sh
+          ./scripts/release.sh
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
+          PUBLISH_PACKAGE: nvent
