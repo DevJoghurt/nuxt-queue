@@ -2,11 +2,9 @@
 
 set -xe
 
+
 # Restore all git changes
 git restore --source=HEAD --staged --worktree -- package.json yarn.lock
-
-# Resolve yarn
-#yarn install --frozen-lockfile=false
 
 # Update token
 if [[ ! -z ${NPM_TOKEN} ]] ; then
@@ -16,6 +14,18 @@ if [[ ! -z ${NPM_TOKEN} ]] ; then
   npm whoami
 fi
 
-# Release package
-echo "⚡ Publishing with tag latest"
+# Save original package.json
+cp package.json package.json.bak
+
+# Publish as nuxt-queue
+echo "⚡ Publishing as nuxt-queue with tag latest"
 npx npm@8.17.0 publish --tag latest --access public --tolerate-republish
+
+# Publish as nvent
+echo "⚡ Publishing as nvent with tag latest"
+jq '.name = "nvent"' package.json > package.nvent.json
+mv package.nvent.json package.json
+npx npm@8.17.0 publish --tag latest --access public --tolerate-republish
+
+# Restore original package.json
+mv package.json.bak package.json

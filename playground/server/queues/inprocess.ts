@@ -1,27 +1,24 @@
-import type { Job } from 'bullmq'
-
-async function wait(job: Job) {
-  return new Promise((resolve) => {
-    let counter = 0
-    const intval = setInterval(async () => {
-      job.log('Worker interval ' + counter)
-      await job.updateProgress(counter * 20)
-      counter++
-      if (counter > 5) {
-        clearInterval(intval)
-        resolve(true)
-      }
-    }, 4000)
-  })
-}
-
-export default defineQueueWorker({
-  name: 'inprocess',
-}, async (job) => {
-  const { runtimeDir } = useRuntimeConfig().queue
-  job.log('Hello from inprocess worker with runtime context: ' + runtimeDir)
-  await wait(job)
-  return {
-    status: 'success',
-  }
+export const config = defineQueueConfig({
+  flow: {
+    name: ['resize-flow'],
+    role: 'entry',
+    step: 'resize',
+    emits: ['resize.completed'],
+    subscribes: ['thumbnail'],
+  },
 })
+
+export default defineQueueWorker(
+  async (input, ctx) => {
+    await ctx.state.set('lastEmail', {
+      test: 'sdfdsf',
+    })
+    ctx.logger.log('info', `Processing resize for job ${ctx.jobId} on ${ctx.queue}`)
+
+    // v0.4: Use ctx.flow.emit() for flow events
+    await ctx.flow.emit('email.sent', { to: input.to })
+
+    return {
+      ok: true,
+    }
+  })

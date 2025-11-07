@@ -1,7 +1,8 @@
 export default defineNuxtConfig({
   modules: [
     '@nuxt/ui',
-    '../src/module'
+    'nuxt-mcp',
+    '../src/module',
   ],
 
   devtools: {
@@ -15,23 +16,50 @@ export default defineNuxtConfig({
   },
 
   queue: {
-    ui: true,
-    redis: {
-      host: '127.0.0.1',
-      port: 6379,
+    debug: {
+      // Global log level: 'debug' | 'info' | 'warn' | 'error' | 'silent'
+      level: 'warn',
     },
-    queues: {
-      CronQueue: {
-        origin: 'remote',
+
+    // Shortcut: Configure all backends to use Redis
+    store: {
+      adapter: 'redis',
+      redis: {
+        host: '127.0.0.1',
+        port: 6379,
       },
-      DownloadQueue: {
-        origin: 'remote',
+    },
+    state: {
+      adapter: 'redis',
+      cleanup: {
+        strategy: 'on-complete',
       },
-      ReindexQueue: {
-        origin: 'remote',
-      },
-      SubscriptionQueue: {
-        origin: 'remote',
+    },
+    // You can still override individual configs:
+    eventStore: {
+      adapter: 'redis', // Use file for events in development
+    },
+    queue: {
+      adapter: 'redis',
+      defaultConfig: {
+        // Queue options
+        prefix: 'nq',
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 1000,
+          },
+          timeout: 120000,
+          removeOnComplete: 100,
+          removeOnFail: 50,
+        },
+        // Worker options
+        worker: {
+          concurrency: 2,
+          lockDurationMs: 120000,
+          maxStalledCount: 2,
+        },
       },
     },
   },
