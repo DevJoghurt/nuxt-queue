@@ -19,8 +19,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Don't checkout the tag - use main branch which has the latest release script
-          # ref: ${{ github.event.inputs.tag }}
     
       - name: Get package.json from tag
         run: |
