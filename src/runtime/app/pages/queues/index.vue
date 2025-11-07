@@ -255,4 +255,3 @@ const columns: TableColumn<QueueInfo>[] = [
   },
 ]
 </script>
-

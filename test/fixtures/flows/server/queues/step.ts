@@ -1,11 +1,7 @@
-// Local stub for tests: registry stubs defineQueueWorker at runtime
-// but TypeScript needs a declaration here.
-declare const defineQueueWorker: any
-
 export const config = {
   queue: { name: 'testflow' },
   flow: {
-    name: ['sample-flow'],
+    names: ['sample-flow'],
     role: 'step',
     step: 'next',
     subscribes: ['start'],

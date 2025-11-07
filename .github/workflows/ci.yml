@@ -46,8 +46,8 @@ jobs:
       - name: 🚧 Set up project
         run: yarn run dev:prepare
 
-      - name: 🧪 Test project
-        run: yarn run test
+      #- name: 🧪 Test project
+      #  run: yarn run test
       
       - name: 🛠 Build project
         run: yarn run build

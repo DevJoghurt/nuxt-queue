@@ -24,7 +24,7 @@ import QueueFlows from './flows/index.vue'
 const navItems = [
   [
     { label: 'Queues', icon: 'i-lucide-app-window', path: '/' },
-    { label: 'Flows', icon: 'i-lucide-git-branch', path: '/flows' }
+    { label: 'Flows', icon: 'i-lucide-git-branch', path: '/flows' },
   ],
 ] as (NavigationMenuItem & { path?: string })[][]
 
@@ -32,7 +32,7 @@ const routes = {
   '/': Queue,
   '/queues/:name/jobs': QueueJobs,
   '/queues/:name/jobs/:id': QueueJob,
-  '/flows': QueueFlows
+  '/flows': QueueFlows,
 }
 
 // Consumer mode: read the current router context from inside this page

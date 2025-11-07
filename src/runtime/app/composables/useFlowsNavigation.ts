@@ -35,7 +35,7 @@ export function useFlowsNavigation() {
   // Use a local ref for timelineOpen instead of URL-based state
   // This allows immediate synchronous updates for the UI
   const timelineOpen = ref(route.query.timeline === 'true')
-  
+
   // Sync back to URL when it changes
   watch(timelineOpen, (value) => {
     router.push({
@@ -45,7 +45,7 @@ export function useFlowsNavigation() {
       },
     })
   })
-  
+
   // Sync from URL when route changes (e.g., back button)
   watch(() => route.query.timeline, (value) => {
     timelineOpen.value = value === 'true'

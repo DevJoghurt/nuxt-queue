@@ -23,6 +23,8 @@
     "dev:preview": "nuxi preview playground",
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxi prepare playground",
     "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit",
+    "test": "vitest",
+    "lint": "eslint --ext .ts,.js,.mjs,.cjs,.vue .",
     "cleanup": "rimraf dist*/ **/node_modules .nuxt* playground/.data",
     "bumpp": "bumpp"
   },

@@ -7,8 +7,8 @@
       <div class="flex flex-col md:flex-row">
         <div class="flex-none flex flex-col justify-between space-y-2">
           <ULink
-            @click="push(link)"
             class="inline-flex items-center gap-1"
+            @click="push(link)"
           >
             <span class="text-lg font-semibold">{{ title }}</span>
             <UIcon

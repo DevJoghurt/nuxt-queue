@@ -159,25 +159,25 @@ function formatTs(e: any) {
 
 function eventIcon(type: string) {
   if (!type) return 'i-lucide-circle'
-  
+
   // Flow events
   if (type === 'flow.start') return 'i-lucide-play-circle'
   if (type === 'flow.completed') return 'i-lucide-check-circle-2'
   if (type === 'flow.failed') return 'i-lucide-x-circle'
-  
+
   // Step events
   if (type === 'step.started' || type === 'step.running') return 'i-lucide-arrow-right-circle'
   if (type === 'step.completed') return 'i-lucide-check-circle'
   if (type === 'step.failed') return 'i-lucide-alert-circle'
   if (type === 'step.retry') return 'i-lucide-rotate-cw'
   if (type === 'step.timeout') return 'i-lucide-clock'
-  
+
   // Log events
   if (type === 'log') return 'i-lucide-file-text'
-  
+
   // Emit events
   if (type === 'emit') return 'i-lucide-zap'
-  
+
   // Default
   return 'i-lucide-circle-dot'
 }
@@ -185,7 +185,7 @@ function eventIcon(type: string) {
 // Convert raw events to timeline items
 const timelineItems = computed(() => {
   const arr = Array.isArray(props.items) ? [...props.items] : []
-  
+
   // Sort newest first
   arr.sort((a, b) => {
     const tb = eventTsMs(b)
@@ -196,7 +196,7 @@ const timelineItems = computed(() => {
     const bi = String((b as any)?.id || '')
     return bi.localeCompare(ai)
   })
-  
+
   // Map to timeline item format
   return arr.map(e => ({
     date: formatTs(e),

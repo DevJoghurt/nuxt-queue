@@ -14,7 +14,7 @@
           :ui="{
             base: 'size-2',
             container: 'h-2',
-            item: 'p-1'
+            item: 'p-1',
           }"
         />
       </div>
@@ -91,7 +91,7 @@ function getItemHash(item: any): string {
     const ts = item.ts || 0
     return `log-${ts}-${step}-${level}-${message}`.toLowerCase()
   }
-  
+
   // For other events, use type + timestamp + stepName
   const step = item.stepName || ''
   const ts = item.ts || 0
@@ -102,10 +102,10 @@ function getItemHash(item: any): string {
 const filteredItems = computed(() => {
   // First, combine ALL items (events and logs) and deduplicate
   const allItems: any[] = []
-  
+
   // Add all events from events array
   allItems.push(...props.events)
-  
+
   // Add logs (convert log format to event format)
   const logItems = props.logs.map(log => ({
     id: `log-${log.ts}`,
@@ -119,11 +119,11 @@ const filteredItems = computed(() => {
     },
   }))
   allItems.push(...logItems)
-  
+
   // Remove duplicates using content-based hashing
   const seenHashes = new Set<string>()
   const uniqueItems: any[] = []
-  
+
   allItems.forEach((item) => {
     const hash = getItemHash(item)
     if (!seenHashes.has(hash)) {
@@ -131,7 +131,7 @@ const filteredItems = computed(() => {
       uniqueItems.push(item)
     }
   })
-  
+
   // Now apply the filter based on selection
   let deduplicatedItems = uniqueItems
   if (filter.value === 'events') {
@@ -143,7 +143,7 @@ const filteredItems = computed(() => {
     deduplicatedItems = uniqueItems.filter(item => item.type === 'log')
   }
   // 'all' shows everything (no filtering needed)
-  
+
   // Sort by timestamp (newest first)
   deduplicatedItems.sort((a, b) => {
     const getTs = (item: any) => {
@@ -153,7 +153,7 @@ const filteredItems = computed(() => {
     }
     return getTs(b) - getTs(a)
   })
-  
+
   return deduplicatedItems
 })
 </script>

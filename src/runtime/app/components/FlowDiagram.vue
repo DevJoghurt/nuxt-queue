@@ -152,7 +152,7 @@ const nodes = computed<FlowNode[]>(() => {
   const out: FlowNode[] = []
   const f = props.flow
   if (!f) return out
-  
+
   const states = props.stepStates || {}
   const colWidth = 250
   const rowHeight = 140
@@ -160,9 +160,9 @@ const nodes = computed<FlowNode[]>(() => {
   const verticalGap = 80
   const entryToStepsGap = 140 // Extra gap between entry and first step row
   const nodeWidth = 220
-  
+
   let y = 0
-  
+
   // Entry node (centered) - offset by half width to center properly
   if (f.entry) {
     const entryState = states[f.entry.step]
@@ -186,38 +186,38 @@ const nodes = computed<FlowNode[]>(() => {
     })
     y += rowHeight + entryToStepsGap
   }
-  
+
   // Use analyzed levels if available, otherwise fall back to simple grid
   const steps = f.steps || {}
-  
+
   if (f.analyzed?.levels && f.analyzed.levels.length > 0) {
     // Use analyzed levels for better layout
     const levels = f.analyzed.levels.filter(level => level.length > 0) // Skip empty levels
-    
+
     levels.forEach((levelSteps) => {
       if (levelSteps.length === 0) return
-      
+
       const cols = Math.min(4, levelSteps.length) // Max 4 columns per level
       const rows = Math.ceil(levelSteps.length / cols)
-      
+
       levelSteps.forEach((stepName, idx) => {
         const step = steps[stepName]
         if (!step) return
-        
+
         const stepState = states[stepName]
         const status = mapStatusToNodeStatus(stepState?.status)
-        
+
         const col = idx % cols
         const row = Math.floor(idx / cols)
-        
+
         // Calculate how many nodes are in this specific row within this level
         const remainingInLevel = levelSteps.length - (row * cols)
         const nodesInThisRow = Math.min(cols, remainingInLevel)
-        
+
         // Center this row based on its actual node count
         const rowWidth = nodesInThisRow * colWidth + (nodesInThisRow - 1) * horizontalGap
         const rowStartX = -rowWidth / 2
-        
+
         const x = rowStartX + col * (colWidth + horizontalGap)
         const yPos = y + row * (rowHeight + verticalGap)
 
@@ -239,7 +239,7 @@ const nodes = computed<FlowNode[]>(() => {
           style: { minWidth: `${nodeWidth}px` },
         })
       })
-      
+
       // Move Y down for next level (account for all rows in this level)
       y += rows * (rowHeight + verticalGap)
     })
@@ -248,24 +248,24 @@ const nodes = computed<FlowNode[]>(() => {
     // Fallback: simple grid layout
     const names = Object.keys(steps)
     const cols = 3
-    
+
     names.forEach((name, idx) => {
       const step = steps[name]
       const stepState = states[name]
       const status = mapStatusToNodeStatus(stepState?.status)
-      
+
       const col = idx % cols
       const row = Math.floor(idx / cols)
-      
+
       // Calculate how many nodes are in this specific row
       const totalRows = Math.ceil(names.length / cols)
       const isLastRow = row === totalRows - 1
       const nodesInThisRow = isLastRow ? (names.length % cols || cols) : cols
-      
+
       // Center this row based on its actual node count
       const rowWidth = nodesInThisRow * colWidth + (nodesInThisRow - 1) * horizontalGap
       const rowStartX = -rowWidth / 2
-      
+
       const x = rowStartX + col * (colWidth + horizontalGap)
       const yPos = y + row * (rowHeight + verticalGap)
 
@@ -288,7 +288,7 @@ const nodes = computed<FlowNode[]>(() => {
       })
     })
   }
-  
+
   return out
 })
 
@@ -338,11 +338,11 @@ const edges = computed<FlowEdge[]>(() => {
   // Always use analyzed dependencies
   if (f.analyzed?.steps) {
     const analyzedSteps = f.analyzed.steps
-    
+
     // Add edges based on analyzed dependencies
     for (const [stepName, stepInfo] of Object.entries(analyzedSteps)) {
       const target = `step:${stepName}`
-      
+
       if (stepInfo.dependsOn.length > 0) {
         // Add edges from dependencies
         for (const depName of stepInfo.dependsOn) {
@@ -412,7 +412,7 @@ watch(() => props.flow, (f) => {
   applySavedPositions(builtNodes, f.id)
   internalNodes.value = builtNodes
   internalEdges.value = builtEdges
-  
+
   // Trigger fit view after nodes are rendered
   setTimeout(() => {
     if (vueFlowRef.value) {
@@ -433,7 +433,7 @@ watch(() => props.stepStates, () => {
     if (existing) n.position = existing
   })
   internalNodes.value = builtNodes
-  
+
   // Update edges for animation
   const builtEdges: VFEdge[] = edges.value.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label, animated: e.animated }))
   internalEdges.value = builtEdges
@@ -456,14 +456,14 @@ function onAction(payload: { id: string, action: 'run' | 'logs' | 'details' }) {
 function resetLayout() {
   const id = flowId.value
   if (!id) return
-  
+
   try {
     localStorage.removeItem(storageKey(id))
   }
   catch {
     // ignore
   }
-  
+
   // Get fresh positions from computed nodes (without saved positions)
   const freshNodes: VFNode[] = nodes.value.map(n => ({
     id: n.id,
@@ -472,10 +472,10 @@ function resetLayout() {
     type: n.type,
     style: n.style,
   }))
-  
+
   // Update internal nodes with fresh positions
   internalNodes.value = freshNodes
-  
+
   // Use Vue Flow's fitView to center and zoom the diagram
   nextTick(() => {
     if (vueFlowRef.value) {
