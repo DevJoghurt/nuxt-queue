@@ -134,9 +134,9 @@ export default defineNuxtModule<ModuleOptions>({
     let lastCompiledRegistry = compiledSnapshot
 
     // Template filenames for reference
-    const REGISTRY_TEMPLATE = 'queue-registry.ts'
-    const HANDLERS_TEMPLATE = 'worker-handlers.ts'
-    const ANALYZED_FLOWS_TEMPLATE = 'analyzed-flows.ts'
+    const REGISTRY_TEMPLATE = 'queue-registry.mjs'
+    const HANDLERS_TEMPLATE = 'worker-handlers.mjs'
+    const ANALYZED_FLOWS_TEMPLATE = 'analyzed-flows.mjs'
 
     // add dynamic ts files to build transpile list
     for (const templateName of [REGISTRY_TEMPLATE, HANDLERS_TEMPLATE, ANALYZED_FLOWS_TEMPLATE] as const) {

@@ -15,10 +15,12 @@ Event-sourced queue and flow orchestration for Nuxt. Built on BullMQ with integr
 - 🚀 **Horizontal Scaling**: Stateless architecture for easy scaling
 - 🔍 **Full Observability**: Real-time logs, metrics, and event streams
 
-## 📖 Status
 
-**Current Version**: v0.4.0 (Active Development)
+---
 
+**Version**: v0.4.0  
+**Status**: ✅ Current Implementation  
+**Last Updated**: 2025-11-07
 ✅ Core queue and flow functionality  
 ✅ Event sourcing with Redis Streams  
 ✅ Real-time monitoring UI with Vue Flow diagrams  
@@ -29,7 +31,39 @@ Event-sourced queue and flow orchestration for Nuxt. Built on BullMQ with integr
 🚧 Python workers (planned v0.5)  
 🚧 Postgres adapters (planned v0.6)
 
-See [specs/roadmap.md](./specs/roadmap.md) for planned features.
+
+## 🗃️ Event Schema & Storage
+
+All flow operations are event-sourced and stored in Redis Streams (`nq:flow:<runId>`). Events are immutable, type-safe, and provide a complete audit trail.
+
+**Event types:**
+
+  - `flow.start`, `flow.completed`, `flow.failed`
+  - `step.started`, `step.completed`, `step.failed`, `step.retry`
+  - `log`, `emit`, `state`
+
+See [Event Schema](./specs/v0.4/event-schema.md) for full details and field definitions.
+
+## 🏆 Best Practices
+
+- Keep steps small and focused
+- Use state for shared data between steps
+- Use `ctx.flow.emit()` to trigger downstream steps
+- Log with context using `ctx.logger.log()`
+- Set concurrency based on resource needs
+- Use `on-complete` state cleanup for automatic state management
+- Document schedules with metadata for maintainability
+
+## ⚠️ Limitations (v0.4)
+
+1. **TypeScript only**: Python workers not yet implemented (planned for v0.5)
+2. **No complex triggers**: Only basic scheduling available (v0.5 will add triggers)
+3. **No await patterns**: Pausing flows for time/events planned for v0.5
+4. **Redis only**: No Postgres adapter yet (planned for v0.6)
+5. **State separate from events**: Not unified with stream store (planned for v0.6)
+6. **Basic logging**: No advanced logger adapters (planned for v0.7)
+7. **No schedule editing**: Must delete and recreate schedules (v0.5 will add full trigger management)
+
 
 ## 🚀 Quick Start
 
@@ -222,7 +256,7 @@ await $fetch('/api/_flows/my-flow/schedules/schedule-id', {
 
 ## 🎨 Development UI
 
-Access the built-in UI at `http://localhost:3000/__queue` (or use the `<QueueApp />` component):
+Access the built-in UI as `<QueueApp />` component:
 
 - 📊 **Dashboard**: Overview of queues and flows
 - 🔄 **Flow Diagrams**: Visual representation with Vue Flow
@@ -283,10 +317,14 @@ Every worker receives a rich context:
 ## 📚 Documentation
 
 ### v0.4 Documentation
-- **[Current Implementation](./specs/v0.4/current-implementation.md)** - Complete architecture
+- **[Current Implementation](./specs/v0.4/current-implementation.md)** - Complete v0.4 architecture
 - **[Event Schema](./specs/v0.4/event-schema.md)** - Event types and structure
 - **[Flow Scheduling](./specs/v0.4/flow-scheduling.md)** - Scheduling specification
-- **[Quick Reference](./specs/v0.4/quick-reference.md)** - API patterns
+- **[Quick Reference](./specs/v0.4/quick-reference.md)** - One-page API reference
+
+### API & Advanced
+- **[API Reference](./specs/v0.4/current-implementation.md#api-endpoints)** - REST endpoints for flows/queues
+- **[Logging](./specs/v0.4/logging.md)** - Server logging and best practices
 
 ### Roadmap & Future
 - **[Roadmap](./specs/roadmap.md)** - Planned features across versions

@@ -33,7 +33,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Publish package
-        run: chmod +x ./scripts/release.sh && ./scripts/release.sh
+      - name: Publish packages (nuxt-queue and nvent)
+        run: |
+          chmod +x ./scripts/release.sh
+          ./scripts/release.sh
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}

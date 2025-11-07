@@ -37,7 +37,7 @@ export default defineNuxtConfig({
     },
     // You can still override individual configs:
     eventStore: {
-      adapter: 'file', // Use file for events in development
+      adapter: 'redis', // Use file for events in development
     },
     queue: {
       adapter: 'redis',
