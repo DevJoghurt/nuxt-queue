@@ -11,6 +11,16 @@ node_modules
 .local
 dump.rdb
 
+# Python
+**/__pycache__
+**/*.py[cod]
+**/*.pyo
+**/*.pyd
+**/*.pyc
+**/*.egg-info
+**/*.egg
+**/*.whl
+
 # Yarn
 **/.yarn/cache
 **/.yarn/*state*
