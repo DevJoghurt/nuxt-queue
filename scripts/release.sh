@@ -35,14 +35,15 @@ fi
 if [[ "$PUBLISH_PACKAGE" = "nvent" ]] || [[ "$PUBLISH_PACKAGE" = "both" ]]; then
   echo "⚡ Publishing as nvent with tag latest"
   echo "📦 Changing package name from 'nuxt-queue' to 'nvent'"
-  # Change the name in package.json
+  # Change the name in package.json and remove prepack script
   if [ -f "package.json.bak" ]; then
-    jq '.name = "nvent"' package.json.bak > package.json
+    jq '.name = "nvent" | del(.scripts.prepack)' package.json.bak > package.json
   else
-    jq '.name = "nvent"' package.json > package.nvent.json
+    jq '.name = "nvent" | del(.scripts.prepack)' package.json > package.nvent.json
     mv package.nvent.json package.json
   fi
   cat package.json | grep '"name"'
+  # Publish without running prepack (already built)
   npx npm@8.17.0 publish --tag latest --access public --tolerate-republish
 else
   echo "⏭️  Skipping nvent publish (PUBLISH_PACKAGE='$PUBLISH_PACKAGE')"
