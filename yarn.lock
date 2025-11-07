@@ -9628,7 +9628,6 @@ __metadata:
     eslint: "npm:^9.39.1"
     globby: "npm:15.0.0"
     ioredis: "npm:^5.8.2"
-    jiti: "npm:^2.6.1"
     json-editor-vue: "npm:^0.18.1"
     magicast: "npm:^0.5.1"
     mlly: "npm:^1.8.0"
