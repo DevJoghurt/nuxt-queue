@@ -1,9 +1,22 @@
+import { ref, watch, useFetch, type Ref } from '#imports'
+import type { FetchError } from 'ofetch'
+
+interface FlowRun {
+  id: string
+  [key: string]: any
+}
+
 /**
  * Composable for fetching and managing flow runs
  * Simple approach: Fresh fetch on every refresh, no stale cache
  * Client-only to avoid hydration mismatches
  */
-export function useFlowRuns(flowId: Ref<string>) {
+export function useFlowRuns(flowId: Ref<string>): {
+  runs: globalThis.Ref<FlowRun[] | null | undefined>
+  refresh: () => Promise<void>
+  status: globalThis.Ref<'idle' | 'pending' | 'success' | 'error'>
+  error: globalThis.Ref<FetchError | null | undefined>
+} {
   // Counter to force cache busting when needed
   const refreshCounter = ref(0)
 

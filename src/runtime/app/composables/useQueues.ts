@@ -1,4 +1,5 @@
-import { ref } from '#imports'
+import { ref, useFetch } from '#imports'
+import type { FetchError } from 'ofetch'
 
 export interface QueueCounts {
   active: number
@@ -40,7 +41,12 @@ export interface QueueInfo {
  * Composable for fetching queue list with job counts
  * Client-only to avoid hydration mismatches
  */
-export function useQueues() {
+export function useQueues(): {
+  queues: globalThis.Ref<QueueInfo[] | null | undefined>
+  refresh: () => Promise<void>
+  status: globalThis.Ref<'idle' | 'pending' | 'success' | 'error'>
+  error: globalThis.Ref<FetchError | null | undefined>
+} {
   const refreshCounter = ref(0)
 
   const { data: queues, refresh: _refresh, status, error } = useFetch<QueueInfo[]>(

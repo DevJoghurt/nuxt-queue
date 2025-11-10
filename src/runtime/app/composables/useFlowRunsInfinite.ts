@@ -1,5 +1,4 @@
-import { ref, computed, watch } from '#imports'
-import type { Ref } from 'vue'
+import { ref, computed, watch, type Ref } from '#imports'
 
 interface FlowRun {
   id: string

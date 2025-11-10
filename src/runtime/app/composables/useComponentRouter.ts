@@ -6,8 +6,8 @@ import {
   useRoute,
   useRouter,
   watch,
+  defineAsyncComponent,
 } from '#imports'
-import { defineAsyncComponent } from 'vue'
 
 export type ComponentRouteRecord = {
   path: string
