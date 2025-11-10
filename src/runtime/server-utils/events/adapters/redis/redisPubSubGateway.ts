@@ -1,7 +1,5 @@
 import type IORedis from 'ioredis'
-import { useServerLogger } from '#imports'
-
-const logger = useServerLogger('redis-adapter')
+import { useNventLogger } from '#imports'
 
 /**
  * Gateway pattern for Redis Pub/Sub
@@ -10,6 +8,7 @@ const logger = useServerLogger('redis-adapter')
 export class RedisPubSubGateway {
   private channelSubscribers = new Map<string, Set<(messageId: string) => void>>()
   private initialized = false
+  private logger = useNventLogger('redis-pubsub-gateway')
 
   constructor(private subscriber: IORedis) {}
 
@@ -29,7 +28,7 @@ export class RedisPubSubGateway {
         }
         catch (err) {
           if (process.env.NQ_DEBUG_EVENTS === '1') {
-            logger.error('[redis-pubsub-gateway] Handler error:', err)
+            this.logger.error('[redis-pubsub-gateway] Handler error:', err)
           }
         }
       }
@@ -50,7 +49,7 @@ export class RedisPubSubGateway {
       await this.subscriber.subscribe(channel)
 
       if (process.env.NQ_DEBUG_EVENTS === '1') {
-        logger.info('[redis-pubsub-gateway] Subscribed to channel:', channel)
+        this.logger.info('[redis-pubsub-gateway] Subscribed to channel:', channel)
       }
     }
     this.channelSubscribers.get(channel)!.add(handler)
@@ -69,7 +68,7 @@ export class RedisPubSubGateway {
           })
 
           if (process.env.NQ_DEBUG_EVENTS === '1') {
-            logger.info('[redis-pubsub-gateway] Unsubscribed from channel:', channel)
+            this.logger.info('[redis-pubsub-gateway] Unsubscribed from channel:', channel)
           }
         }
       }

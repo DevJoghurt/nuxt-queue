@@ -2,7 +2,7 @@ import {
   defineWebSocketHandler,
   useQueue,
   usePeerManager,
-  useServerLogger,
+  useNventLogger,
 } from '#imports'
 
 interface PeerContext {
@@ -10,8 +10,6 @@ interface PeerContext {
 }
 
 const peerContexts = new WeakMap<any, PeerContext>()
-
-const logger = useServerLogger('api-queues-ws')
 
 /**
  * Safely send a message to a peer, ignoring connection errors
@@ -75,6 +73,7 @@ function safeSend(peer: any, data: any): boolean {
  */
 export default defineWebSocketHandler({
   open(peer) {
+    const logger = useNventLogger('api-queues-ws')
     logger.info('[ws:queues] client connected:', peer.id)
 
     const { registerWsPeer } = usePeerManager()
@@ -95,6 +94,7 @@ export default defineWebSocketHandler({
   },
 
   async message(peer, message) {
+    const logger = useNventLogger('api-queues-ws')
     const context = peerContexts.get(peer)
     if (!context) {
       logger.error('[ws:queues] no context for peer:', peer.id)
@@ -253,6 +253,7 @@ export default defineWebSocketHandler({
   },
 
   close(peer, event) {
+    const logger = useNventLogger('api-queues-ws')
     const isNormalClosure = event?.code === 1000 || event?.code === 1001
     if (!isNormalClosure) {
       logger.info('[ws:queues] client disconnected:', {
@@ -286,6 +287,7 @@ export default defineWebSocketHandler({
   },
 
   error(peer, error) {
+    const logger = useNventLogger('api-queues-ws')
     logger.error('[ws:queues] error for peer:', {
       peerId: peer.id,
       error,

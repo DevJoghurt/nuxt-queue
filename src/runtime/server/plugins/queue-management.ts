@@ -1,10 +1,9 @@
-import { defineNitroPlugin, useServerLogger } from '#imports'
+import { defineNitroPlugin, useNventLogger } from '#imports'
 import { BullMQProvider } from '../../server-utils/queue/adapters/bullmq'
 import { setQueueProvider, getQueueProvider } from '../../server-utils/queue/queueFactory'
 
-const logger = useServerLogger('plugin-queue-management')
-
 export default defineNitroPlugin(async (nitroApp) => {
+  const logger = useNventLogger('plugin-queue-management')
   // Close existing provider if any (handles HMR reload)
   try {
     const existingProvider = getQueueProvider()

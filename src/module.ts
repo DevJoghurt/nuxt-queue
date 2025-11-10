@@ -62,7 +62,7 @@ export default defineNuxtModule<ModuleOptions>({
       nuxt.options.css.push(resolve('./runtime/app/assets/vueflow.css'))
 
       addPlugin({
-        src: resolve('./runtime/app/plugins/vueflow.client.ts'),
+        src: resolve('./runtime/app/plugins/vueflow.client'),
         mode: 'client',
       })
       addComponentsDir({
@@ -210,10 +210,6 @@ export default defineNuxtModule<ModuleOptions>({
         from: resolve('./runtime/server-utils/utils/useEventStore'),
       },
       {
-        name: 'useServerLogger',
-        from: resolve('./runtime/server-utils/utils/useServerLogger'),
-      },
-      {
         name: 'useLogs',
         from: resolve('./runtime/server-utils/utils/useLogs'),
       },
@@ -221,7 +217,14 @@ export default defineNuxtModule<ModuleOptions>({
         name: 'useEventManager',
         from: resolve('./runtime/server-utils/utils/useEventManager'),
       },
-      { name: 'usePeerManager', from: resolve('./runtime/server-utils/utils/wsPeerManager') },
+      {
+        name: 'usePeerManager',
+        from: resolve('./runtime/server-utils/utils/wsPeerManager'),
+      },
+      {
+        name: 'useNventLogger',
+        from: resolve('./runtime/server-utils/utils/useNventLogger'),
+      },
     ])
 
     // Small helper to refresh registry and re-generate app (dev)

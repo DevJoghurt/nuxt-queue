@@ -1,9 +1,8 @@
-import { defineEventHandler, useRuntimeConfig, $useQueueRegistry, useQueue, useServerLogger } from '#imports'
-
-const logger = useServerLogger('api-queues-index')
+import { defineEventHandler, useRuntimeConfig, $useQueueRegistry, useQueue, useNventLogger } from '#imports'
 
 export default defineEventHandler(async () => {
   const rc: any = useRuntimeConfig()
+  const logger = useNventLogger('api-queues-index')
   const cfgQueues = (rc?.queue?.queues || {}) as Record<string, any>
   const registry = $useQueueRegistry() as any
   const queue = useQueue()

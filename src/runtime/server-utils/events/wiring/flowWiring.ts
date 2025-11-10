@@ -1,9 +1,7 @@
 import type { EventStoreAdapter } from '../types'
 import type { EventRecord, EmitEvent } from '../../types'
 import { getEventBus } from '../eventBus'
-import { useServerLogger, useEventStore, $useAnalyzedFlows, $useQueueRegistry, useQueue } from '#imports'
-
-const logger = useServerLogger('flow-wiring')
+import { useEventStore, $useAnalyzedFlows, $useQueueRegistry, useQueue, useNventLogger } from '#imports'
 
 export interface FlowWiringDeps {
   adapter: EventStoreAdapter
@@ -45,6 +43,7 @@ async function checkAndTriggerPendingSteps(
   runId: string,
   store: ReturnType<typeof useEventStore>,
 ): Promise<void> {
+  const logger = useNventLogger('flow-wiring')
   try {
     const analyzedFlows = $useAnalyzedFlows()
     const registry = $useQueueRegistry() as any
@@ -306,6 +305,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
    * Add flow run to sorted set index for listing
    */
   const indexFlowRun = async (flowName: string, flowId: string, timestamp: number, metadata?: Record<string, any>) => {
+    const logger = useNventLogger('flow-wiring')
     try {
       const store = useEventStore()
       const names = store.names()
@@ -324,6 +324,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
   function start() {
     if (wired) return
     wired = true
+    const logger = useNventLogger('flow-wiring')
 
     // Get stream names utility
     const store = useEventStore()
@@ -608,6 +609,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
   }
 
   function stop() {
+    const logger = useNventLogger('flow-wiring')
     for (const u of unsubs.splice(0)) {
       try {
         u()

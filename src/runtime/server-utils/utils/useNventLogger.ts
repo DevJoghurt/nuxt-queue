@@ -3,7 +3,7 @@ import { consola, type ConsolaInstance } from 'consola'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
-export interface ServerLogger {
+export interface NventLogger {
   debug: (message: string, context?: any) => void
   info: (message: string, context?: any) => void
   warn: (message: string, context?: any) => void
@@ -34,11 +34,11 @@ const loggerCache = new Map<string, ConsolaInstance>()
  * - NQ_DEBUG_<SCOPE>: environment variable for scope (e.g., NQ_DEBUG_FLOW_WIRING=1)
  *
  * @param scope - Logger scope/namespace (e.g., 'flow-wiring', 'event-manager')
- * @returns ServerLogger instance with scoped logging methods
+ * @returns NventLogger instance with scoped logging methods
  *
  * @example
  * ```ts
- * const logger = useServerLogger('flow-wiring')
+ * const logger = useNventLogger('flow-wiring')
  * logger.debug('Step triggered', { stepName: 'process', runId: '123' })
  * logger.info('Flow completed', { flowName: 'example' })
  * logger.warn('Retry attempt', { attempt: 3 })
@@ -49,7 +49,7 @@ const loggerCache = new Map<string, ConsolaInstance>()
  * logger.consola.box('🚀 Flow Started')
  * ```
  */
-export function useServerLogger(scope: string): ServerLogger {
+export function useNventLogger(scope: string): NventLogger {
   const rc = useRuntimeConfig()
 
   // Get global log level from config or env

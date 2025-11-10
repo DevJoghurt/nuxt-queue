@@ -1,11 +1,10 @@
 import { getEventStoreFactory } from '../events/eventStoreFactory'
 import type { EventReadOptions, EventSubscription } from '../events/types'
 import type { EventRecord } from '../types'
-import { useServerLogger } from '#imports'
-
-const logger = useServerLogger('event-store')
+import { useNventLogger } from '#imports'
 
 export function useEventStore() {
+  const logger = useNventLogger('event-store')
   const factory = getEventStoreFactory()
 
   async function read(stream: string, opts?: EventReadOptions): Promise<EventRecord[]> {

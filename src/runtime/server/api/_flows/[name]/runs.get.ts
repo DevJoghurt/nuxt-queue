@@ -1,6 +1,4 @@
-import { defineEventHandler, getRouterParam, getQuery, useEventStore, useServerLogger } from '#imports'
-
-const logger = useServerLogger('api-flows-runs')
+import { defineEventHandler, getRouterParam, getQuery, useEventStore, useNventLogger } from '#imports'
 
 /**
  * GET /api/_flows/:name/runs?limit=50&offset=0
@@ -8,6 +6,7 @@ const logger = useServerLogger('api-flows-runs')
  * List runs for a specific flow with pagination support
  */
 export default defineEventHandler(async (event) => {
+  const logger = useNventLogger('api-flows-runs')
   const flowName = getRouterParam(event, 'name')
   const query = getQuery(event)
   const limit = Math.min(Number.parseInt(query.limit as string) || 50, 100)

@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq'
 import { createBullMQProcessor, type NodeHandler } from './runner/node'
-import { useRuntimeConfig, useServerLogger } from '#imports'
+import { useRuntimeConfig, useNventLogger } from '#imports'
 
 // Track registered workers AND their handlers
 interface QueueWorkerInfo {
@@ -10,10 +10,9 @@ interface QueueWorkerInfo {
 
 const registeredWorkers = new Map<string, QueueWorkerInfo>()
 
-const logger = useServerLogger('worker-adapter')
-
 // Close all workers (called on HMR reload or server shutdown)
 export async function closeAllWorkers() {
+  const logger = useNventLogger('worker-adapter')
   const closePromises: Promise<void>[] = []
   for (const [queueName, info] of registeredWorkers.entries()) {
     closePromises.push(
@@ -35,6 +34,7 @@ export async function closeAllWorkers() {
 // Creates ONE Worker per queue that dispatches to handlers by job.name
 export async function registerTsWorker(queueName: string, jobName: string, handler: NodeHandler, opts?: any) {
   let info = registeredWorkers.get(queueName)
+  const logger = useNventLogger('worker-adapter')
 
   if (info) {
     // Worker already exists for this queue - just add the handler

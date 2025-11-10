@@ -1,8 +1,6 @@
 import { getEventBus } from '../events/eventBus'
 import type { EventRecord } from '../types'
-import { useServerLogger } from '#imports'
-
-const logger = useServerLogger('event-manager')
+import { useNventLogger } from '#imports'
 
 export interface EventManager {
   /**
@@ -21,6 +19,7 @@ declare global {
 // Internal getter (no `use` prefix). Utils wrapper will expose `useEventManager`.
 export function useEventManager(): EventManager {
   if (globalThis.__nq_event_manager) return globalThis.__nq_event_manager
+  const logger = useNventLogger('event-manager')
   const bus = getEventBus()
 
   const publishBus: EventManager['publishBus'] = async (evt) => {

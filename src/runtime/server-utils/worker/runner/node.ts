@@ -1,9 +1,7 @@
 import type { Job as BullJob } from 'bullmq'
 import { randomUUID } from 'node:crypto'
 import { getStateProvider } from '../../state/stateFactory'
-import { useRuntimeConfig, useLogs, useFlowEngine, useEventManager, useServerLogger } from '#imports'
-
-const logger = useServerLogger('node-runner')
+import { useRuntimeConfig, useLogs, useFlowEngine, useEventManager, useNventLogger } from '#imports'
 
 export interface RunLogger {
   log: (level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any) => void
@@ -104,6 +102,7 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
 export type NodeHandler = (input: any, ctx: RunContext) => Promise<any>
 
 export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
+  const logger = useNventLogger('node-runner')
   return async function processor(job: BullJob) {
     // Check if this is a scheduled flow start trigger
     if (job.data?.__scheduledFlowStart) {

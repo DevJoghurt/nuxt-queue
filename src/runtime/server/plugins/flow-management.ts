@@ -10,11 +10,10 @@
  * is handled by flowWiring.ts which subscribes to emit/step.completed events
  */
 
-import { defineNitroPlugin, useEventManager, $useQueueRegistry, useQueue, useServerLogger } from '#imports'
-
-const logger = useServerLogger('plugin-flow-management')
+import { defineNitroPlugin, useEventManager, $useQueueRegistry, useQueue, useNventLogger } from '#imports'
 
 export default defineNitroPlugin((nitro) => {
+  const logger = useNventLogger('plugin-flow-management')
   const { onType, publishBus } = useEventManager()
   const registry = $useQueueRegistry() as any
 

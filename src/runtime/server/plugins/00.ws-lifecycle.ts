@@ -1,15 +1,13 @@
 import {
   defineNitroPlugin,
-  useServerLogger,
+  useNventLogger,
   usePeerManager,
 } from '#imports'
-
-const logger = useServerLogger('plugin-ws-lifecycle')
-
 /**
  * Nitro plugin to handle graceful WebSocket shutdown during HMR
  */
 export default defineNitroPlugin((nitroApp) => {
+  const logger = useNventLogger('plugin-ws-lifecycle')
   logger.info('[ws-lifecycle] WebSocket lifecycle plugin initialized')
 
   const {

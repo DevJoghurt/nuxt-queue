@@ -2,14 +2,12 @@ import {
   defineWebSocketHandler,
   useEventStore,
   usePeerManager,
-  useServerLogger,
+  useNventLogger,
 } from '#imports'
 
 interface PeerContext {
   subscriptions: Map<string, () => void> // streamName -> unsubscribe function
 }
-
-const logger = useServerLogger('api-flows-ws')
 
 const peerContexts = new WeakMap<any, PeerContext>()
 
@@ -89,6 +87,7 @@ function safeSend(peer: any, data: any): boolean {
  */
 export default defineWebSocketHandler({
   open(peer) {
+    const logger = useNventLogger('api-flows-ws')
     logger.info('[ws] client connected:', { peerId: peer.id })
 
     const { registerWsPeer } = usePeerManager()
@@ -109,6 +108,7 @@ export default defineWebSocketHandler({
   },
 
   async message(peer, message) {
+    const logger = useNventLogger('api-flows-ws')
     const context = peerContexts.get(peer)
     if (!context) {
       logger.error('[ws] no context for peer:', { peerId: peer.id })
@@ -252,6 +252,7 @@ export default defineWebSocketHandler({
   },
 
   close(peer, event) {
+    const logger = useNventLogger('api-flows-ws')
     const isNormalClosure = event?.code === 1000 || event?.code === 1001
     if (!isNormalClosure) {
       logger.info('[ws] client disconnected:', { peerId: peer.id, code: event?.code, reason: event?.reason })
@@ -281,6 +282,7 @@ export default defineWebSocketHandler({
   },
 
   error(peer, error) {
+    const logger = useNventLogger('api-flows-ws')
     logger.error('[ws] error for peer:', { peerId: peer.id, error })
 
     const { unregisterWsPeer } = usePeerManager()

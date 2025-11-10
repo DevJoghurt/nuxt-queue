@@ -1,12 +1,10 @@
-import { useRuntimeConfig, useServerLogger } from '#imports'
+import { useRuntimeConfig, useNventLogger } from '#imports'
 import { getStreamNames } from './streamNames'
 import { createRedisAdapter } from './adapters/redis/redisAdapter'
 import { createMemoryAdapter } from './adapters/memoryAdapter'
 import { createFileAdapter } from './adapters/fileAdapter'
 import type { EventStoreAdapter } from './types'
 import { createWiringRegistry } from './wiring/registry'
-
-const logger = useServerLogger('event-store-factory')
 
 export interface EventStoreInstance {
   name: string
@@ -30,6 +28,7 @@ let cachedFactory: EventStoreFactory | null = null
 // Internal factory getter (no `use` prefix). Utils wrapper will expose `useEventStoreFactory`.
 export function getEventStoreFactory(): EventStoreFactory {
   if (cachedFactory) return cachedFactory
+  const logger = useNventLogger('event-store-factory')
   const rc: any = useRuntimeConfig()
   const adapter = rc?.queue?.eventStore?.adapter || 'memory'
 
