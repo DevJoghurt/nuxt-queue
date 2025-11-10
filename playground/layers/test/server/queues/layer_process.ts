@@ -10,6 +10,6 @@ export const config = defineQueueConfig({
   },
 })
 
-export default defineQueueWorker((input, ctx) => {
+export default function defineQueueWorker(input, ctx) {
   throw new Error('Function not implemented.')
-})
+}
