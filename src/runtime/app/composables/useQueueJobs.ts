@@ -1,4 +1,5 @@
 import { ref, type Ref, useFetch } from '#imports'
+import type { FetchError } from 'ofetch'
 
 export interface Job {
   id: string
@@ -23,7 +24,12 @@ export interface JobsResponse {
 export function useQueueJobs(
   queueName: Ref<string>,
   state: Ref<string | null> = ref(null),
-) {
+): {
+  data: Ref<JobsResponse | null | undefined>
+  refresh: () => Promise<void>
+  status: Ref<'idle' | 'pending' | 'success' | 'error'>
+  error: Ref<FetchError | null | undefined>
+} {
   return useFetch<JobsResponse>(
     () => {
       const params = new URLSearchParams()
