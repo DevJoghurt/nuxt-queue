@@ -1,4 +1,4 @@
-import { ref, useFetch, type Ref } from '#imports'
+import { ref, useFetch } from '#imports'
 import type { FetchError } from 'ofetch'
 
 export interface QueueCounts {
@@ -42,10 +42,10 @@ export interface QueueInfo {
  * Client-only to avoid hydration mismatches
  */
 export function useQueues(): {
-  queues: Ref<QueueInfo[] | null | undefined>
+  queues: globalThis.Ref<QueueInfo[] | null | undefined>
   refresh: () => Promise<void>
-  status: Ref<'idle' | 'pending' | 'success' | 'error'>
-  error: Ref<FetchError | null | undefined>
+  status: globalThis.Ref<'idle' | 'pending' | 'success' | 'error'>
+  error: globalThis.Ref<FetchError | null | undefined>
 } {
   const refreshCounter = ref(0)
 
