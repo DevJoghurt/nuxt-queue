@@ -1,8 +1,7 @@
 import {
   defineWebSocketHandler,
-  useQueueAdapter,
-  registerWsPeer,
-  unregisterWsPeer,
+  useQueue,
+  usePeerManager,
   useServerLogger,
 } from '#imports'
 
@@ -77,6 +76,8 @@ function safeSend(peer: any, data: any): boolean {
 export default defineWebSocketHandler({
   open(peer) {
     logger.info('[ws:queues] client connected:', peer.id)
+
+    const { registerWsPeer } = usePeerManager()
 
     // Register peer for graceful shutdown during HMR
     registerWsPeer(peer)
@@ -261,6 +262,8 @@ export default defineWebSocketHandler({
       })
     }
 
+    const { unregisterWsPeer } = usePeerManager()
+
     // Unregister peer from lifecycle tracking
     unregisterWsPeer(peer)
 
@@ -287,6 +290,8 @@ export default defineWebSocketHandler({
       peerId: peer.id,
       error,
     })
+
+    const { unregisterWsPeer } = usePeerManager()
 
     // Unregister peer from lifecycle tracking
     unregisterWsPeer(peer)
