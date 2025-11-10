@@ -153,7 +153,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from '#imports'
+import { ref, computed, watch, resolveComponent, useTemplateRef, h } from '#imports'
 import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import { UTable, UButton, UBadge, UPagination, USelectMenu } from '#components'

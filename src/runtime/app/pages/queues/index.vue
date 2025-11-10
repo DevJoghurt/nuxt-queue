@@ -97,7 +97,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from '#imports'
+import { ref, useTemplateRef, h } from '#imports'
 import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import { UTable, UButton, UPagination } from '#components'

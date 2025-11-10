@@ -1,3 +1,5 @@
+import { defineQueueConfig, defineQueueWorker } from '#imports'
+
 export const config = defineQueueConfig({
   flow: {
     name: ['resize2'],
@@ -8,6 +10,6 @@ export const config = defineQueueConfig({
   },
 })
 
-function test() {}
-
-export default test
+export default function defineQueueWorker(input, ctx) {
+  throw new Error('Function not implemented.')
+}

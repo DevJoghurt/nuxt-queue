@@ -1,3 +1,5 @@
+import { defineQueueConfig, defineQueueWorker } from '#imports'
+
 export const config = defineQueueConfig({
   queue: { name: 'email' },
   flow: {
