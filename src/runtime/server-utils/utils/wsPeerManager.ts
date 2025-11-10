@@ -18,48 +18,58 @@ let isShuttingDown = false
 /**
  * Register a peer to be tracked for graceful shutdown
  */
-export function registerWsPeer(peer: any) {
+function registerWsPeer(peer: any) {
   activePeers.add(peer)
 }
 
 /**
  * Unregister a peer (called when connection closes normally)
  */
-export function unregisterWsPeer(peer: any) {
+function unregisterWsPeer(peer: any) {
   activePeers.delete(peer)
 }
 
 /**
  * Get all currently active WebSocket peers
  */
-export function getActivePeers() {
+function getActivePeers() {
   return Array.from(activePeers)
 }
 
 /**
  * Check if server is currently shutting down
  */
-export function isServerShuttingDown() {
+function isServerShuttingDown() {
   return isShuttingDown
 }
 
 /**
  * Set the shutdown state
  */
-export function setShuttingDown(state: boolean) {
+function setShuttingDown(state: boolean) {
   isShuttingDown = state
 }
 
 /**
  * Clear all tracked peers
  */
-export function clearAllPeers() {
+function clearAllPeers() {
   activePeers.clear()
 }
 
 /**
  * Get the count of active peers
  */
-export function getActivePeerCount() {
+function getActivePeerCount() {
   return activePeers.size
 }
+
+export const usePeerManager = () => ({
+  registerWsPeer,
+  unregisterWsPeer,
+  getActivePeers,
+  isServerShuttingDown,
+  setShuttingDown,
+  clearAllPeers,
+  getActivePeerCount,
+})

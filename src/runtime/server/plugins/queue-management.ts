@@ -1,6 +1,6 @@
 import { defineNitroPlugin, useServerLogger } from '#imports'
-import { BullMQProvider } from '../queue/adapters/bullmq'
-import { setQueueProvider, getQueueProvider } from '../queue/queueFactory'
+import { BullMQProvider } from '../../server-utils/queue/adapters/bullmq'
+import { setQueueProvider, getQueueProvider } from '../../server-utils/queue/queueFactory'
 
 const logger = useServerLogger('plugin-queue-management')
 

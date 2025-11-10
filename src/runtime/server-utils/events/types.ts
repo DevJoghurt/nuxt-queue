@@ -1,4 +1,4 @@
-import type { EventRecord } from '../../types'
+import type { EventRecord } from '../types'
 
 // v0.4: Using runId-based routing
 

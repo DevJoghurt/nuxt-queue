@@ -45,6 +45,8 @@ export default defineNuxtModule<ModuleOptions>({
     // Normalize and merge configuration
     const config = normalizeModuleOptions(options)
 
+    // Use addServerScanDir only for api/ and plugins/ directories
+    // These follow Nuxt conventions and won't include .d.ts files in the build
     addServerScanDir(resolve('./runtime/server'))
 
     // Add shared utilities for both app and server
@@ -55,6 +57,10 @@ export default defineNuxtModule<ModuleOptions>({
     // add vueflow assets
 
     if (config.ui) {
+      // add vueflow assets
+      nuxt.options.css = nuxt.options.css || []
+      nuxt.options.css.push(resolve('./runtime/app/assets/vueflow.css'))
+
       addPlugin({
         src: resolve('./runtime/app/plugins/vueflow.client.ts'),
         mode: 'client',
@@ -164,19 +170,59 @@ export default defineNuxtModule<ModuleOptions>({
     })
 
     // add composables
-    addServerImports([{
-      name: 'useQueueRegistry',
-      as: '$useQueueRegistry',
-      from: resolve(nuxt.options.buildDir, 'queue-registry'),
-    }, {
-      name: 'useWorkerHandlers',
-      as: '$useWorkerHandlers',
-      from: resolve(nuxt.options.buildDir, 'worker-handlers'),
-    }, {
-      name: 'useAnalyzedFlows',
-      as: '$useAnalyzedFlows',
-      from: resolve(nuxt.options.buildDir, 'analyzed-flows'),
-    }])
+    addServerImports([
+      // Generated templates
+      {
+        name: 'useQueueRegistry',
+        as: '$useQueueRegistry',
+        from: resolve(nuxt.options.buildDir, 'queue-registry'),
+      },
+      {
+        name: 'useWorkerHandlers',
+        as: '$useWorkerHandlers',
+        from: resolve(nuxt.options.buildDir, 'worker-handlers'),
+      },
+      {
+        name: 'useAnalyzedFlows',
+        as: '$useAnalyzedFlows',
+        from: resolve(nuxt.options.buildDir, 'analyzed-flows'),
+      },
+      // Core utilities for user code (moved to server-utils to avoid bundling issues)
+      {
+        name: 'defineQueueConfig',
+        from: resolve('./runtime/server-utils/utils/defineQueueConfig'),
+      },
+      {
+        name: 'defineQueueWorker',
+        from: resolve('./runtime/server-utils/utils/defineQueueWorker'),
+      },
+      // Composables users may need in server code
+      {
+        name: 'useQueue',
+        from: resolve('./runtime/server-utils/utils/useQueue'),
+      },
+      {
+        name: 'useFlowEngine',
+        from: resolve('./runtime/server-utils/utils/useFlowEngine'),
+      },
+      {
+        name: 'useEventStore',
+        from: resolve('./runtime/server-utils/utils/useEventStore'),
+      },
+      {
+        name: 'useServerLogger',
+        from: resolve('./runtime/server-utils/utils/useServerLogger'),
+      },
+      {
+        name: 'useLogs',
+        from: resolve('./runtime/server-utils/utils/useLogs'),
+      },
+      {
+        name: 'useEventManager',
+        from: resolve('./runtime/server-utils/utils/useEventManager'),
+      },
+      { name: 'usePeerManager', from: resolve('./runtime/server-utils/utils/wsPeerManager') },
+    ])
 
     // Small helper to refresh registry and re-generate app (dev)
     const refreshRegistry = async (reason: string, changedPath?: string) => {

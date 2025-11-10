@@ -1,5 +1,5 @@
 import type { EventStoreAdapter, EventReadOptions, EventSubscription } from '../types'
-import type { EventRecord } from '../../../types'
+import type { EventRecord } from '../../types'
 
 // Store data in globalThis to survive HMR reloads
 interface MemoryAdapterStore {

@@ -1,7 +1,7 @@
 import { promises as fsp } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { EventStoreAdapter, EventReadOptions, EventSubscription } from '../types'
-import type { EventRecord } from '../../../types'
+import type { EventRecord } from '../../types'
 import { useRuntimeConfig } from '#imports'
 
 function nowIso() {

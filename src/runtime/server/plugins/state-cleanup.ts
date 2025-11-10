@@ -1,5 +1,5 @@
 import { useServerLogger, defineNitroPlugin, useEventManager, useRuntimeConfig } from '#imports'
-import { getStateProvider } from '../state/stateFactory'
+import { getStateProvider } from '../../server-utils/state/stateFactory'
 
 const logger = useServerLogger('plugin-state-cleanup')
 

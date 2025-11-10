@@ -1,5 +1,5 @@
 import type { EventStoreAdapter } from '../types'
-import type { EventRecord, EmitEvent } from '../../../types'
+import type { EventRecord, EmitEvent } from '../../types'
 import { getEventBus } from '../eventBus'
 import { useServerLogger, useEventStore, $useAnalyzedFlows, $useQueueRegistry, useQueue } from '#imports'
 

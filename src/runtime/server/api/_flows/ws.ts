@@ -1,8 +1,7 @@
 import {
   defineWebSocketHandler,
   useEventStore,
-  registerWsPeer,
-  unregisterWsPeer,
+  usePeerManager,
   useServerLogger,
 } from '#imports'
 
@@ -91,6 +90,8 @@ function safeSend(peer: any, data: any): boolean {
 export default defineWebSocketHandler({
   open(peer) {
     logger.info('[ws] client connected:', { peerId: peer.id })
+
+    const { registerWsPeer } = usePeerManager()
 
     // Register peer for graceful shutdown during HMR
     registerWsPeer(peer)
@@ -255,6 +256,7 @@ export default defineWebSocketHandler({
     if (!isNormalClosure) {
       logger.info('[ws] client disconnected:', { peerId: peer.id, code: event?.code, reason: event?.reason })
     }
+    const { unregisterWsPeer } = usePeerManager()
 
     // Unregister peer from lifecycle tracking
     unregisterWsPeer(peer)
@@ -280,6 +282,8 @@ export default defineWebSocketHandler({
 
   error(peer, error) {
     logger.error('[ws] error for peer:', { peerId: peer.id, error })
+
+    const { unregisterWsPeer } = usePeerManager()
 
     // Unregister peer from lifecycle tracking
     unregisterWsPeer(peer)

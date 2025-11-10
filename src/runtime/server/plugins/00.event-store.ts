@@ -1,5 +1,5 @@
 import { defineNitroPlugin } from '#imports'
-import { getEventStoreFactory } from '../events/eventStoreFactory'
+import { getEventStoreFactory } from '../../server-utils/events/eventStoreFactory'
 
 /**
  * Flow Run Snapshots (stream-based)

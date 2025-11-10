@@ -1,11 +1,7 @@
 import {
   defineNitroPlugin,
-  getActivePeerCount,
-  getActivePeers,
-  setShuttingDown,
-  clearAllPeers,
-  isServerShuttingDown,
   useServerLogger,
+  usePeerManager,
 } from '#imports'
 
 const logger = useServerLogger('plugin-ws-lifecycle')
@@ -15,6 +11,14 @@ const logger = useServerLogger('plugin-ws-lifecycle')
  */
 export default defineNitroPlugin((nitroApp) => {
   logger.info('[ws-lifecycle] WebSocket lifecycle plugin initialized')
+
+  const {
+    getActivePeers,
+    isServerShuttingDown,
+    setShuttingDown,
+    clearAllPeers,
+    getActivePeerCount,
+  } = usePeerManager()
 
   // Suppress WebSocket ECONNRESET errors during shutdown
   // These are expected when we're closing connections

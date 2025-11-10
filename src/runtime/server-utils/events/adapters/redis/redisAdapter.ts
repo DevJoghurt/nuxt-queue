@@ -1,5 +1,4 @@
-import type { EventStoreAdapter, EventReadOptions, EventSubscription } from '../../types'
-import type { EventRecord } from '../../../../types'
+import type { EventStoreAdapter, EventReadOptions, EventSubscription, EventRecord } from '../../types'
 import { useRuntimeConfig, useServerLogger } from '#imports'
 import IORedis from 'ioredis'
 import { RedisPubSubGateway } from './redisPubSubGateway'

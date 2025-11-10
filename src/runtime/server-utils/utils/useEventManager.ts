@@ -1,5 +1,5 @@
 import { getEventBus } from '../events/eventBus'
-import type { EventRecord } from '../../types'
+import type { EventRecord } from '../types'
 import { useServerLogger } from '#imports'
 
 const logger = useServerLogger('event-manager')

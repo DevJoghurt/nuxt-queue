@@ -1,6 +1,6 @@
 import { defineNitroPlugin, $useWorkerHandlers, $useQueueRegistry } from '#imports'
-import { registerTsWorker, closeAllWorkers } from '../worker/adapter'
-import type { NodeHandler } from '../worker/runner/node'
+import { registerTsWorker, closeAllWorkers } from '../../server-utils/worker/adapter'
+import type { NodeHandler } from '../../server-utils/worker/runner/node'
 
 type HandlerEntry = { queue: string, id: string, absPath: string, handler: NodeHandler }
 
