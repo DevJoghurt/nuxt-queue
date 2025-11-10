@@ -1,9 +1,7 @@
 import type { EventStoreAdapter, EventReadOptions, EventSubscription, EventRecord } from '../../types'
-import { useRuntimeConfig, useServerLogger } from '#imports'
+import { useRuntimeConfig, useNventLogger } from '#imports'
 import IORedis from 'ioredis'
 import { RedisPubSubGateway } from './redisPubSubGateway'
-
-const logger = useServerLogger('redis-adapter')
 
 function nowIso() {
   return new Date().toISOString()
@@ -11,6 +9,7 @@ function nowIso() {
 
 export function createRedisAdapter(): EventStoreAdapter {
   const rc: any = useRuntimeConfig()
+  const logger = useNventLogger('redis-adapter')
   const conn = rc?.queue?.eventStore?.redis || {}
   const rsOpts = (rc?.queue?.eventStore?.options?.redisStreams || {}) as {
     group?: string

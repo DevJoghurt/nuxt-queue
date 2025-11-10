@@ -2,11 +2,15 @@ import {
   defineWebSocketHandler,
   useEventStore,
   usePeerManager,
+<<<<<<< HEAD:packages/nvent/src/runtime/server/api/_flows/ws.ts
   useServerLogger,
   useStreamAdapter,
   useStoreAdapter,
   getStoreAppendTopic,
   SubjectPatterns,
+=======
+  useNventLogger,
+>>>>>>> dfbe904 (refactore server logger):src/runtime/server/api/_flows/ws.ts
 } from '#imports'
 
 import type { SubscriptionHandle } from '../../adapters/interfaces/stream'
@@ -14,8 +18,6 @@ import type { SubscriptionHandle } from '../../adapters/interfaces/stream'
 interface PeerContext {
   subscriptions: Map<string, SubscriptionHandle> // streamName -> subscription handle
 }
-
-const logger = useServerLogger('api-flows-ws')
 
 const peerContexts = new WeakMap<any, PeerContext>()
 
@@ -95,6 +97,7 @@ function safeSend(peer: any, data: any): boolean {
  */
 export default defineWebSocketHandler({
   open(peer) {
+    const logger = useNventLogger('api-flows-ws')
     logger.info('[ws] client connected:', { peerId: peer.id })
 
     const { registerWsPeer } = usePeerManager()
@@ -115,6 +118,7 @@ export default defineWebSocketHandler({
   },
 
   async message(peer, message) {
+    const logger = useNventLogger('api-flows-ws')
     const context = peerContexts.get(peer)
     if (!context) {
       logger.error('[ws] no context for peer:', { peerId: peer.id })
@@ -265,7 +269,12 @@ export default defineWebSocketHandler({
     }
   },
 
+<<<<<<< HEAD:packages/nvent/src/runtime/server/api/_flows/ws.ts
   async close(peer, event) {
+=======
+  close(peer, event) {
+    const logger = useNventLogger('api-flows-ws')
+>>>>>>> dfbe904 (refactore server logger):src/runtime/server/api/_flows/ws.ts
     const isNormalClosure = event?.code === 1000 || event?.code === 1001
     if (!isNormalClosure) {
       logger.info('[ws] client disconnected:', { peerId: peer.id, code: event?.code, reason: event?.reason })
@@ -294,7 +303,12 @@ export default defineWebSocketHandler({
     }
   },
 
+<<<<<<< HEAD:packages/nvent/src/runtime/server/api/_flows/ws.ts
   async error(peer, error) {
+=======
+  error(peer, error) {
+    const logger = useNventLogger('api-flows-ws')
+>>>>>>> dfbe904 (refactore server logger):src/runtime/server/api/_flows/ws.ts
     logger.error('[ws] error for peer:', { peerId: peer.id, error })
 
     const { unregisterWsPeer } = usePeerManager()

@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto'
+<<<<<<< HEAD:packages/nvent/src/runtime/server/worker/runner/node.ts
 import { getStateProvider } from '../../state/stateProvider'
 import { useRuntimeConfig, useLogs, useFlowEngine, useEventManager, useServerLogger } from '#imports'
 
 const logger = useServerLogger('node-runner')
+=======
+import { getStateProvider } from '../../state/stateFactory'
+import { useRuntimeConfig, useLogs, useFlowEngine, useEventManager, useNventLogger } from '#imports'
+>>>>>>> dfbe904 (refactore server logger):src/runtime/server-utils/worker/runner/node.ts
 
 /**
  * Generic job interface that works with any queue adapter
@@ -116,12 +121,18 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
 
 export type NodeHandler = (input: any, ctx: RunContext) => Promise<any>
 
+<<<<<<< HEAD:packages/nvent/src/runtime/server/worker/runner/node.ts
 /**
  * Wraps a NodeHandler with full RunContext building and event emission
  * Works with any queue adapter by accepting a job-like object
  */
 export function createJobProcessor(handler: NodeHandler, queueName: string) {
   return async function processor(job: QueueJob) {
+=======
+export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
+  const logger = useNventLogger('node-runner')
+  return async function processor(job: BullJob) {
+>>>>>>> dfbe904 (refactore server logger):src/runtime/server-utils/worker/runner/node.ts
     // Check if this is a scheduled flow start trigger
     if (job.data?.__scheduledFlowStart) {
       const { __flowName, __flowInput } = job.data

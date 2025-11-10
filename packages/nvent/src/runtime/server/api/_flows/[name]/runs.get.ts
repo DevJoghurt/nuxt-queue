@@ -1,6 +1,10 @@
+<<<<<<< HEAD:packages/nvent/src/runtime/server/api/_flows/[name]/runs.get.ts
 import { defineEventHandler, getRouterParam, getQuery, useStoreAdapter, useServerLogger, SubjectPatterns } from '#imports'
 
 const logger = useServerLogger('api-flows-runs')
+=======
+import { defineEventHandler, getRouterParam, getQuery, useEventStore, useNventLogger } from '#imports'
+>>>>>>> dfbe904 (refactore server logger):src/runtime/server/api/_flows/[name]/runs.get.ts
 
 /**
  * GET /api/_flows/:flowName/runs
@@ -18,6 +22,7 @@ const logger = useServerLogger('api-flows-runs')
  * }
  */
 export default defineEventHandler(async (event) => {
+  const logger = useNventLogger('api-flows-runs')
   const flowName = getRouterParam(event, 'name')
   const query = getQuery(event)
   const limit = Math.min(Number.parseInt(query.limit as string) || 50, 100)
