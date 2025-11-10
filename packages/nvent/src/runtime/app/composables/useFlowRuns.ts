@@ -12,10 +12,10 @@ interface FlowRun {
  * Client-only to avoid hydration mismatches
  */
 export function useFlowRuns(flowId: Ref<string>): {
-  runs: globalThis.Ref<FlowRun[] | null | undefined>
+  runs: Ref<FlowRun[] | null | undefined>
   refresh: () => Promise<void>
-  status: globalThis.Ref<'idle' | 'pending' | 'success' | 'error'>
-  error: globalThis.Ref<FetchError | null | undefined>
+  status: Ref<'idle' | 'pending' | 'success' | 'error'>
+  error: Ref<FetchError | null | undefined>
 } {
   // Counter to force cache busting when needed
   const refreshCounter = ref(0)
