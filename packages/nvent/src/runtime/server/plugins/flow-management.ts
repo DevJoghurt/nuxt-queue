@@ -10,16 +10,10 @@
  * is handled by flowWiring.ts which subscribes to emit/step.completed events
  */
 
-<<<<<<< HEAD:packages/nvent/src/runtime/server/plugins/flow-management.ts
 import { defineNitroPlugin, useEventManager, $useQueueRegistry, useQueueAdapter, useServerLogger } from '#imports'
 
 const logger = useServerLogger('plugin-flow-management')
-=======
-import { defineNitroPlugin, useEventManager, $useQueueRegistry, useQueue, useNventLogger } from '#imports'
->>>>>>> dfbe904 (refactore server logger):src/runtime/server/plugins/flow-management.ts
 
-export default defineNitroPlugin((nitro) => {
-  const logger = useNventLogger('plugin-flow-management')
   const { onType, publishBus } = useEventManager()
   const registry = $useQueueRegistry() as any
 

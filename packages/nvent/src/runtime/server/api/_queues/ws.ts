@@ -1,8 +1,9 @@
 import {
   defineWebSocketHandler,
-  useQueue,
-  usePeerManager,
-  useNventLogger,
+  useQueueAdapter,
+  registerWsPeer,
+  unregisterWsPeer,
+  useServerLogger,
 } from '#imports'
 
 interface PeerContext {
@@ -71,12 +72,9 @@ function safeSend(peer: any, data: any): boolean {
  *   "message": "error description"
  * }
  */
-export default defineWebSocketHandler({
   open(peer) {
-    const logger = useNventLogger('api-queues-ws')
+    const logger = useServerLogger('api-queues-ws')
     logger.info('[ws:queues] client connected:', peer.id)
-
-    const { registerWsPeer } = usePeerManager()
 
     // Register peer for graceful shutdown during HMR
     registerWsPeer(peer)
@@ -94,7 +92,7 @@ export default defineWebSocketHandler({
   },
 
   async message(peer, message) {
-    const logger = useNventLogger('api-queues-ws')
+    const logger = useServerLogger('api-queues-ws')
     const context = peerContexts.get(peer)
     if (!context) {
       logger.error('[ws:queues] no context for peer:', peer.id)
@@ -253,7 +251,7 @@ export default defineWebSocketHandler({
   },
 
   close(peer, event) {
-    const logger = useNventLogger('api-queues-ws')
+    const logger = useServerLogger('api-queues-ws')
     const isNormalClosure = event?.code === 1000 || event?.code === 1001
     if (!isNormalClosure) {
       logger.info('[ws:queues] client disconnected:', {
@@ -263,10 +261,8 @@ export default defineWebSocketHandler({
       })
     }
 
-    const { unregisterWsPeer } = usePeerManager()
-
-    // Unregister peer from lifecycle tracking
-    unregisterWsPeer(peer)
+  // Unregister peer from lifecycle tracking
+  unregisterWsPeer(peer)
 
     const context = peerContexts.get(peer)
     if (context) {
@@ -287,13 +283,11 @@ export default defineWebSocketHandler({
   },
 
   error(peer, error) {
-    const logger = useNventLogger('api-queues-ws')
+    const logger = useServerLogger('api-queues-ws')
     logger.error('[ws:queues] error for peer:', {
       peerId: peer.id,
       error,
     })
-
-    const { unregisterWsPeer } = usePeerManager()
 
     // Unregister peer from lifecycle tracking
     unregisterWsPeer(peer)

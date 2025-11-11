@@ -1,17 +1,8 @@
-<<<<<<<< HEAD:packages/nvent/src/runtime/server/events/wiring/flowWiring.ts
 import type { EventRecord, EmitEvent } from '../../../types'
-========
-import type { EventStoreAdapter } from '../types'
-import type { EventRecord, EmitEvent } from '../../types'
->>>>>>>> 55dbc89 (fix publish npm bug):src/runtime/server-utils/events/wiring/flowWiring.ts
 import { getEventBus } from '../eventBus'
-<<<<<<< HEAD:packages/nvent/src/runtime/server/events/wiring/flowWiring.ts
 import { useServerLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, SubjectPatterns } from '#imports'
 
 const logger = useServerLogger('flow-wiring')
-=======
-import { useEventStore, $useAnalyzedFlows, $useQueueRegistry, useQueue, useNventLogger } from '#imports'
->>>>>>> dfbe904 (refactore server logger):src/runtime/server-utils/events/wiring/flowWiring.ts
 
 /**
  * Check if all dependencies for a step are met
@@ -49,7 +40,7 @@ async function checkAndTriggerPendingSteps(
   runId: string,
   store: ReturnType<typeof useStoreAdapter>,
 ): Promise<void> {
-  const logger = useNventLogger('flow-wiring')
+  const logger = useServerLogger('flow-wiring')
   try {
     const analyzedFlows = $useAnalyzedFlows()
     const registry = $useQueueRegistry() as any
@@ -310,7 +301,7 @@ export function createFlowWiring() {
    * Add flow run to sorted set index for listing
    */
   const indexFlowRun = async (flowName: string, flowId: string, timestamp: number, metadata?: Record<string, any>) => {
-    const logger = useNventLogger('flow-wiring')
+    const logger = useServerLogger('flow-wiring')
     try {
       const store = useStoreAdapter()
       // Use centralized naming function
@@ -331,7 +322,7 @@ export function createFlowWiring() {
   function start() {
     if (wired) return
     wired = true
-    const logger = useNventLogger('flow-wiring')
+    const logger = useServerLogger('flow-wiring')
 
     // Get store - must be available after adapters are initialized
     const store = useStoreAdapter()
@@ -630,7 +621,7 @@ export function createFlowWiring() {
   }
 
   function stop() {
-    const logger = useNventLogger('flow-wiring')
+    const logger = useServerLogger('flow-wiring')
     for (const u of unsubs.splice(0)) {
       try {
         u()

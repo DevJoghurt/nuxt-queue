@@ -1,10 +1,4 @@
-<<<<<<< HEAD:packages/nvent/src/runtime/server/api/_flows/[name]/runs.get.ts
-import { defineEventHandler, getRouterParam, getQuery, useStoreAdapter, useServerLogger, SubjectPatterns } from '#imports'
-
-const logger = useServerLogger('api-flows-runs')
-=======
-import { defineEventHandler, getRouterParam, getQuery, useEventStore, useNventLogger } from '#imports'
->>>>>>> dfbe904 (refactore server logger):src/runtime/server/api/_flows/[name]/runs.get.ts
+import { defineEventHandler, getRouterParam, getQuery, useStoreAdapter, useNventLogger, SubjectPatterns } from '#imports'
 
 /**
  * GET /api/_flows/:flowName/runs

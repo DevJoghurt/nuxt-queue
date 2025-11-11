@@ -6,7 +6,7 @@
   "repository": "DevJoghurt/nvent",
 =======
   "name": "nuxt-queue",
-  "version": "0.4.4",
+  "version": "0.4.0",
   "description": "Nuxt queue service based on Bullmq",
   "repository": "DevJoghurt/nuxt-queue",
 >>>>>>> 8eaa020 (new version)
