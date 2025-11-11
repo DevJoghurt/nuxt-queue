@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { defineEventHandler, useRuntimeConfig, $useQueueRegistry, useQueueAdapter, useServerLogger } from '#imports'
 
 const logger = useServerLogger('api-queues-index')
@@ -18,6 +19,19 @@ export default defineEventHandler(async () => {
   }
 
   const names = new Set<string>()
+=======
+import { defineEventHandler, useRuntimeConfig, $useQueueRegistry, useQueue, useNventLogger } from '#imports'
+
+export default defineEventHandler(async () => {
+  const rc: any = useRuntimeConfig()
+  const logger = useNventLogger('api-queues-index')
+  const cfgQueues = (rc?.queue?.queues || {}) as Record<string, any>
+  const registry = $useQueueRegistry() as any
+  const queue = useQueue()
+
+  const names = new Set<string>()
+  for (const q in cfgQueues) names.add(q)
+>>>>>>> 227da8b (refactoring)
   if (registry?.workers?.length) {
     for (const w of registry.workers as Array<{ queue: { name: string } }>) names.add(w.queue.name)
   }
@@ -29,6 +43,7 @@ export default defineEventHandler(async () => {
         const counts = await queue.getJobCounts(name)
         const isPaused = await queue.isPaused(name)
 
+<<<<<<< HEAD
         // Find all workers for this queue from registry
         const workers = registry?.workers?.filter((w: any) => w.queue.name === name) || []
 
@@ -44,6 +59,12 @@ export default defineEventHandler(async () => {
           const c = w.worker?.concurrency || 0
           return Math.max(max, c)
         }, baseWorkerConfig.concurrency || 0)
+=======
+        // Find worker config for this queue from registry
+        const worker = registry?.workers?.find((w: any) => w.queue.name === name)
+        const queueConfig = worker?.queue || {}
+        const workerConfig = worker?.worker || {}
+>>>>>>> 227da8b (refactoring)
 
         return {
           name,
@@ -51,6 +72,7 @@ export default defineEventHandler(async () => {
           isPaused,
           config: {
             queue: {
+<<<<<<< HEAD
               // Worker-specific config overrides global defaults
               prefix: queueConfig.prefix || globalQueueDefaults.prefix,
               defaultJobOptions: queueConfig.defaultJobOptions || globalQueueDefaults.defaultJobOptions,
@@ -64,6 +86,19 @@ export default defineEventHandler(async () => {
               drainDelayMs: baseWorkerConfig.drainDelayMs || globalWorkerDefaults.drainDelayMs,
               autorun: baseWorkerConfig.autorun ?? globalWorkerDefaults.autorun,
               pollingIntervalMs: baseWorkerConfig.pollingIntervalMs ?? globalWorkerDefaults.pollingIntervalMs,
+=======
+              prefix: queueConfig.prefix,
+              defaultJobOptions: queueConfig.defaultJobOptions,
+              limiter: queueConfig.limiter,
+            },
+            worker: {
+              concurrency: workerConfig.concurrency,
+              lockDurationMs: workerConfig.lockDurationMs,
+              maxStalledCount: workerConfig.maxStalledCount,
+              drainDelayMs: workerConfig.drainDelayMs,
+              autorun: workerConfig.autorun,
+              pollingIntervalMs: workerConfig.pollingIntervalMs,
+>>>>>>> 227da8b (refactoring)
             },
           },
         }
@@ -82,8 +117,13 @@ export default defineEventHandler(async () => {
           },
           isPaused: false,
           config: {
+<<<<<<< HEAD
             queue: globalQueueDefaults,
             worker: globalWorkerDefaults,
+=======
+            queue: {},
+            worker: {},
+>>>>>>> 227da8b (refactoring)
           },
         }
       }

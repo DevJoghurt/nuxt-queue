@@ -20,6 +20,7 @@ export interface PostgresConfig {
   database?: string
   user?: string
   password?: string
+<<<<<<< HEAD
   ssl?: boolean | object
 }
 
@@ -136,15 +137,35 @@ export interface QueueConfig {
 
   /**
    * Redis connection (overrides connections.redis if specified)
+=======
+}
+
+/**
+ * Queue provider configuration
+ */
+export interface QueueConfig {
+  /**
+   * Queue backend adapter: 'redis' (BullMQ) or 'postgres' (PGBoss)
+   */
+  adapter?: 'redis' | 'postgres'
+
+  /**
+   * Redis connection config (when using BullMQ)
+>>>>>>> 227da8b (refactoring)
    */
   redis?: RedisConfig
 
   /**
+<<<<<<< HEAD
    * Postgres connection (overrides connections.postgres if specified)
+=======
+   * Postgres connection config (when using PGBoss)
+>>>>>>> 227da8b (refactoring)
    */
   postgres?: PostgresConfig
 
   /**
+<<<<<<< HEAD
    * File storage configuration (overrides connections.file if specified)
    */
   file?: FileConfig
@@ -262,10 +283,105 @@ export interface StoreConfig {
 
   /**
    * Redis connection (overrides connections.redis if specified)
+=======
+   * Default configuration for queues and workers.
+   * Combines both queue and worker options for convenience.
+   */
+  defaultConfig?: {
+    // Queue options
+    prefix?: string
+    defaultJobOptions?: {
+      attempts?: number
+      backoff?: number | { type: 'fixed' | 'exponential', delay: number }
+      delay?: number
+      priority?: number
+      timeout?: number
+      lifo?: boolean
+      removeOnComplete?: boolean | number
+      removeOnFail?: boolean | number
+    }
+    limiter?: {
+      max?: number
+      duration?: number
+      groupKey?: string
+    }
+
+    // Worker options (nested)
+    worker?: {
+      concurrency?: number
+      lockDurationMs?: number
+      maxStalledCount?: number
+      drainDelayMs?: number
+      autorun?: boolean
+      pollingIntervalMs?: number
+    }
+  }
+}
+
+/**
+ * State provider configuration
+ */
+export interface StateConfig {
+  adapter?: 'redis' | 'postgres'
+  namespace?: string
+  autoScope?: 'always' | 'flow' | 'never'
+  cleanup?: {
+    strategy?: 'never' | 'immediate' | 'ttl' | 'on-complete'
+    ttlMs?: number
+  }
+  redis?: RedisConfig
+  postgres?: PostgresConfig
+}
+
+/**
+ * Event store configuration
+ */
+export interface EventStoreConfig {
+  adapter?: 'redis' | 'postgres' | 'memory' | 'file'
+  streams?: any
+  options?: {
+    file?: {
+      dir?: string
+      ext?: string
+      pollMs?: number
+    }
+  }
+  redis?: RedisConfig
+  postgres?: PostgresConfig
+  /**
+   * Retention settings for event lifecycle tracking
+   */
+  retention?: {
+    /**
+     * How long to keep event stream data (in seconds)
+     * @default 604800 (7 days)
+     */
+    eventTTL?: number
+    /**
+     * How long to keep flow metadata after completion/failure (in seconds)
+     * @default 2592000 (30 days)
+     */
+    metadataTTL?: number
+  }
+}
+
+/**
+ * Store shortcut - sets all backends to the same storage
+ */
+export interface StoreShortcut {
+  /**
+   * Storage backend adapter to use for everything
+   */
+  adapter: 'redis' | 'postgres'
+
+  /**
+   * Redis config (used when adapter is 'redis')
+>>>>>>> 227da8b (refactoring)
    */
   redis?: RedisConfig
 
   /**
+<<<<<<< HEAD
    * Postgres connection (overrides connections.postgres if specified)
    */
   postgres?: PostgresConfig
@@ -321,12 +437,28 @@ export interface ModuleOptions {
   /**
    * Directory to scan for function definitions
    * @default 'server/functions'
+=======
+   * Postgres config (used when adapter is 'postgres')
+   */
+  postgres?: PostgresConfig
+}
+
+/**
+ * Module options for nuxt-queue
+ */
+export interface ModuleOptions {
+  /**
+   * Directory to scan for queue workers
+>>>>>>> 227da8b (refactoring)
    */
   dir?: string
 
   /**
    * Enable dev UI
+<<<<<<< HEAD
    * @default true in development
+=======
+>>>>>>> 227da8b (refactoring)
    */
   ui?: boolean
 
@@ -336,11 +468,23 @@ export interface ModuleOptions {
   debug?: Record<string, any>
 
   /**
+<<<<<<< HEAD
    * Queue adapter configuration (job execution)
+=======
+   * Shortcut to configure all backends at once.
+   * Setting this will configure queue, state, and eventStore to use the same backend.
+   * Individual configs can still override this.
+   */
+  store?: StoreShortcut
+
+  /**
+   * Queue provider configuration (BullMQ/PGBoss)
+>>>>>>> 227da8b (refactoring)
    */
   queue?: QueueConfig
 
   /**
+<<<<<<< HEAD
    * Stream adapter configuration (pub/sub messaging)
    * @since v0.4.1
    */
@@ -363,14 +507,33 @@ export interface ModuleOptions {
 
 /**
  * Runtime config shape for nvent module (v0.4.1+)
+=======
+   * State provider configuration
+   */
+  state?: StateConfig
+
+  /**
+   * Event store configuration
+   */
+  eventStore?: EventStoreConfig
+}
+
+/**
+ * Runtime config shape for queue module
+>>>>>>> 227da8b (refactoring)
  */
 export interface QueueModuleConfig {
   debug?: Record<string, any>
   workers: any[]
   registry?: any
   queue: Required<QueueConfig>
+<<<<<<< HEAD
   stream: Required<StreamConfig>
   store: Required<StoreConfig>
   connections: Required<ConnectionsConfig>
+=======
+  state: Required<StateConfig>
+  eventStore: Required<EventStoreConfig>
+>>>>>>> 227da8b (refactoring)
   rootDir?: string
 }
