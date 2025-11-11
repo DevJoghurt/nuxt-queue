@@ -1,12 +1,23 @@
-import { defineEventHandler, getRouterParam, getQuery, useEventStore, useNventLogger } from '#imports'
+import { defineEventHandler, getRouterParam, getQuery, useStoreAdapter, useServerLogger, SubjectPatterns } from '#imports'
+
+const logger = useServerLogger('api-flows-runs')
 
 /**
- * GET /api/_flows/:name/runs?limit=50&offset=0
+ * GET /api/_flows/:flowName/runs
  *
- * List runs for a specific flow with pagination support
+ * Returns a list of flow runs with their metadata from the sorted set index.
+ * Supports pagination via offset/limit query params.
+ *
+ * Query params:
+ * - limit: number (default: 50)
+ * - offset: number (default: 0)
+ *
+ * Returns:
+ * {
+ *   runs: Array<{ id, score, metadata }>
+ * }
  */
 export default defineEventHandler(async (event) => {
-  const logger = useNventLogger('api-flows-runs')
   const flowName = getRouterParam(event, 'name')
   const query = getQuery(event)
   const limit = Math.min(Number.parseInt(query.limit as string) || 50, 100)
@@ -21,12 +32,11 @@ export default defineEventHandler(async (event) => {
     return { error: 'Missing flow name' }
   }
 
-  const store = useEventStore()
-  const names = store.names()
+  const store = useStoreAdapter()
 
   try {
     // Use centralized naming function
-    const runIndexKey = names.flowIndex(flowName)
+    const runIndexKey = SubjectPatterns.flowRunIndex(flowName)
 
     // First, get the total count (Redis ZCARD for sorted sets)
     // We'll need to add a method to get the count

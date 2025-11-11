@@ -16,12 +16,15 @@ This specification outlines the architectural transformation from a single-packa
 - Shorter, more memorable name
 - Better represents the event-driven nature of the system
 - Avoids confusion with simple queue libraries
+- Generic "functions" terminology (not "queue workers") for broader applicability
 
 **Migration:**
 - All package names will use `@nvent/*` scope
 - NPM package: `nvent` (main module)
 - GitHub repo: remains `nuxt-queue` (for continuity) or renamed to `nvent`
 - Documentation URLs will reference `nvent`
+- Default directory: `/server/functions` (not `/server/queues`)
+- API: `defineFunction()` and `defineFunctionConfig()` (not `defineQueueWorker()`, `defineQueueConfig()`)
 
 ---
 
@@ -48,7 +51,7 @@ nvent/
 
 ```
 @nvent/nvent                    # Core module
-@nvent/adapter-queue-redis      # Queue adapter for Redis
+@nvent/adapter-queue-redis      # Queue adapter for Redis (BullMQ)
 @nvent/adapter-stream-redis     # Stream adapter for Redis
 @nvent/adapter-store-redis      # Store adapter for Redis
 ```
@@ -61,9 +64,14 @@ nvent/
 
 #### 1. **Queue Adapters** (`adapter-queue-*`)
 
-**Purpose:** Task queue and worker execution  
+**Purpose:** Job queue and worker execution infrastructure  
 **Current Implementation:** BullMQ (Redis)  
-**Responsibility:**
+**Developer Experience:** Functions are defined with `defineFunction()` and stored in `/server/functions` directory. These functions can be:
+- Executed as queue workers (background jobs)
+- Used as flow steps (workflow orchestration)
+- Called directly (immediate execution)
+
+**Adapter Responsibility:**
 - Job enqueueing and scheduling
 - Worker process management
 - Job retry logic
@@ -589,6 +597,10 @@ export default defineNuxtConfig({
   ],
   
   nvent: {
+    // Default directory for functions (formerly /server/queues)
+    // Functions can be used as: queue workers, flow steps, or direct calls
+    dir: 'server/functions',
+    
     queue: {
       adapter: 'redis',  // Resolves to registered adapter
       redis: {
@@ -597,7 +609,11 @@ export default defineNuxtConfig({
       },
       defaultConfig: {
         attempts: 3,
-        backoff: 1000
+        backoff: 1000,
+        worker: {
+          concurrency: 10,
+          autorun: true
+        }
       }
     },
     stream: {
@@ -622,9 +638,87 @@ export default defineNuxtConfig({
 })
 ```
 
+**Function Definition Examples:**
+
+```typescript
+// server/functions/send-email.ts
+
+// Config (formerly defineQueueConfig)
+export const config = defineFunctionConfig({
+  queue: {
+    name: 'send-email',
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: 1000
+    }
+  },
+  worker: {
+    concurrency: 5,
+    autorun: true
+  },
+  // Optional: use as flow step
+  flow: {
+    name: 'notification-flow',
+    role: 'step',
+    step: 'send-email',
+    subscribes: 'user.created'
+  }
+})
+
+// Handler (formerly defineQueueWorker)
+export default defineFunction(async (payload, ctx) => {
+  await sendEmail(payload)
+  
+  // Access to runtime helpers
+  ctx.provider  // useQueue()
+  ctx.flow      // useFlowEngine()
+  ctx.registry  // $useQueueRegistry()
+  
+  return { success: true }
+})
+
+// Can be used as:
+// 1. Queue worker: await $queue.add('send-email', { to: 'user@example.com' })
+// 2. Flow step: automatically triggered by 'user.created' event
+// 3. Direct call: await ctx.provider.dispatch('send-email', { to: 'user@example.com' })
+```
+
 ---
 
 ## Configuration System Refactoring
+
+### API Migration (v0.4.0 → v0.4.1)
+
+**Function Definition API:**
+
+```typescript
+// v0.4.0 (current)
+// server/queues/send-email.ts
+export const config = defineQueueConfig({
+  queue: { name: 'send-email' },
+  worker: { concurrency: 5 }
+})
+export default defineQueueWorker(async (payload, ctx) => {
+  // handler code
+})
+
+// v0.4.1 (new)
+// server/functions/send-email.ts
+export const config = defineFunctionConfig({
+  queue: { name: 'send-email' },
+  worker: { concurrency: 5 }
+})
+export default defineFunction(async (payload, ctx) => {
+  // handler code (same signature)
+})
+```
+
+**Key Changes:**
+- Directory: `/server/queues` → `/server/functions`
+- Wrapper: `defineQueueWorker()` → `defineFunction()`
+- Config: `defineQueueConfig()` → `defineFunctionConfig()`
+- **Signature stays the same:** Both take `(payload, ctx)` handler function
+- **Context API unchanged:** `ctx.provider`, `ctx.flow`, `ctx.registry` work the same
 
 ### Current State (v0.4.0)
 

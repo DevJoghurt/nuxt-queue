@@ -1,8 +1,9 @@
 import {
   defineWebSocketHandler,
-  useQueue,
-  usePeerManager,
-  useNventLogger,
+  useQueueAdapter,
+  registerWsPeer,
+  unregisterWsPeer,
+  useServerLogger,
 } from '#imports'
 
 interface PeerContext {
@@ -10,6 +11,8 @@ interface PeerContext {
 }
 
 const peerContexts = new WeakMap<any, PeerContext>()
+
+const logger = useServerLogger('api-queues-ws')
 
 /**
  * Safely send a message to a peer, ignoring connection errors
@@ -73,10 +76,7 @@ function safeSend(peer: any, data: any): boolean {
  */
 export default defineWebSocketHandler({
   open(peer) {
-    const logger = useNventLogger('api-queues-ws')
     logger.info('[ws:queues] client connected:', peer.id)
-
-    const { registerWsPeer } = usePeerManager()
 
     // Register peer for graceful shutdown during HMR
     registerWsPeer(peer)
@@ -94,7 +94,6 @@ export default defineWebSocketHandler({
   },
 
   async message(peer, message) {
-    const logger = useNventLogger('api-queues-ws')
     const context = peerContexts.get(peer)
     if (!context) {
       logger.error('[ws:queues] no context for peer:', peer.id)
@@ -124,7 +123,7 @@ export default defineWebSocketHandler({
         return
       }
 
-      const queue = useQueue()
+      const queue = useQueueAdapter()
 
       // Unsubscribe from any existing subscription with same key
       const existingUnsub = context.subscriptions.get(queueName)
@@ -253,7 +252,6 @@ export default defineWebSocketHandler({
   },
 
   close(peer, event) {
-    const logger = useNventLogger('api-queues-ws')
     const isNormalClosure = event?.code === 1000 || event?.code === 1001
     if (!isNormalClosure) {
       logger.info('[ws:queues] client disconnected:', {
@@ -263,15 +261,13 @@ export default defineWebSocketHandler({
       })
     }
 
-    const { unregisterWsPeer } = usePeerManager()
-
     // Unregister peer from lifecycle tracking
     unregisterWsPeer(peer)
 
     const context = peerContexts.get(peer)
     if (context) {
       // Unsubscribe from all queues
-      for (const unsub of context.subscriptions.values()) {
+      for (const unsub of Array.from(context.subscriptions.values())) {
         try {
           unsub()
         }
@@ -287,13 +283,10 @@ export default defineWebSocketHandler({
   },
 
   error(peer, error) {
-    const logger = useNventLogger('api-queues-ws')
     logger.error('[ws:queues] error for peer:', {
       peerId: peer.id,
       error,
     })
-
-    const { unregisterWsPeer } = usePeerManager()
 
     // Unregister peer from lifecycle tracking
     unregisterWsPeer(peer)
@@ -301,7 +294,7 @@ export default defineWebSocketHandler({
     const context = peerContexts.get(peer)
     if (context) {
       // Cleanup on error
-      for (const unsub of context.subscriptions.values()) {
+      for (const unsub of Array.from(context.subscriptions.values())) {
         try {
           unsub()
         }

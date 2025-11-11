@@ -1,7 +1,22 @@
-import type { Job as BullJob } from 'bullmq'
 import { randomUUID } from 'node:crypto'
-import { getStateProvider } from '../../state/stateFactory'
-import { useRuntimeConfig, useLogs, useFlowEngine, useEventManager, useNventLogger } from '#imports'
+import { getStateProvider } from '../../state/stateProvider'
+import { useRuntimeConfig, useLogs, useFlowEngine, useEventManager, useServerLogger } from '#imports'
+
+const logger = useServerLogger('node-runner')
+
+/**
+ * Generic job interface that works with any queue adapter
+ * Adapters should provide jobs in this format
+ */
+export interface QueueJob {
+  id: string
+  name: string
+  data: any
+  attemptsMade?: number
+  opts?: {
+    attempts?: number
+  }
+}
 
 export interface RunLogger {
   log: (level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any) => void
@@ -101,9 +116,12 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
 
 export type NodeHandler = (input: any, ctx: RunContext) => Promise<any>
 
-export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
-  const logger = useNventLogger('node-runner')
-  return async function processor(job: BullJob) {
+/**
+ * Wraps a NodeHandler with full RunContext building and event emission
+ * Works with any queue adapter by accepting a job-like object
+ */
+export function createJobProcessor(handler: NodeHandler, queueName: string) {
+  return async function processor(job: QueueJob) {
     // Check if this is a scheduled flow start trigger
     if (job.data?.__scheduledFlowStart) {
       const { __flowName, __flowInput } = job.data
@@ -126,7 +144,8 @@ export function createBullMQProcessor(handler: NodeHandler, queueName: string) {
     // Normal job processing
     const eventMgr = useEventManager()
     const rc: any = useRuntimeConfig()
-    const autoScope: 'always' | 'flow' | 'never' = rc?.queue?.state?.autoScope || 'always'
+    // v0.4.1: Read autoScope from store.state.autoScope
+    const autoScope: 'always' | 'flow' | 'never' = rc?.queue?.store?.state?.autoScope || 'always'
     const providedFlow = job.data?.flowId
     // v0.4: Always use a proper flow identifier (UUID for new flows, never job ID)
     const flowId = providedFlow || (autoScope === 'always' ? randomUUID() : undefined)

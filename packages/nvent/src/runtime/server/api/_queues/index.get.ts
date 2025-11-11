@@ -1,14 +1,23 @@
-import { defineEventHandler, useRuntimeConfig, $useQueueRegistry, useQueue, useNventLogger } from '#imports'
+import { defineEventHandler, useRuntimeConfig, $useQueueRegistry, useQueueAdapter, useServerLogger } from '#imports'
+
+const logger = useServerLogger('api-queues-index')
 
 export default defineEventHandler(async () => {
   const rc: any = useRuntimeConfig()
-  const logger = useNventLogger('api-queues-index')
-  const cfgQueues = (rc?.queue?.queues || {}) as Record<string, any>
   const registry = $useQueueRegistry() as any
-  const queue = useQueue()
+  const queue = useQueueAdapter()
+
+  // Get global queue config with defaults from runtime config
+  // Structure is rc.queue.queue (outer is module, inner is queue adapter config)
+  const globalQueueConfig = rc?.queue?.queue || {}
+  const globalWorkerDefaults = globalQueueConfig.worker || {}
+  const globalQueueDefaults = {
+    prefix: globalQueueConfig.prefix,
+    defaultJobOptions: globalQueueConfig.defaultJobOptions,
+    limiter: globalQueueConfig.limiter,
+  }
 
   const names = new Set<string>()
-  for (const q in cfgQueues) names.add(q)
   if (registry?.workers?.length) {
     for (const w of registry.workers as Array<{ queue: { name: string } }>) names.add(w.queue.name)
   }
@@ -20,10 +29,21 @@ export default defineEventHandler(async () => {
         const counts = await queue.getJobCounts(name)
         const isPaused = await queue.isPaused(name)
 
-        // Find worker config for this queue from registry
-        const worker = registry?.workers?.find((w: any) => w.queue.name === name)
-        const queueConfig = worker?.queue || {}
-        const workerConfig = worker?.worker || {}
+        // Find all workers for this queue from registry
+        const workers = registry?.workers?.filter((w: any) => w.queue.name === name) || []
+
+        // Find first worker that has queue/worker config defined
+        const workerWithQueueConfig = workers.find((w: any) => w.queue && Object.keys(w.queue).length > 1)
+        const workerWithWorkerConfig = workers.find((w: any) => w.worker && Object.keys(w.worker).length > 0)
+
+        const queueConfig = workerWithQueueConfig?.queue || workers[0]?.queue || {}
+        const baseWorkerConfig = workerWithWorkerConfig?.worker || {}
+
+        // For multiple workers, show max concurrency across all workers
+        const maxConcurrency = workers.reduce((max: number, w: any) => {
+          const c = w.worker?.concurrency || 0
+          return Math.max(max, c)
+        }, baseWorkerConfig.concurrency || 0)
 
         return {
           name,
@@ -31,17 +51,19 @@ export default defineEventHandler(async () => {
           isPaused,
           config: {
             queue: {
-              prefix: queueConfig.prefix,
-              defaultJobOptions: queueConfig.defaultJobOptions,
-              limiter: queueConfig.limiter,
+              // Worker-specific config overrides global defaults
+              prefix: queueConfig.prefix || globalQueueDefaults.prefix,
+              defaultJobOptions: queueConfig.defaultJobOptions || globalQueueDefaults.defaultJobOptions,
+              limiter: queueConfig.limiter || globalQueueDefaults.limiter,
             },
             worker: {
-              concurrency: workerConfig.concurrency,
-              lockDurationMs: workerConfig.lockDurationMs,
-              maxStalledCount: workerConfig.maxStalledCount,
-              drainDelayMs: workerConfig.drainDelayMs,
-              autorun: workerConfig.autorun,
-              pollingIntervalMs: workerConfig.pollingIntervalMs,
+              // Worker-specific config overrides global defaults
+              concurrency: maxConcurrency || globalWorkerDefaults.concurrency,
+              lockDurationMs: baseWorkerConfig.lockDurationMs || globalWorkerDefaults.lockDurationMs,
+              maxStalledCount: baseWorkerConfig.maxStalledCount || globalWorkerDefaults.maxStalledCount,
+              drainDelayMs: baseWorkerConfig.drainDelayMs || globalWorkerDefaults.drainDelayMs,
+              autorun: baseWorkerConfig.autorun ?? globalWorkerDefaults.autorun,
+              pollingIntervalMs: baseWorkerConfig.pollingIntervalMs ?? globalWorkerDefaults.pollingIntervalMs,
             },
           },
         }
@@ -60,8 +82,8 @@ export default defineEventHandler(async () => {
           },
           isPaused: false,
           config: {
-            queue: {},
-            worker: {},
+            queue: globalQueueDefaults,
+            worker: globalWorkerDefaults,
           },
         }
       }

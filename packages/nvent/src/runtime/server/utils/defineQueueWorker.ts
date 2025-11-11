@@ -1,8 +1,8 @@
-import { $useQueueRegistry, useFlowEngine, useQueue } from '#imports'
+import { $useQueueRegistry, useFlowEngine, useQueueAdapter } from '#imports'
 import type { RunContext, NodeHandler } from '../worker/runner/node'
 
 export type ExtendedRunContext = RunContext & {
-  provider: ReturnType<typeof useQueue>
+  provider: ReturnType<typeof useQueueAdapter>
   flow: ReturnType<typeof useFlowEngine>
   registry: any
 }
@@ -13,7 +13,7 @@ export const defineQueueWorker: DefineQueueWorker = (handler) => {
   // Adapt worker handler signature to NodeHandler used by the BullMQ adapter
   const wrapped: NodeHandler = async (input, ctx) => {
     // Lazily resolve provider and helpers at run time to avoid early init ordering issues
-    const provider = useQueue()
+    const provider = useQueueAdapter()
     // Use ctx.flow if already provided (it has context-aware wrapper), otherwise create new
     const flow = ctx.flow || useFlowEngine()
     const registry = $useQueueRegistry() as any

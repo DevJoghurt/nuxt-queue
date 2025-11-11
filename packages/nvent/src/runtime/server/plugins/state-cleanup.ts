@@ -1,5 +1,7 @@
-import { useNventLogger, defineNitroPlugin, useEventManager, useRuntimeConfig } from '#imports'
-import { getStateProvider } from '../../server-utils/state/stateFactory'
+import { useServerLogger, defineNitroPlugin, useEventManager, useRuntimeConfig } from '#imports'
+import { getStateProvider } from '../state/stateProvider'
+
+const logger = useServerLogger('plugin-state-cleanup')
 
 /**
  * State Cleanup Plugin
@@ -11,9 +13,9 @@ import { getStateProvider } from '../../server-utils/state/stateFactory'
  * - 'ttl': State expires automatically via TTL (handled by storage provider)
  */
 export default defineNitroPlugin(() => {
-  const logger = useNventLogger('plugin-state-cleanup')
   const rc: any = useRuntimeConfig()
-  const cleanup = rc?.queue?.state?.cleanup || { strategy: 'never' }
+  // v0.4.1: Read cleanup config from store.state.cleanup
+  const cleanup = rc?.queue?.store?.state?.cleanup || { strategy: 'never' }
 
   // Only set up listeners if cleanup is enabled
   if (cleanup.strategy === 'never' || cleanup.strategy === 'ttl') {
@@ -31,23 +33,13 @@ export default defineNitroPlugin(() => {
 
       try {
         const sp = getStateProvider()
-        const prefix = `flow:${flowId}:`
-        const { keys } = await sp.list(prefix)
+        const pattern = `flow:${flowId}:*`
 
-        if (keys.length > 0) {
-          // Keys from list() include the namespace (e.g., 'nq:flow:123:key')
-          // We need to strip the namespace prefix before calling delete()
-          const rc: any = useRuntimeConfig()
-          const ns = rc?.queue?.state?.namespace || 'nq'
-          const nsPrefix = `${ns}:`
+        // Use clear() with pattern matching (much more efficient)
+        const deletedCount = await sp.clear(pattern)
 
-          await Promise.all(keys.map((k: string) => {
-            // Remove namespace prefix to get the actual key
-            const keyWithoutNs = k.startsWith(nsPrefix) ? k.substring(nsPrefix.length) : k
-            return sp.delete(keyWithoutNs)
-          }))
-
-          logger.info(`Cleaned up ${keys.length} state keys after flow completion`, { flowId, keys })
+        if (deletedCount > 0) {
+          logger.info(`Cleaned up ${deletedCount} state keys after flow completion`, { flowId })
         }
       }
       catch (error) {
@@ -62,23 +54,13 @@ export default defineNitroPlugin(() => {
 
       try {
         const sp = getStateProvider()
-        const prefix = `flow:${flowId}:`
-        const { keys } = await sp.list(prefix)
+        const pattern = `flow:${flowId}:*`
 
-        if (keys.length > 0) {
-          // Keys from list() include the namespace (e.g., 'nq:flow:123:key')
-          // We need to strip the namespace prefix before calling delete()
-          const rc: any = useRuntimeConfig()
-          const ns = rc?.queue?.state?.namespace || 'nq'
-          const nsPrefix = `${ns}:`
+        // Use clear() with pattern matching (much more efficient)
+        const deletedCount = await sp.clear(pattern)
 
-          await Promise.all(keys.map((k: string) => {
-            // Remove namespace prefix to get the actual key
-            const keyWithoutNs = k.startsWith(nsPrefix) ? k.substring(nsPrefix.length) : k
-            return sp.delete(keyWithoutNs)
-          }))
-
-          logger.info(`Cleaned up ${keys.length} state keys after flow failure`, { flowId, keys })
+        if (deletedCount > 0) {
+          logger.info(`Cleaned up ${deletedCount} state keys after flow failure`, { flowId })
         }
       }
       catch (error) {
@@ -97,23 +79,13 @@ export default defineNitroPlugin(() => {
 
       try {
         const sp = getStateProvider()
-        const prefix = `flow:${flowId}:`
-        const { keys } = await sp.list(prefix)
+        const pattern = `flow:${flowId}:*`
 
-        if (keys.length > 0) {
-          // Keys from list() include the namespace (e.g., 'nq:flow:123:key')
-          // We need to strip the namespace prefix before calling delete()
-          const rc: any = useRuntimeConfig()
-          const ns = rc?.queue?.state?.namespace || 'nq'
-          const nsPrefix = `${ns}:`
+        // Use clear() with pattern matching (much more efficient)
+        const deletedCount = await sp.clear(pattern)
 
-          await Promise.all(keys.map((k: string) => {
-            // Remove namespace prefix to get the actual key
-            const keyWithoutNs = k.startsWith(nsPrefix) ? k.substring(nsPrefix.length) : k
-            return sp.delete(keyWithoutNs)
-          }))
-
-          logger.info(`Cleaned up ${keys.length} state keys after step completion`, { flowId, keys })
+        if (deletedCount > 0) {
+          logger.info(`Cleaned up ${deletedCount} state keys after step completion`, { flowId })
         }
       }
       catch (error) {

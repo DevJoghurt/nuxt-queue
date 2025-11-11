@@ -1,11 +1,15 @@
-import { $useQueueRegistry, useQueue, useEventManager, useNventLogger } from '#imports'
+import { $useQueueRegistry, useQueueAdapter, useEventManager, useServerLogger } from '#imports'
 import { randomUUID } from 'node:crypto'
 
+const logger = useServerLogger('flow-engine')
+
+/**
+ * Flow Engine for starting and emitting flow events
+ */
 export const useFlowEngine = () => {
   const registry = $useQueueRegistry()
-  const queueAdapter = useQueue()
+  const queueAdapter = useQueueAdapter()
   const eventsManager = useEventManager()
-  const logger = useNventLogger('flow-engine')
 
   const startFlow = async (flowName: string, payload: any = {}) => {
     const flow = (registry?.flows as Record<string, any>)?.[flowName]

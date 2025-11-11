@@ -1,4 +1,4 @@
-import { defineEventHandler, readBody, getRouterParam, createError, useQueue, $useQueueRegistry } from '#imports'
+import { defineEventHandler, readBody, getRouterParam, createError, useQueueAdapter, $useQueueRegistry } from '#imports'
 
 export default defineEventHandler(async (event) => {
   const flowName = getRouterParam(event, 'name')
@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
     ? flow.entry.queue
     : flow.entry.queue?.name || flow.entry.queue
 
-  const queue = useQueue()
+  const queue = useQueueAdapter()
 
   // Create schedule options
   const scheduleOpts: any = {}

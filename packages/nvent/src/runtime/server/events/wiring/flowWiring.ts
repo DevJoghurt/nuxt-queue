@@ -1,11 +1,8 @@
-import type { EventStoreAdapter } from '../types'
-import type { EventRecord, EmitEvent } from '../../types'
+import type { EventRecord, EmitEvent } from '../../../types'
 import { getEventBus } from '../eventBus'
-import { useEventStore, $useAnalyzedFlows, $useQueueRegistry, useQueue, useNventLogger } from '#imports'
+import { useServerLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, SubjectPatterns } from '#imports'
 
-export interface FlowWiringDeps {
-  adapter: EventStoreAdapter
-}
+const logger = useServerLogger('flow-wiring')
 
 /**
  * Check if all dependencies for a step are met
@@ -41,20 +38,19 @@ export function checkPendingStepTriggers(
 async function checkAndTriggerPendingSteps(
   flowName: string,
   runId: string,
-  store: ReturnType<typeof useEventStore>,
+  store: ReturnType<typeof useStoreAdapter>,
 ): Promise<void> {
-  const logger = useNventLogger('flow-wiring')
   try {
     const analyzedFlows = $useAnalyzedFlows()
     const registry = $useQueueRegistry() as any
-    const { enqueue } = useQueue()
+    const queue = useQueueAdapter()
 
     // Get flow definition
     const flowDef = analyzedFlows.find((f: any) => f.id === flowName) as any
     if (!flowDef?.steps) return
 
     // Get current flow metadata
-    const indexKey = store.names().flowIndex(flowName)
+    const indexKey = SubjectPatterns.flowRunIndex(flowName)
     const flowEntry = await store.indexGet(indexKey, runId)
     if (!flowEntry?.metadata) return
 
@@ -62,7 +58,7 @@ async function checkAndTriggerPendingSteps(
     const emittedEvents = new Set<string>(flowEntry.metadata.emittedEvents || [])
 
     // Read all events to get completed steps
-    const streamName = store.names().flow(runId)
+    const streamName = SubjectPatterns.flowRun(runId)
     const allEvents = await store.read(streamName)
 
     const completedSteps = new Set<string>()
@@ -112,7 +108,7 @@ async function checkAndTriggerPendingSteps(
           const jobId = `${runId}__${stepName}`
 
           try {
-            await enqueue(stepMeta.queue, { name: stepName, data: payload, opts: { jobId } })
+            await queue.enqueue(stepMeta.queue, { name: stepName, data: payload, opts: { jobId } })
 
             logger.debug('Triggered pending step', {
               flowName,
@@ -185,7 +181,7 @@ export function analyzeFlowCompletion(
   // Remove steps from failedSteps if they were retried (not final failure)
   // A step is only permanently failed if it has a step.failed event but no subsequent retry
   const finalFailedSteps = new Set<string>()
-  for (const stepName of failedSteps) {
+  for (const stepName of Array.from(failedSteps)) {
     // Check if there was a step.failed event after the last step.retry
     let lastRetryIndex = -1
     let lastFailedIndex = -1
@@ -218,7 +214,7 @@ export function analyzeFlowCompletion(
   let hasBlockingFailure = false
 
   if (hasFinalFailures) {
-    for (const failedStepName of finalFailedSteps) {
+    for (const failedStepName of Array.from(finalFailedSteps)) {
       const failedStepDef = flowSteps[failedStepName] as any
 
       // Check if this failed step has emits
@@ -295,8 +291,7 @@ export function analyzeFlowCompletion(
  *
  * Events arrive as "ingress" (no id/ts) and are persisted to `nq:flow:{runId}` streams.
  */
-export function createFlowWiring(deps: FlowWiringDeps) {
-  const { adapter } = deps
+export function createFlowWiring() {
   const bus = getEventBus()
   const unsubs: Array<() => void> = []
   let wired = false
@@ -305,13 +300,14 @@ export function createFlowWiring(deps: FlowWiringDeps) {
    * Add flow run to sorted set index for listing
    */
   const indexFlowRun = async (flowName: string, flowId: string, timestamp: number, metadata?: Record<string, any>) => {
-    const logger = useNventLogger('flow-wiring')
     try {
-      const store = useEventStore()
-      const names = store.names()
+      const store = useStoreAdapter()
       // Use centralized naming function
-      const indexKey = names.flowIndex(flowName)
+      const indexKey = SubjectPatterns.flowRunIndex(flowName)
 
+      if (!store.indexAdd) {
+        throw new Error('StoreAdapter does not support indexAdd')
+      }
       await store.indexAdd(indexKey, flowId, timestamp, metadata)
 
       logger.debug('Indexed run', { flowName, flowId, indexKey, timestamp, metadata })
@@ -324,11 +320,17 @@ export function createFlowWiring(deps: FlowWiringDeps) {
   function start() {
     if (wired) return
     wired = true
-    const logger = useNventLogger('flow-wiring')
 
-    // Get stream names utility
-    const store = useEventStore()
-    const names = store.names()
+    // Get store - must be available after adapters are initialized
+    const store = useStoreAdapter()
+
+    if (!store || !store.append) {
+      logger.error('StoreAdapter not properly initialized or missing append method', {
+        hasStore: !!store,
+        hasAppend: !!(store && store.append),
+      })
+      throw new Error('StoreAdapter not initialized')
+    }
 
     // ============================================================================
     // HANDLER 1: PERSISTENCE - Append all flow events to streams
@@ -352,7 +354,14 @@ export function createFlowWiring(deps: FlowWiringDeps) {
         }
 
         // Use centralized naming function
-        const streamName = names.flow(runId)
+        const streamName = SubjectPatterns.flowRun(runId)
+
+        // Validate event has required type field
+        if (!e.type) {
+          logger.error('Event missing type field', { event: e })
+          return
+        }
+
         const eventData: any = {
           type: e.type,
           runId: e.runId,
@@ -366,7 +375,7 @@ export function createFlowWiring(deps: FlowWiringDeps) {
         if ('attempt' in e && (e as any).attempt) eventData.attempt = (e as any).attempt
 
         // Append to stream
-        await adapter.append(streamName, eventData)
+        await store.append(streamName, eventData)
 
         if (e.type === 'flow.completed' || e.type === 'flow.failed') {
           logger.info('Stored terminal event to stream', {
@@ -416,8 +425,8 @@ export function createFlowWiring(deps: FlowWiringDeps) {
         const flowName = e.flowName
         if (!flowName) return
 
-        const streamName = names.flow(runId)
-        const indexKey = names.flowIndex(flowName)
+        const streamName = SubjectPatterns.flowRun(runId)
+        const indexKey = SubjectPatterns.flowRunIndex(flowName)
 
         // For flow.start, initialize index with running status
         if (e.type === 'flow.start') {
@@ -609,7 +618,6 @@ export function createFlowWiring(deps: FlowWiringDeps) {
   }
 
   function stop() {
-    const logger = useNventLogger('flow-wiring')
     for (const u of unsubs.splice(0)) {
       try {
         u()

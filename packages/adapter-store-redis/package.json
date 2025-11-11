@@ -1,0 +1,37 @@
+{
+  "name": "@nvent/adapter-store-redis",
+  "version": "0.4.1",
+  "description": "Redis store adapter for nvent using Redis Streams",
+  "repository": "DevJoghurt/nvent",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/types.d.mts",
+      "import": "./dist/module.mjs"
+    }
+  },
+  "main": "./dist/module.mjs",
+  "types": "./dist/types.d.mts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "nuxt-module-build build",
+    "dev": "nuxt-module-build build --stub",
+    "prepack": "pnpm build"
+  },
+  "peerDependencies": {
+    "nvent": "workspace:*"
+  },
+  "dependencies": {
+    "@nuxt/kit": "^4.2.1",
+    "defu": "^6.1.4",
+    "ioredis": "^5.8.2"
+  },
+  "devDependencies": {
+    "@nuxt/module-builder": "^1.0.2",
+    "@nuxt/schema": "^4.2.1",
+    "typescript": "latest"
+  }
+}

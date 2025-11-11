@@ -10,10 +10,11 @@
  * is handled by flowWiring.ts which subscribes to emit/step.completed events
  */
 
-import { defineNitroPlugin, useEventManager, $useQueueRegistry, useQueue, useNventLogger } from '#imports'
+import { defineNitroPlugin, useEventManager, $useQueueRegistry, useQueueAdapter, useServerLogger } from '#imports'
+
+const logger = useServerLogger('plugin-flow-management')
 
 export default defineNitroPlugin((nitro) => {
-  const logger = useNventLogger('plugin-flow-management')
   const { onType, publishBus } = useEventManager()
   const registry = $useQueueRegistry() as any
 
@@ -58,15 +59,17 @@ export default defineNitroPlugin((nitro) => {
     const triggers = Object.keys(registry?.eventIndex || {})
     if (!triggers.includes(emitName)) return
 
-    const { enqueue } = useQueue()
     const targets = (registry?.eventIndex as Record<string, Array<{ flowId: string, step: string, queue: string }>>)[emitName] || []
+
+    // Get queue adapter inside the handler (after adapters are initialized)
+    const queue = useQueueAdapter()
 
     for (const t of targets) {
       const payload = { ...e.data }
 
       try {
         // Enqueue the entry step (no jobId for new flows)
-        const id = await enqueue(t.queue, { name: t.step, data: payload })
+        const id = await queue.enqueue(t.queue, { name: t.step, data: payload })
 
         // Publish flow.start event for the new flow run
         try {

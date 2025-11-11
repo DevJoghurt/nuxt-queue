@@ -1,3 +1,10 @@
 {
-  "extends": "./playground/.nuxt/tsconfig.json"
+  "files": [],
+  "references": [
+    { "path": "./packages/nvent" },
+    { "path": "./packages/adapter-queue-redis" },
+    { "path": "./packages/adapter-stream-redis" },
+    { "path": "./packages/adapter-store-redis" },
+    { "path": "./playground" }
+  ]
 }

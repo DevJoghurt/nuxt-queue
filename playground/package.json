@@ -1,6 +1,6 @@
 {
   "private": true,
-  "name": "nuxt-queue-playground",
+  "name": "nvent-playground",
   "type": "module",
   "scripts": {
     "dev": "nuxi dev",
@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "nuxt": "*",
-    "@nuxt/ui": "*"
+    "@nuxt/ui": "*",
+    "nvent": "workspace:*"
   }
 }

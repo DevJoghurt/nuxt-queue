@@ -1,20 +1,14 @@
-import type { StreamAdapter } from '../types'
 import { createFlowWiring } from './flowWiring'
-
-export interface WiringDeps {
-  adapter: StreamAdapter
-  names?: any // Legacy, not used in v0.3
-}
 
 export interface Wiring {
   start(): void
   stop(): void
 }
 
-export function createWiringRegistry(deps: WiringDeps): Wiring {
+export function createWiringRegistry(): Wiring {
   // v0.3: Simplified wiring - just flow timeline + index
   const wirings: Wiring[] = [
-    createFlowWiring({ adapter: deps.adapter }),
+    createFlowWiring(),
     // add future wirings here (triggers, webhooks, etc.)
   ]
   let started = false

@@ -1,4 +1,4 @@
-import { defineEventHandler, createError, useEventStore } from '#imports'
+import { defineEventHandler, createError, useStoreAdapter, SubjectPatterns } from '#imports'
 
 /**
  * DELETE /api/_flows/:flowName/clear-history
@@ -15,14 +15,13 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const store = useEventStore()
-    const names = store.names()
+    const store = useStoreAdapter()
 
     let deletedStreams = 0
     let deletedIndex = false
 
     // Get all run IDs from the index using the proper naming convention
-    const indexKey = names.flowIndex(flowName)
+    const indexKey = SubjectPatterns.flowRunIndex(flowName)
 
     if (store.indexRead) {
       const runs = await store.indexRead(indexKey, { limit: 10000 })
@@ -30,7 +29,7 @@ export default defineEventHandler(async (event) => {
       // Delete each run stream and its metadata hash (for Redis adapter)
       if (store.deleteStream) {
         for (const run of runs) {
-          const streamName = names.flow(run.id)
+          const streamName = SubjectPatterns.flowRun(run.id)
           await store.deleteStream(streamName)
           // Also delete metadata hash if Redis adapter is used
           if (store.deleteIndex) {

@@ -1,4 +1,4 @@
-import { useEventManager, useEventStore } from '#imports'
+import { useEventManager, useStoreAdapter, SubjectPatterns } from '#imports'
 
 export interface LogReadOptions {
   fromId?: string
@@ -7,8 +7,7 @@ export interface LogReadOptions {
 
 export function useLogs() {
   const eventManager = useEventManager()
-  const store = useEventStore()
-  const names = store.names()
+  const store = useStoreAdapter()
 
   // Note: direct read helpers removed; prefer paged getters below or live subscriptions.
 
@@ -30,7 +29,7 @@ export function useLogs() {
    */
   async function getFlowRunLogs(flowId: string, opts?: { limit?: number, fromId?: string, direction?: 'forward' | 'backward', paged?: boolean }) {
     // Use centralized naming function
-    const s = names.flow(flowId)
+    const s = SubjectPatterns.flowRun(flowId)
     const limit = opts?.limit ?? 200
     const direction = opts?.direction || 'backward'
     if (opts?.paged) {
@@ -88,7 +87,7 @@ export function useLogs() {
   /** Subscribe to logs on a specific flow run stream via the store adapter (canonical). */
   function onFlowLog(flowId: string, handler: (e: { level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any, raw: any }) => void) {
     // Use centralized naming function
-    const s = names.flow(flowId)
+    const s = SubjectPatterns.flowRun(flowId)
     return store.subscribe(s, (evt: any) => {
       if (evt?.kind !== 'runner.log') return
       const d = (evt?.data || {}) as any

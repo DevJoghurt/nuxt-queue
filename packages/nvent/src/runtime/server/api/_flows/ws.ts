@@ -1,13 +1,21 @@
 import {
   defineWebSocketHandler,
-  useEventStore,
-  usePeerManager,
-  useNventLogger,
+  registerWsPeer,
+  unregisterWsPeer,
+  useServerLogger,
+  useStreamAdapter,
+  useStoreAdapter,
+  getStoreAppendTopic,
+  SubjectPatterns,
 } from '#imports'
 
+import type { SubscriptionHandle } from '../../adapters/interfaces/stream'
+
 interface PeerContext {
-  subscriptions: Map<string, () => void> // streamName -> unsubscribe function
+  subscriptions: Map<string, SubscriptionHandle> // streamName -> subscription handle
 }
+
+const logger = useServerLogger('api-flows-ws')
 
 const peerContexts = new WeakMap<any, PeerContext>()
 
@@ -87,10 +95,7 @@ function safeSend(peer: any, data: any): boolean {
  */
 export default defineWebSocketHandler({
   open(peer) {
-    const logger = useNventLogger('api-flows-ws')
     logger.info('[ws] client connected:', { peerId: peer.id })
-
-    const { registerWsPeer } = usePeerManager()
 
     // Register peer for graceful shutdown during HMR
     registerWsPeer(peer)
@@ -108,7 +113,6 @@ export default defineWebSocketHandler({
   },
 
   async message(peer, message) {
-    const logger = useNventLogger('api-flows-ws')
     const context = peerContexts.get(peer)
     if (!context) {
       logger.error('[ws] no context for peer:', { peerId: peer.id })
@@ -140,24 +144,32 @@ export default defineWebSocketHandler({
         return
       }
 
-      const store = useEventStore()
-      const names = store.names()
-      const flowStream = names.flow(runId)
+      const stream = useStreamAdapter()
+      const store = useStoreAdapter()
       const subscriptionKey = `${flowName}:${runId}`
 
       // Unsubscribe from any existing subscription with same key
-      const existingUnsub = context.subscriptions.get(subscriptionKey)
-      if (existingUnsub) {
+      const existingHandle = context.subscriptions.get(subscriptionKey)
+      if (existingHandle) {
         try {
-          existingUnsub()
+          await existingHandle.unsubscribe()
         }
         catch (err) {
           logger.error('[ws] error unsubscribing:', { error: err })
         }
       }
 
-      // Subscribe to stream store events
-      const unsub = store.subscribe(flowStream, async (event: any) => {
+      // Subscribe to StreamAdapter for cross-instance real-time updates
+      // Topic published by StoreAdapter when new events arrive
+      const subject = SubjectPatterns.flowRun(runId)
+      const topic = getStoreAppendTopic(subject)
+      const handle = await stream.subscribe(topic, async (message: any) => {
+        // message.data.event contains the appended event
+        const event = message.data?.event
+        if (!event) {
+          console.warn('[ws] Received message without event data:', message)
+          return
+        }
         safeSend(peer, {
           type: 'event',
           flowName,
@@ -170,13 +182,13 @@ export default defineWebSocketHandler({
         })
       })
 
-      context.subscriptions.set(subscriptionKey, unsub)
+      context.subscriptions.set(subscriptionKey, handle)
 
-      // Send historical events (backfill)
+      // Send historical events (backfill) from StoreAdapter
       try {
-        const historicalEvents = await store.read(flowStream, {
+        const historicalEvents = await store.read(subject, {
           limit: 100,
-          direction: 'forward',
+          order: 'asc', // forward order
         })
 
         safeSend(peer, {
@@ -215,11 +227,11 @@ export default defineWebSocketHandler({
       }
 
       const subscriptionKey = `${flowName}:${runId}`
-      const unsub = context.subscriptions.get(subscriptionKey)
+      const handle = context.subscriptions.get(subscriptionKey)
 
-      if (unsub) {
+      if (handle) {
         try {
-          unsub()
+          await handle.unsubscribe()
           context.subscriptions.delete(subscriptionKey)
 
           safeSend(peer, {
@@ -251,13 +263,11 @@ export default defineWebSocketHandler({
     }
   },
 
-  close(peer, event) {
-    const logger = useNventLogger('api-flows-ws')
+  async close(peer, event) {
     const isNormalClosure = event?.code === 1000 || event?.code === 1001
     if (!isNormalClosure) {
       logger.info('[ws] client disconnected:', { peerId: peer.id, code: event?.code, reason: event?.reason })
     }
-    const { unregisterWsPeer } = usePeerManager()
 
     // Unregister peer from lifecycle tracking
     unregisterWsPeer(peer)
@@ -265,9 +275,9 @@ export default defineWebSocketHandler({
     const context = peerContexts.get(peer)
     if (context) {
       // Unsubscribe from all streams
-      for (const unsub of context.subscriptions.values()) {
+      for (const handle of Array.from(context.subscriptions.values())) {
         try {
-          unsub()
+          await handle.unsubscribe()
         }
         catch (err) {
           // Suppress errors during normal closure
@@ -281,11 +291,8 @@ export default defineWebSocketHandler({
     }
   },
 
-  error(peer, error) {
-    const logger = useNventLogger('api-flows-ws')
+  async error(peer, error) {
     logger.error('[ws] error for peer:', { peerId: peer.id, error })
-
-    const { unregisterWsPeer } = usePeerManager()
 
     // Unregister peer from lifecycle tracking
     unregisterWsPeer(peer)
@@ -293,9 +300,9 @@ export default defineWebSocketHandler({
     const context = peerContexts.get(peer)
     if (context) {
       // Cleanup on error
-      for (const unsub of context.subscriptions.values()) {
+      for (const handle of Array.from(context.subscriptions.values())) {
         try {
-          unsub()
+          await handle.unsubscribe()
         }
         catch (err) {
           logger.error('[ws] error unsubscribing on error:', { error: err })
