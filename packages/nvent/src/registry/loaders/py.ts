@@ -7,7 +7,7 @@ import type { ConfigMeta, NuxtQueueLogger } from '../types'
 export async function loadPyConfig(absPath: string, logger?: NuxtQueueLogger): Promise<ConfigMeta> {
   const moduleDir = dirname(fileURLToPath(import.meta.url))
 
-  const helper = join(moduleDir, '..', '..', 'runtime', 'python', 'get_config.py')
+  const helper = join(moduleDir, '..', '..', 'runtime', 'worker', 'python', 'get_config.py')
 
   let pyConfig: any | undefined
   if (existsSync(helper)) {

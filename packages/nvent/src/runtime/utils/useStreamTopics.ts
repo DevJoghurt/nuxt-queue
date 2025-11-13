@@ -10,7 +10,7 @@
  * Pattern: store:append:{subject}
  * Published when: StoreAdapter.append() adds an event to a subject
  */
-export function getStoreAppendTopic(subject: string): string {
+function getStoreAppendTopic(subject: string): string {
   return `store:append:${subject}`
 }
 
@@ -19,7 +19,7 @@ export function getStoreAppendTopic(subject: string): string {
  * Pattern: store:save:{collection}
  * Published when: StoreAdapter.save() creates/updates a document
  */
-export function getStoreSaveTopic(collection: string): string {
+function getStoreSaveTopic(collection: string): string {
   return `store:save:${collection}`
 }
 
@@ -28,7 +28,7 @@ export function getStoreSaveTopic(collection: string): string {
  * Pattern: store:delete:{collection}
  * Published when: StoreAdapter.delete() removes a document
  */
-export function getStoreDeleteTopic(collection: string): string {
+function getStoreDeleteTopic(collection: string): string {
   return `store:delete:${collection}`
 }
 
@@ -37,14 +37,14 @@ export function getStoreDeleteTopic(collection: string): string {
  * Pattern: store:kv:{key}
  * Published when: StoreAdapter.kvSet() updates a key
  */
-export function getStoreKvTopic(key: string): string {
+function getStoreKvTopic(key: string): string {
   return `store:kv:${key}`
 }
 
 /**
  * Common subject patterns for event streams
  */
-export const SubjectPatterns = {
+const SubjectPatterns = {
   /**
    * Flow run event stream subject
    */
@@ -65,3 +65,13 @@ export const SubjectPatterns = {
    */
   workerHeartbeat: (workerId: string) => `worker:${workerId}`,
 } as const
+
+export function useStreamTopics() {
+  return {
+    getStoreAppendTopic,
+    getStoreSaveTopic,
+    getStoreDeleteTopic,
+    getStoreKvTopic,
+    SubjectPatterns,
+  }
+}

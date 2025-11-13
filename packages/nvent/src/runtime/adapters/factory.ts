@@ -8,7 +8,7 @@
 import type { QueueAdapter } from './interfaces/queue'
 import type { StreamAdapter } from './interfaces/stream'
 import type { StoreAdapter } from './interfaces/store'
-import type { QueueConfig, StreamConfig, StoreConfig } from '../../../config/types'
+import type { QueueConfig, StreamConfig, StoreConfig } from '../config/types'
 
 import {
   MemoryQueueAdapter,

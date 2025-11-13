@@ -15,8 +15,8 @@ import defu from 'defu'
 import { compileRegistryFromServerWorkers, type LayerInfo } from './registry'
 import { watchQueueFiles } from './utils/dev'
 import { generateRegistryTemplate, generateHandlersTemplate, generateAnalyzedFlowsTemplate } from './utils/templates'
-import { normalizeModuleOptions, toRuntimeConfig, getRedisStorageConfig } from './config'
-import type { ModuleOptions, QueueModuleConfig } from './config/types'
+import { normalizeModuleOptions, toRuntimeConfig, getRedisStorageConfig } from './runtime/config'
+import type { ModuleOptions, QueueModuleConfig } from './runtime/config/types'
 import type {} from '@nuxt/schema'
 
 const meta = {
@@ -187,43 +187,50 @@ export default defineNuxtModule<ModuleOptions>({
         as: '$useAnalyzedFlows',
         from: resolve(nuxt.options.buildDir, 'analyzed-flows'),
       },
-      // Core utilities for user code (moved to server-utils to avoid bundling issues)
+      // Core utilities for user code
       {
         name: 'defineQueueConfig',
-        from: resolve('./runtime/server-utils/utils/defineQueueConfig'),
+        from: resolve('./runtime/utils/defineQueueConfig'),
       },
       {
         name: 'defineQueueWorker',
-        from: resolve('./runtime/server-utils/utils/defineQueueWorker'),
+        from: resolve('./runtime/utils/defineQueueWorker'),
       },
       // Composables users may need in server code
       {
-        name: 'useQueue',
-        from: resolve('./runtime/server-utils/utils/useQueue'),
-      },
-      {
         name: 'useFlowEngine',
-        from: resolve('./runtime/server-utils/utils/useFlowEngine'),
-      },
-      {
-        name: 'useEventStore',
-        from: resolve('./runtime/server-utils/utils/useEventStore'),
-      },
-      {
-        name: 'useLogs',
-        from: resolve('./runtime/server-utils/utils/useLogs'),
+        from: resolve('./runtime/utils/useFlowEngine'),
       },
       {
         name: 'useEventManager',
-        from: resolve('./runtime/server-utils/utils/useEventManager'),
+        from: resolve('./runtime/utils/useEventManager'),
       },
       {
         name: 'usePeerManager',
-        from: resolve('./runtime/server-utils/utils/wsPeerManager'),
+        from: resolve('./runtime/utils/wsPeerManager'),
       },
       {
         name: 'useNventLogger',
-        from: resolve('./runtime/server-utils/utils/useNventLogger'),
+        from: resolve('./runtime/utils/useNventLogger'),
+      }, {
+        name: 'useQueueAdapter',
+        from: resolve('./runtime/utils/adapters'),
+      }, {
+        name: 'useStoreAdapter',
+        from: resolve('./runtime/utils/adapters'),
+      }, {
+        name: 'useStreamAdapter',
+        from: resolve('./runtime/utils/adapters'),
+      },
+      {
+        name: 'getAdapters',
+        from: resolve('./runtime/utils/adapters'),
+      }, {
+        name: 'setAdapters',
+        from: resolve('./runtime/utils/adapters'),
+      }, {
+        name: 'useStreamTopics',
+        from: resolve('./runtime/utils/useStreamTopics'),
       },
     ])
 
@@ -281,4 +288,4 @@ export default defineNuxtModule<ModuleOptions>({
   },
 })
 
-export type { ModuleOptions } from './config/types'
+export type { ModuleOptions } from './runtime/config/types'

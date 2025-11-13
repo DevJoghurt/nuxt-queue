@@ -1,7 +1,7 @@
-import { $useQueueRegistry, useQueueAdapter, useEventManager, useServerLogger } from '#imports'
+import { $useQueueRegistry, useQueueAdapter, useEventManager, useNventLogger } from '#imports'
 import { randomUUID } from 'node:crypto'
 
-const logger = useServerLogger('flow-engine')
+const logger = useNventLogger('flow-engine')
 
 /**
  * Flow Engine for starting and emitting flow events

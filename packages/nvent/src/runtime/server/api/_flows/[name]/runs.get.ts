@@ -1,4 +1,4 @@
-import { defineEventHandler, getRouterParam, getQuery, useStoreAdapter, useNventLogger, SubjectPatterns } from '#imports'
+import { defineEventHandler, getRouterParam, getQuery, useStoreAdapter, useNventLogger, useStreamTopics } from '#imports'
 
 /**
  * GET /api/_flows/:flowName/runs
@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const store = useStoreAdapter()
+  const { SubjectPatterns } = useStreamTopics()
 
   try {
     // Use centralized naming function

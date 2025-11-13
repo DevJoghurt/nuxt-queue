@@ -1,12 +1,11 @@
 /**
  * Adapter Access Utilities
  *
- * Provides composable-style access to the new three-adapter architecture:
+ * Provides composable-style access to the adapter architecture:
  * - QueueAdapter: Job queue operations
  * - StreamAdapter: Cross-instance pub/sub messaging
  * - StoreAdapter: Storage (events, documents, KV, indices)
  *
- * These replace the old EventStoreAdapter pattern.
  */
 
 import type { QueueAdapter } from '../adapters/interfaces/queue'
@@ -63,21 +62,12 @@ export function useStreamAdapter(): StreamAdapter {
 /**
  * Access StoreAdapter for storage operations
  *
- * Replaces the old useEventStore() utility.
  *
  * @example
- * const store = useStoreAdapter()
+ * const store = getStoreAdapter()
  * await store.append('nq:flow:abc-123', { type: 'step.completed', data: {...} })
  * const events = await store.read('nq:flow:abc-123')
  */
 export function useStoreAdapter(): StoreAdapter {
   return getAdapters().store
-}
-
-/**
- * @deprecated Use useStoreAdapter() instead
- * Legacy compatibility wrapper
- */
-export function useStore() {
-  return useStoreAdapter()
 }

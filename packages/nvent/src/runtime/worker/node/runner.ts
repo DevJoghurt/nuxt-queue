@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { getStateProvider } from '../../state/stateProvider'
-import { useRuntimeConfig, useLogs, useFlowEngine, useEventManager, useServerLogger } from '#imports'
+import { getStateProvider } from '../../events/state/stateProvider'
+import { useRuntimeConfig, useFlowEngine, useEventManager, useNventLogger } from '#imports'
 
-const logger = useServerLogger('node-runner')
+const logger = useNventLogger('node-runner')
 
 /**
  * Generic job interface that works with any queue adapter
@@ -76,12 +76,21 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
 
   // Logger bridge: use provider; also mirror to events as runner.log
   const logger: RunLogger = partial?.logger || (() => {
-    const logs = useLogs()
+    const eventManager = useEventManager()
     return {
       log: (level, msg, meta) => {
-        // publish runner.log; ignore failures
-        const mergedMeta = { ...(meta || {}) }
-        void logs.publishLog(level as any, msg, mergedMeta, { queue: partial?.queue, jobId: partial?.jobId, flowId: partial?.flowId })
+        // publish log event directly
+        const runId = partial?.flowId || 'unknown'
+        const flowName = meta?.flowName || 'unknown'
+        void eventManager.publishBus({
+          type: 'log',
+          runId,
+          flowName,
+          stepName: meta?.stepName,
+          stepId: meta?.stepId || meta?.stepRunId,
+          attempt: meta?.attempt,
+          data: { level, message: msg, ...meta },
+        })
       },
     }
   })()

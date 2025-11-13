@@ -1,8 +1,6 @@
-import type { EventRecord, EmitEvent } from '../../../types'
+import type { EventRecord, EmitEvent } from '../../types'
 import { getEventBus } from '../eventBus'
-import { useServerLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, SubjectPatterns } from '#imports'
-
-const logger = useServerLogger('flow-wiring')
+import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, useStreamTopics } from '#imports'
 
 /**
  * Check if all dependencies for a step are met
@@ -40,11 +38,12 @@ async function checkAndTriggerPendingSteps(
   runId: string,
   store: ReturnType<typeof useStoreAdapter>,
 ): Promise<void> {
-  const logger = useServerLogger('flow-wiring')
+  const logger = useNventLogger('flow-wiring')
   try {
     const analyzedFlows = $useAnalyzedFlows()
     const registry = $useQueueRegistry() as any
     const queue = useQueueAdapter()
+    const { SubjectPatterns } = useStreamTopics()
 
     // Get flow definition
     const flowDef = analyzedFlows.find((f: any) => f.id === flowName) as any
@@ -52,6 +51,7 @@ async function checkAndTriggerPendingSteps(
 
     // Get current flow metadata
     const indexKey = SubjectPatterns.flowRunIndex(flowName)
+    if (!store.indexGet) return
     const flowEntry = await store.indexGet(indexKey, runId)
     if (!flowEntry?.metadata) return
 
@@ -91,9 +91,9 @@ async function checkAndTriggerPendingSteps(
 
           for (const sub of subscribes) {
             // Find the emit event for this subscription
-            const emitEvent = allEvents.find((evt: EventRecord) =>
+            const emitEvent = allEvents.find(evt =>
               evt.type === 'emit' && (evt.data as any)?.name === sub,
-            )
+            ) as EventRecord | undefined
 
             if (emitEvent && (emitEvent.data as any)?.payload !== undefined) {
               emitData[sub] = (emitEvent.data as any).payload
@@ -141,7 +141,7 @@ async function checkAndTriggerPendingSteps(
 export function analyzeFlowCompletion(
   flowSteps: Record<string, any>,
   entryStep: string | undefined,
-  events: EventRecord[],
+  events: any[],
 ): {
   status: 'running' | 'completed' | 'failed'
   totalSteps: number
@@ -301,9 +301,10 @@ export function createFlowWiring() {
    * Add flow run to sorted set index for listing
    */
   const indexFlowRun = async (flowName: string, flowId: string, timestamp: number, metadata?: Record<string, any>) => {
-    const logger = useServerLogger('flow-wiring')
+    const logger = useNventLogger('flow-wiring')
     try {
       const store = useStoreAdapter()
+      const { SubjectPatterns } = useStreamTopics()
       // Use centralized naming function
       const indexKey = SubjectPatterns.flowRunIndex(flowName)
 
@@ -322,7 +323,8 @@ export function createFlowWiring() {
   function start() {
     if (wired) return
     wired = true
-    const logger = useServerLogger('flow-wiring')
+    const logger = useNventLogger('flow-wiring')
+    const { SubjectPatterns } = useStreamTopics()
 
     // Get store - must be available after adapters are initialized
     const store = useStoreAdapter()
@@ -447,14 +449,16 @@ export function createFlowWiring() {
         if (e.type === 'step.completed') {
           try {
             // Use atomic increment to avoid race conditions in parallel steps
-            const newCount = await store.indexIncrement(indexKey, runId, 'completedSteps', 1)
+            if (store.indexIncrement) {
+              const newCount = await store.indexIncrement(indexKey, runId, 'completedSteps', 1)
 
-            logger.debug('Incremented completedSteps', {
-              flowName,
-              runId,
-              stepName: 'stepName' in e ? e.stepName : 'unknown',
-              newCount,
-            })
+              logger.debug('Incremented completedSteps', {
+                flowName,
+                runId,
+                stepName: 'stepName' in e ? e.stepName : 'unknown',
+                newCount,
+              })
+            }
           }
           catch (err) {
             logger.warn('Failed to update completedSteps', {
@@ -477,6 +481,10 @@ export function createFlowWiring() {
           }
           else {
             try {
+              if (!store.indexGet || !store.indexUpdateWithRetry) {
+                logger.warn('StoreAdapter does not support indexGet or indexUpdateWithRetry')
+                return
+              }
               const currentEntry = await store.indexGet(indexKey, runId)
               // Filter out any null/undefined values from corrupted data
               const emittedEvents = ((currentEntry?.metadata?.emittedEvents || []) as any[])
@@ -543,7 +551,9 @@ export function createFlowWiring() {
               }
 
               // Update metadata with current state
-              await store.indexUpdateWithRetry(indexKey, runId, updateMetadata)
+              if (store.indexUpdateWithRetry) {
+                await store.indexUpdateWithRetry(indexKey, runId, updateMetadata)
+              }
 
               // If flow reached terminal state, publish terminal event to bus
               // The persistence handler will store it, and other plugins can react to it
@@ -552,9 +562,8 @@ export function createFlowWiring() {
 
                 // Check if terminal event was already published to avoid duplicates
                 // This can happen when multiple steps complete rapidly at the end
-                const terminalEventExists = allEvents.some((evt: EventRecord) =>
-                  evt.type === 'flow.completed' || evt.type === 'flow.failed',
-                )
+                const terminalEventExists = allEvents.some(evt =>
+                  evt.type === 'flow.completed' || evt.type === 'flow.failed')
 
                 if (terminalEventExists) {
                   logger.debug('Terminal event already exists, skipping publish', {
@@ -621,7 +630,7 @@ export function createFlowWiring() {
   }
 
   function stop() {
-    const logger = useServerLogger('flow-wiring')
+    const logger = useNventLogger('flow-wiring')
     for (const u of unsubs.splice(0)) {
       try {
         u()

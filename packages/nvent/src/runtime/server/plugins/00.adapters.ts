@@ -9,14 +9,13 @@
  * Uses normalized config with connection fallback from connections.*
  */
 
-import { defineNitroPlugin, useRuntimeConfig, useServerLogger } from '#imports'
-import { createAdapters, shutdownAdapters } from '../adapters/factory'
-import { setAdapters } from '../utils/useAdapters'
-import type { QueueModuleConfig } from '../../../config/types'
-
-const logger = useServerLogger('adapters-plugin')
+import { defineNitroPlugin, useRuntimeConfig, useNventLogger, setAdapters } from '#imports'
+import { createAdapters, shutdownAdapters } from '../../adapters/factory'
+import type { QueueModuleConfig } from '../../config/types'
+import { createWiringRegistry } from '../../events/wiring/registry'
 
 export default defineNitroPlugin(async (nitroApp) => {
+  const logger = useNventLogger('adapters-plugin')
   const runtimeConfig = useRuntimeConfig()
   const config = (runtimeConfig as any).queue as QueueModuleConfig
 
@@ -39,7 +38,7 @@ export default defineNitroPlugin(async (nitroApp) => {
       store: config.store,
     })
 
-    // Set global adapters for use via useAdapters utilities
+    // Set global adapters for use via setAdapters utilities
     setAdapters(adapters)
 
     logger.info('Adapters initialized successfully', {
@@ -52,7 +51,6 @@ export default defineNitroPlugin(async (nitroApp) => {
     await nitroApp.hooks.callHook('nvent:adapters:ready' as any)
 
     // 4. Initialize flow wiring (event handlers)
-    const { createWiringRegistry } = await import('../events/wiring/registry')
     const wiring = createWiringRegistry()
     wiring.start()
     logger.info('Flow wiring started')

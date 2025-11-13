@@ -1,7 +1,6 @@
-import { useRuntimeConfig } from '#imports'
-import type { StoreAdapter } from '../adapters/interfaces/store'
+import { useRuntimeConfig, useStoreAdapter } from '#imports'
+import type { StoreAdapter } from '../../adapters/interfaces/store'
 import type { StateProvider } from './types'
-import { useStoreAdapter } from '../utils/useAdapters'
 
 /**
  * Get state provider (backed by StoreAdapter KV)

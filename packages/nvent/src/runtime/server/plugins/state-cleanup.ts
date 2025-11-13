@@ -1,7 +1,5 @@
-import { useServerLogger, defineNitroPlugin, useEventManager, useRuntimeConfig } from '#imports'
-import { getStateProvider } from '../state/stateProvider'
-
-const logger = useServerLogger('plugin-state-cleanup')
+import { useNventLogger, defineNitroPlugin, useEventManager, useRuntimeConfig } from '#imports'
+import { getStateProvider } from '../../events/state/stateProvider'
 
 /**
  * State Cleanup Plugin
@@ -13,6 +11,7 @@ const logger = useServerLogger('plugin-state-cleanup')
  * - 'ttl': State expires automatically via TTL (handled by storage provider)
  */
 export default defineNitroPlugin(() => {
+  const logger = useNventLogger('plugin-state-cleanup')
   const rc: any = useRuntimeConfig()
   // v0.4.1: Read cleanup config from store.state.cleanup
   const cleanup = rc?.queue?.store?.state?.cleanup || { strategy: 'never' }

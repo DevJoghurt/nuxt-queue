@@ -17,7 +17,7 @@ export type {
   WorkerHandler,
   WorkerContext,
   WorkerOptions,
-} from './runtime/server/adapters/interfaces/queue'
+} from './runtime/adapters/interfaces/queue'
 
 // Stream Adapter
 export type {
@@ -25,7 +25,7 @@ export type {
   StreamEvent,
   SubscribeOptions,
   SubscriptionHandle,
-} from './runtime/server/adapters/interfaces/stream'
+} from './runtime/adapters/interfaces/stream'
 
 // Store Adapter
 export type {
@@ -34,8 +34,8 @@ export type {
   EventReadOptions,
   EventSubscription,
   ListOptions,
-} from './runtime/server/adapters/interfaces/store'
+} from './runtime/adapters/interfaces/store'
 
 // Adapter Registry
-export { useAdapterRegistry } from './runtime/server/adapters/registry'
-export type { AdapterRegistry } from './runtime/server/adapters/registry'
+export { useAdapterRegistry } from './runtime/adapters/registry'
+export type { AdapterRegistry } from './runtime/adapters/registry'

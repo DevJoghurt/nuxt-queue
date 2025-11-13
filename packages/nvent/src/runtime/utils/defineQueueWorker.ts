@@ -1,5 +1,5 @@
 import { $useQueueRegistry, useFlowEngine, useQueueAdapter } from '#imports'
-import type { RunContext, NodeHandler } from '../worker/runner/node'
+import type { RunContext, NodeHandler } from '../worker/node/runner'
 
 export type ExtendedRunContext = RunContext & {
   provider: ReturnType<typeof useQueueAdapter>

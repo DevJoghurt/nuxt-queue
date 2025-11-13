@@ -1,13 +1,13 @@
+import {
   defineWebSocketHandler,
   usePeerManager,
   useNventLogger,
   useStreamAdapter,
   useStoreAdapter,
-  getStoreAppendTopic,
-  SubjectPatterns,
+  useStreamTopics
 } from '#imports'
 
-import type { SubscriptionHandle } from '../../adapters/interfaces/stream'
+import type { SubscriptionHandle } from '../../../adapters/interfaces/stream'
 
 interface PeerContext {
   subscriptions: Map<string, SubscriptionHandle> // streamName -> subscription handle
@@ -161,6 +161,7 @@ export default defineWebSocketHandler({
 
       // Subscribe to StreamAdapter for cross-instance real-time updates
       // Topic published by StoreAdapter when new events arrive
+      const { SubjectPatterns, getStoreAppendTopic } = useStreamTopics()
       const subject = SubjectPatterns.flowRun(runId)
       const topic = getStoreAppendTopic(subject)
       const handle = await stream.subscribe(topic, async (message: any) => {

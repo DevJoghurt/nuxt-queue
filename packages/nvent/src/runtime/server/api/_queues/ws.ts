@@ -1,9 +1,8 @@
 import {
   defineWebSocketHandler,
   useQueueAdapter,
-  registerWsPeer,
-  unregisterWsPeer,
-  useServerLogger,
+  usePeerManager,
+  useNventLogger,
 } from '#imports'
 
 interface PeerContext {
@@ -72,10 +71,12 @@ function safeSend(peer: any, data: any): boolean {
  *   "message": "error description"
  * }
  */
+export default defineWebSocketHandler({
   open(peer) {
-    const logger = useServerLogger('api-queues-ws')
+    const logger = useNventLogger('api-queues-ws')
     logger.info('[ws:queues] client connected:', peer.id)
 
+    const { registerWsPeer } = usePeerManager()
     // Register peer for graceful shutdown during HMR
     registerWsPeer(peer)
 
@@ -92,7 +93,7 @@ function safeSend(peer: any, data: any): boolean {
   },
 
   async message(peer, message) {
-    const logger = useServerLogger('api-queues-ws')
+    const logger = useNventLogger('api-queues-ws')
     const context = peerContexts.get(peer)
     if (!context) {
       logger.error('[ws:queues] no context for peer:', peer.id)
@@ -251,7 +252,7 @@ function safeSend(peer: any, data: any): boolean {
   },
 
   close(peer, event) {
-    const logger = useServerLogger('api-queues-ws')
+    const logger = useNventLogger('api-queues-ws')
     const isNormalClosure = event?.code === 1000 || event?.code === 1001
     if (!isNormalClosure) {
       logger.info('[ws:queues] client disconnected:', {
@@ -261,8 +262,9 @@ function safeSend(peer: any, data: any): boolean {
       })
     }
 
-  // Unregister peer from lifecycle tracking
-  unregisterWsPeer(peer)
+    const { unregisterWsPeer } = usePeerManager()
+    // Unregister peer from lifecycle tracking
+    unregisterWsPeer(peer)
 
     const context = peerContexts.get(peer)
     if (context) {
@@ -283,12 +285,13 @@ function safeSend(peer: any, data: any): boolean {
   },
 
   error(peer, error) {
-    const logger = useServerLogger('api-queues-ws')
+    const logger = useNventLogger('api-queues-ws')
     logger.error('[ws:queues] error for peer:', {
       peerId: peer.id,
       error,
     })
 
+    const { unregisterWsPeer } = usePeerManager()
     // Unregister peer from lifecycle tracking
     unregisterWsPeer(peer)
 
