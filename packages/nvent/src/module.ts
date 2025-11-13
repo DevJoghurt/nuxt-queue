@@ -5,10 +5,6 @@ import {
   addServerScanDir,
   addServerImports,
   addTemplate,
-  addImportsDir,
-  addComponent,
-  addComponentsDir,
-  addPlugin,
   updateTemplates,
 } from '@nuxt/kit'
 import defu from 'defu'
@@ -48,39 +44,6 @@ export default defineNuxtModule<ModuleOptions>({
     // Use addServerScanDir only for api/ and plugins/ directories
     // These follow Nuxt conventions and won't include .d.ts files in the build
     addServerScanDir(resolve('./runtime/server'))
-
-    // Add shared utilities for both app and server
-    addImportsDir(resolve('./runtime/shared/utils'))
-
-    addImportsDir(resolve('./runtime/app/composables'))
-
-    // add vueflow assets
-
-    if (config.ui) {
-      // add vueflow assets
-      nuxt.options.css = nuxt.options.css || []
-      nuxt.options.css.push(resolve('./runtime/app/assets/vueflow.css'))
-
-      addPlugin({
-        src: resolve('./runtime/app/plugins/vueflow.client'),
-        mode: 'client',
-      })
-      addComponentsDir({
-        path: resolve('./runtime/app/components'),
-        prefix: 'Queue',
-      })
-
-      addComponent({
-        name: 'QueueApp',
-        filePath: resolve('./runtime/app/pages/index.vue'),
-        global: true,
-      })
-    }
-
-    // add jsoneditor to vite optimize -> for esm support
-    nuxt.options.vite.optimizeDeps = defu(nuxt.options.vite.optimizeDeps, {
-      include: ['vanilla-jsoneditor'],
-    })
 
     nuxt.hook('nitro:config', (nitro) => {
       // Ensure Redis storage is configured for unstorage so StateProvider persists to Redis.

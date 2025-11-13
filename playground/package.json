@@ -10,6 +10,7 @@
   "dependencies": {
     "nuxt": "*",
     "@nuxt/ui": "*",
-    "nvent": "workspace:*"
+    "nvent": "workspace:*",
+    "@nvent/app": "workspace:*"
   }
 }

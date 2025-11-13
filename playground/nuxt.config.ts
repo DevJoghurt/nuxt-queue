@@ -3,6 +3,7 @@ export default defineNuxtConfig({
     '@nuxt/ui',
     'nuxt-mcp',
     'nvent',
+    '@nvent/app',
   ],
 
   imports: {
