@@ -31,7 +31,7 @@
     <div class="flex-1 min-h-0 overflow-hidden">
       <div class="h-full flex gap-px bg-gray-200 dark:bg-gray-800">
         <!-- Runs List -->
-        <div class="w-1/3 bg-white dark:bg-gray-950 flex flex-col min-h-0">
+        <div class="w-1/3 min-w-0 flex-shrink-0 bg-white dark:bg-gray-950 flex flex-col min-h-0 overflow-hidden">
           <div class="px-4 py-3 min-h-[49px] border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
             <h2 class="text-sm font-medium text-gray-900 dark:text-gray-100">
               Runs
@@ -85,14 +85,21 @@
             class="flex-1 overflow-y-auto min-h-0"
           >
             <div class="h-full flex items-center justify-center text-sm text-gray-400">
-              <div class="text-center">
-                <div v-if="loadingRuns">
-                  Loading runs...
+              <ClientOnly>
+                <div class="text-center">
+                  <div v-if="loadingRuns">
+                    Loading runs...
+                  </div>
+                  <div v-else>
+                    No runs yet
+                  </div>
                 </div>
-                <div v-else>
-                  No runs yet
-                </div>
-              </div>
+                <template #fallback>
+                  <div class="text-center">
+                    No runs yet
+                  </div>
+                </template>
+              </ClientOnly>
             </div>
           </div>
           <div
@@ -149,6 +156,7 @@
                     :is-running="r.status === 'running'"
                     :is-completed="r.status === 'completed'"
                     :is-failed="r.status === 'failed'"
+                    :is-canceled="r.status === 'canceled'"
                   />
                 </div>
               </div>
@@ -202,7 +210,7 @@
         </div>
 
         <!-- Main Content Area with Tabs -->
-        <div class="flex-1 bg-white dark:bg-gray-950 flex flex-col min-h-0">
+        <div class="flex-1 min-w-0 bg-white dark:bg-gray-950 flex flex-col min-h-0 overflow-hidden">
           <div class="px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 shrink-0">
             <div class="flex items-center justify-between">
               <UTabs
@@ -269,22 +277,26 @@
               class="h-full flex gap-px bg-gray-200 dark:bg-gray-800"
             >
               <!-- Left: Overview -->
-              <div class="w-1/2 bg-white dark:bg-gray-950 flex flex-col min-h-0">
+              <div class="flex-1 min-w-0 max-w-[50%] bg-white dark:bg-gray-950 flex flex-col min-h-0 overflow-hidden">
                 <div class="flex-1 overflow-y-auto min-h-0">
                   <FlowRunOverview
                     :run-status="runSnapshot.status"
                     :started-at="runSnapshot.startedAt"
                     :completed-at="runSnapshot.completedAt"
                     :steps="flowState.stepList.value"
+                    :flow-name="selectedFlow"
+                    :run-id="selectedRunId"
+                    @select-step="handleSelectStep"
+                    @cancel-flow="handleCancelFlow"
                   />
                 </div>
               </div>
 
               <!-- Right: Combined Logs & Events -->
-              <div class="w-1/2 bg-white dark:bg-gray-950 flex flex-col min-h-0">
+              <div class="flex-1 min-w-0 max-w-[50%] bg-white dark:bg-gray-950 flex flex-col min-h-0 overflow-hidden">
                 <FlowRunTimeline
                   :events="timeline"
-                  :logs="flowState.state.value.logs"
+                  :logs="filteredLogs"
                   :is-live="isConnected"
                   @export="exportTimelineJson"
                 />
@@ -575,13 +587,48 @@ const runSnapshot = computed(() => {
   }
 })
 
-const timeline = computed(() => flowState.events.value)
+// Selected step for filtering events and logs
+const selectedStepKey = ref<string | null>(null)
+
+const timeline = computed(() => {
+  const events = flowState.events.value
+  if (!selectedStepKey.value) return events
+  // Filter events by selected step
+  return events.filter((e: any) => e.stepName === selectedStepKey.value)
+})
+
+const filteredLogs = computed(() => {
+  const logs = flowState.state.value.logs
+  if (!selectedStepKey.value) return logs
+  // Filter logs by selected step
+  return logs.filter((log: any) => log.stepName === selectedStepKey.value)
+})
 
 const selectedFlowMeta = computed(() => {
   const id = selectedFlow.value
   if (!id) return null
   return (flows.value || []).find((f: any) => f?.id === id) || null
 })
+
+const handleSelectStep = (stepKey: string | null) => {
+  selectedStepKey.value = stepKey
+}
+
+// Handle cancel flow
+const handleCancelFlow = async () => {
+  if (!selectedFlow.value || !selectedRunId.value) return
+  
+  try {
+    await $fetch(`/api/_flows/${selectedFlow.value}/runs/${selectedRunId.value}/cancel`, {
+      method: 'POST',
+    })
+    // Toast notification (if available) or console
+    console.log('Flow canceled successfully')
+  }
+  catch (error) {
+    console.error('Failed to cancel flow:', error)
+  }
+}
 
 const diagramStepStates = computed(() => {
   if (!selectedRunId.value) return undefined

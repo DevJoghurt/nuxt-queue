@@ -1,4 +1,4 @@
-import { defineEventHandler, getRouterParam, createError, useRuntimeConfig, $useQueueRegistry } from '#imports'
+import { defineEventHandler, getRouterParam, createError, useRuntimeConfig, useQueueAdapter, $useQueueRegistry } from '#imports'
 import { Queue } from 'bullmq'
 
 export default defineEventHandler(async (event) => {
@@ -14,13 +14,47 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: `Flow '${flowName}' not found` })
   }
 
-  const rc = useRuntimeConfig() as any
-  const connection = rc.queue?.redis
-
   // Extract queue name (handle both string and object formats)
   const queueName = typeof flow.entry.queue === 'string'
     ? flow.entry.queue
     : flow.entry.queue?.name || flow.entry.queue
+
+  const adapter = useQueueAdapter()
+
+  // Try adapter's getScheduledJobs first (for file adapter)
+  if (adapter.getScheduledJobs) {
+    try {
+      const scheduledJobs = await adapter.getScheduledJobs(queueName)
+
+      // Filter for this flow's entry step
+      const schedules = scheduledJobs
+        .filter(job => job.jobName === flow.entry.step)
+        .map(job => ({
+          id: job.id,
+          flowName,
+          queue: queueName,
+          step: flow.entry.step,
+          schedule: {
+            cron: job.cron || job.pattern,
+          },
+          nextRun: job.nextRun ? job.nextRun.toISOString() : undefined,
+          repeatCount: job.repeatCount,
+          limit: job.limit,
+        }))
+
+      return schedules
+    }
+    catch (error: any) {
+      throw createError({
+        statusCode: 500,
+        statusMessage: `Failed to list schedules: ${error.message}`,
+      })
+    }
+  }
+
+  // Fallback to BullMQ for Redis adapter
+  const rc = useRuntimeConfig() as any
+  const connection = rc.queue?.redis
 
   // Get queue prefix from registry worker config
   let prefix: string | undefined

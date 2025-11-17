@@ -27,7 +27,7 @@ export declare function defineQueueWorker(processor: (...args: any[]) => any): a
 export declare function defineQueueConfig(cfg: any): any
 
 // v0.4 Event Schema
-export type EventType = 'flow.start' | 'flow.completed' | 'flow.failed' | 'step.started' | 'step.completed' | 'step.failed' | 'step.retry' | 'log' | 'emit' | 'state'
+export type EventType = 'flow.start' | 'flow.completed' | 'flow.failed' | 'flow.cancel' | 'step.started' | 'step.completed' | 'step.failed' | 'step.retry' | 'log' | 'emit' | 'state'
 
 export interface BaseEvent {
   id?: string // Redis stream ID (auto-generated, not present for ingress events)
@@ -62,6 +62,13 @@ export interface FlowFailedEvent extends BaseEvent {
   data?: {
     error?: string
     stack?: string
+  }
+}
+
+export interface FlowCancelEvent extends BaseEvent {
+  type: 'flow.cancel'
+  data?: {
+    canceledAt?: string
   }
 }
 
@@ -127,6 +134,6 @@ export interface StateEvent extends StepEvent {
   }
 }
 
-export type FlowEvent = FlowStartEvent | FlowCompletedEvent | FlowFailedEvent | StepStartedEvent | StepCompletedEvent | StepFailedEvent | StepRetryEvent | LogEvent | EmitEvent | StateEvent
+export type FlowEvent = FlowStartEvent | FlowCompletedEvent | FlowFailedEvent | FlowCancelEvent | StepStartedEvent | StepCompletedEvent | StepFailedEvent | StepRetryEvent | LogEvent | EmitEvent | StateEvent
 
 export type EventRecord = FlowEvent

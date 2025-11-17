@@ -1,8 +1,8 @@
 /**
  * Adapter Factory (v0.4.1)
  *
- * Creates adapters with proper dependency injection
- * StoreAdapter automatically gets StreamAdapter for cross-instance replication
+ * Creates adapters independently without dependencies
+ * StoreAdapter is pure storage - streaming handled by wiring layer
  */
 
 import type { QueueAdapter } from './interfaces/queue'
@@ -25,21 +25,17 @@ export interface AdapterSet {
 }
 
 /**
- * Create a complete set of adapters with proper dependencies (v0.4.1)
- * StoreAdapter receives StreamAdapter for automatic cross-instance replication
+ * Create a complete set of adapters (v0.4.1)
+ * All adapters are independent - wiring layer handles coordination
  */
 export async function createAdapters(config: {
   queue: QueueConfig
   stream: StreamConfig
   store: StoreConfig
 }): Promise<AdapterSet> {
-  // 1. Create StreamAdapter first (no dependencies)
+  // Create all adapters independently (order doesn't matter)
   const stream = await createStreamAdapter(config.stream)
-
-  // 2. Create StoreAdapter with StreamAdapter dependency
-  const store = await createStoreAdapter(config.store, stream)
-
-  // 3. Create QueueAdapter (independent)
+  const store = await createStoreAdapter(config.store)
   const queue = await createQueueAdapter(config.queue)
 
   return { queue, stream, store }
@@ -75,21 +71,19 @@ async function createStreamAdapter(config: StreamConfig): Promise<StreamAdapter>
 
 async function createStoreAdapter(
   config: StoreConfig,
-  stream: StreamAdapter,
 ): Promise<StoreAdapter> {
   const type = config.adapter || 'file'
 
   switch (type) {
     case 'memory': {
-      // Memory adapter with StreamAdapter for cross-instance sync
-      return new MemoryStoreAdapter({ streamAdapter: stream })
+      // Memory adapter - pure in-memory storage
+      return new MemoryStoreAdapter()
     }
 
     case 'file': {
       const dataDir = config.file?.dataDir || '.data/store'
       const adapter = new FileStoreAdapter({
         dataDir,
-        streamAdapter: stream, // File adapter can stream to other instances
       })
       await adapter.init()
       return adapter

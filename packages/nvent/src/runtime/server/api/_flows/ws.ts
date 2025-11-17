@@ -4,7 +4,7 @@ import {
   useNventLogger,
   useStreamAdapter,
   useStoreAdapter,
-  useStreamTopics
+  useStreamTopics,
 } from '#imports'
 
 import type { SubscriptionHandle } from '../../../adapters/interfaces/stream'
@@ -159,18 +159,24 @@ export default defineWebSocketHandler({
         }
       }
 
-      // Subscribe to StreamAdapter for cross-instance real-time updates
-      // Topic published by StoreAdapter when new events arrive
-      const { SubjectPatterns, getStoreAppendTopic } = useStreamTopics()
+      // Subscribe to StreamAdapter client-messages channel
+      // Topic published by StreamCoordinator when client messages are enabled
+
+      const { SubjectPatterns, getClientFlowTopic } = useStreamTopics()
+
+      // Calculate the subject for store operations (subject pattern: nq:flow:{runId})
       const subject = SubjectPatterns.flowRun(runId)
-      const topic = getStoreAppendTopic(subject)
+
+      // Subscribe to client:flow:{runId} channel for real-time updates
+      const topic = getClientFlowTopic(runId)
       const handle = await stream.subscribe(topic, async (message: any) => {
-        // message.data.event contains the appended event
+        // message.data.event contains the flow event
         const event = message.data?.event
         if (!event) {
-          console.warn('[ws] Received message without event data:', message)
+          logger.warn('[ws] Received message without event data:', message)
           return
         }
+
         safeSend(peer, {
           type: 'event',
           flowName,

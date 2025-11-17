@@ -16,6 +16,7 @@ import * as fastq from 'fastq'
 import type { queueAsPromised } from 'fastq'
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
+import cronParser from 'cron-parser'
 import type {
   QueueAdapter,
   JobInput,
@@ -54,10 +55,19 @@ interface JobWithOpts extends Job {
   }
 }
 
+interface ScheduledJob {
+  queueName: string
+  job: JobInput
+  opts: ScheduleOptions
+  timerId?: NodeJS.Timeout
+  repeatCount: number
+}
+
 export class FileQueueAdapter implements QueueAdapter {
   private jobs = new Map<string, JobWithOpts>()
   private eventListeners = new Map<string, Array<(payload: any) => void>>()
   private workers = new Map<string, QueueWorkerInfo>()
+  private scheduledJobs = new Map<string, ScheduledJob>()
   private options: FileQueueAdapterOptions
   private initialized = false
 
@@ -168,8 +178,9 @@ export class FileQueueAdapter implements QueueAdapter {
     // Dispatch to worker if registered
     const workerInfo = this.workers.get(queueName)
     if (workerInfo && !workerInfo.paused) {
-      workerInfo.queue.push({ jobId, jobName: job.name, data: job.data }).catch((error) => {
-        console.error(`[FileQueueAdapter] Error processing job ${jobId}:`, error)
+      // Don't catch errors here - let them propagate to dispatcher for retry handling
+      workerInfo.queue.push({ jobId, jobName: job.name, data: job.data }).catch(() => {
+        // Errors are handled by dispatcher's retry logic
       })
     }
 
@@ -203,9 +214,31 @@ export class FileQueueAdapter implements QueueAdapter {
       return jobId
     }
 
-    // Cron not supported (needs scheduler daemon)
+    // Handle cron and repeat scheduling
     if (opts?.cron || opts?.repeat) {
-      throw new Error('Cron/repeat scheduling not supported in file adapter')
+      const scheduleId = this.generateId()
+      const cronPattern = opts.cron || opts.repeat?.pattern
+
+      if (!cronPattern) {
+        throw new Error('Cron pattern is required for scheduled jobs')
+      }
+
+      // Create scheduled job entry
+      const scheduledJob: ScheduledJob = {
+        queueName,
+        job,
+        opts,
+        repeatCount: 0,
+      }
+
+      this.scheduledJobs.set(scheduleId, scheduledJob)
+
+      // Start the cron schedule
+      this.scheduleCronJob(scheduleId, scheduledJob)
+
+      console.info(`[FileQueue] Scheduled job "${job.name}" with cron pattern "${cronPattern}" (id: ${scheduleId})`)
+
+      return scheduleId
     }
 
     return this.enqueue(queueName, job)
@@ -277,6 +310,61 @@ export class FileQueueAdapter implements QueueAdapter {
     }
   }
 
+  async getScheduledJobs(queueName: string): Promise<Array<any>> {
+    const scheduled: Array<any> = []
+
+    for (const [scheduleId, scheduledJob] of this.scheduledJobs.entries()) {
+      if (scheduledJob.queueName === queueName) {
+        const cronPattern = scheduledJob.opts.cron || scheduledJob.opts.repeat?.pattern
+        let nextRun: Date | undefined
+
+        // Calculate next run time
+        if (cronPattern) {
+          try {
+            const interval = cronParser.parseExpression(cronPattern)
+            nextRun = interval.next().toDate()
+          }
+          catch {
+            // Ignore parse errors for display
+          }
+        }
+
+        scheduled.push({
+          id: scheduleId,
+          jobName: scheduledJob.job.name,
+          queueName: scheduledJob.queueName,
+          cron: scheduledJob.opts.cron,
+          pattern: scheduledJob.opts.repeat?.pattern,
+          nextRun,
+          repeatCount: scheduledJob.repeatCount,
+          limit: scheduledJob.opts.repeat?.limit,
+        })
+      }
+    }
+
+    return scheduled
+  }
+
+  async removeScheduledJob(scheduleId: string): Promise<boolean> {
+    const scheduledJob = this.scheduledJobs.get(scheduleId)
+
+    if (!scheduledJob) {
+      return false
+    }
+
+    // Clear the timer
+    if (scheduledJob.timerId) {
+      clearTimeout(scheduledJob.timerId)
+    }
+
+    // Remove from map
+    this.scheduledJobs.delete(scheduleId)
+
+    console.info(`[FileQueue] Removed scheduled job: ${scheduleId}`)
+
+    return true
+  }
+
   async pause(queueName: string): Promise<void> {
     const workerInfo = this.workers.get(queueName)
     if (workerInfo) {
@@ -294,6 +382,15 @@ export class FileQueueAdapter implements QueueAdapter {
   }
 
   async close(): Promise<void> {
+    // Stop all scheduled jobs
+    for (const [scheduleId, scheduledJob] of this.scheduledJobs.entries()) {
+      if (scheduledJob.timerId) {
+        clearTimeout(scheduledJob.timerId)
+      }
+      console.info(`[FileQueue] Stopped scheduled job: ${scheduleId}`)
+    }
+    this.scheduledJobs.clear()
+
     // Drain all worker queues
     const drainPromises = Array.from(this.workers.values()).map(w => w.queue.drained())
     await Promise.all(drainPromises)
@@ -364,10 +461,11 @@ export class FileQueueAdapter implements QueueAdapter {
       const currentAttempts = storedJob.attemptsMade || 0
       const maxAttempts = storedJob.opts?.attempts || 1
 
-      // Update job state to active and increment attempts
+      // Update job state to active
+      // Note: We increment attemptsMade AFTER the attempt completes (on retry),
+      // so during processing it shows the number of COMPLETED attempts (0 for first attempt)
       await this.updateJobState(queueName, task.jobId, 'active', {
         processedOn: Date.now(),
-        attemptsMade: currentAttempts + 1,
       })
 
       // Emit active event
@@ -375,11 +473,12 @@ export class FileQueueAdapter implements QueueAdapter {
 
       try {
         // Build a BullMQ-like job object so the handler's processor logic works
+        // attemptsMade is 0-indexed: 0 = first attempt, 1 = second attempt, etc.
         const jobLike = {
           id: task.jobId,
           name: task.jobName,
           data: task.data,
-          attemptsMade: currentAttempts + 1,
+          attemptsMade: currentAttempts,
           opts: { attempts: maxAttempts, ...storedJob.opts },
         }
 
@@ -419,6 +518,7 @@ export class FileQueueAdapter implements QueueAdapter {
           }
 
           // Update job back to waiting for retry
+          // Increment attemptsMade to track completed attempts (0 = first attempt completed)
           await this.updateJobState(queueName, task.jobId, 'waiting', {
             attemptsMade: newAttemptCount,
             failedReason: `Attempt ${newAttemptCount}/${maxAttempts} failed: ${(err as Error).message}`,
@@ -426,19 +526,23 @@ export class FileQueueAdapter implements QueueAdapter {
 
           // Log retry
           console.info(
-            `[FileQueue] Retrying job ${task.jobId} (attempt ${newAttemptCount}/${maxAttempts}) `
+            `[FileQueue] Retrying job ${task.jobId} (attempt ${newAttemptCount + 1}/${maxAttempts}) `
             + `after ${retryDelay}ms delay`,
           )
 
           // Schedule retry with backoff
-          setTimeout(() => {
-            workerInfo.queue.push(task).catch((retryErr) => {
-              console.error(`[FileQueue] Error retrying job ${task.jobId}:`, retryErr)
-            })
-          }, retryDelay)
+          const currentWorkerInfo = this.workers.get(queueName)
+          if (currentWorkerInfo) {
+            setTimeout(() => {
+              currentWorkerInfo.queue.push(task).catch(() => {
+                // Errors will be handled by retry logic
+              })
+            }, retryDelay)
+          }
 
-          // Don't throw - job will be retried
-          return
+          // Throw the error so the runner can emit step.failed and step.retry events
+          // The retry is already scheduled above, so this just lets the events flow
+          throw err
         }
 
         // Max attempts reached - mark as failed
@@ -498,8 +602,9 @@ export class FileQueueAdapter implements QueueAdapter {
     )
 
     for (const job of waitingJobs) {
-      workerInfo.queue.push({ jobId: job.id, jobName: job.name, data: job.data }).catch((error) => {
-        console.error(`[FileQueueAdapter] Error processing queued job ${job.id}:`, error)
+      // Don't catch errors here - let them propagate to dispatcher for retry handling
+      workerInfo.queue.push({ jobId: job.id, jobName: job.name, data: job.data }).catch(() => {
+        // Errors are handled by dispatcher's retry logic
       })
     }
   }
@@ -537,5 +642,62 @@ export class FileQueueAdapter implements QueueAdapter {
 
   private generateId(): string {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  }
+
+  private scheduleCronJob(scheduleId: string, scheduledJob: ScheduledJob): void {
+    const cronPattern = scheduledJob.opts.cron || scheduledJob.opts.repeat?.pattern
+
+    if (!cronPattern) {
+      console.error(`[FileQueue] No cron pattern found for schedule ${scheduleId}`)
+      return
+    }
+
+    try {
+      // Parse the cron expression
+      const interval = cronParser.parseExpression(cronPattern)
+      const nextRun = interval.next().toDate()
+      const now = new Date()
+      const delay = nextRun.getTime() - now.getTime()
+
+      console.info(
+        `[FileQueue] Next run for schedule ${scheduleId}: ${nextRun.toISOString()} (in ${Math.round(delay / 1000)}s)`,
+      )
+
+      // Schedule the next execution
+      scheduledJob.timerId = setTimeout(async () => {
+        // Check if we've hit the repeat limit
+        const limit = scheduledJob.opts.repeat?.limit
+        if (limit !== undefined && scheduledJob.repeatCount >= limit) {
+          console.info(`[FileQueue] Schedule ${scheduleId} reached repeat limit (${limit})`)
+          this.scheduledJobs.delete(scheduleId)
+          return
+        }
+
+        // Execute the job
+        try {
+          await this.enqueue(scheduledJob.queueName, scheduledJob.job)
+          scheduledJob.repeatCount++
+
+          // Schedule the next run (if not at limit)
+          const shouldContinue = limit === undefined || scheduledJob.repeatCount < limit
+          if (shouldContinue) {
+            this.scheduleCronJob(scheduleId, scheduledJob)
+          }
+          else {
+            console.info(`[FileQueue] Schedule ${scheduleId} completed all ${limit} runs`)
+            this.scheduledJobs.delete(scheduleId)
+          }
+        }
+        catch (error) {
+          console.error(`[FileQueue] Error executing scheduled job ${scheduleId}:`, error)
+          // Continue scheduling even if one execution fails
+          this.scheduleCronJob(scheduleId, scheduledJob)
+        }
+      }, delay)
+    }
+    catch (error) {
+      console.error(`[FileQueue] Error parsing cron expression "${cronPattern}":`, error)
+      throw new Error(`Invalid cron pattern: ${cronPattern}`)
+    }
   }
 }

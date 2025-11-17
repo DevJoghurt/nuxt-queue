@@ -51,7 +51,15 @@ export default defineNitroPlugin(async (nitroApp) => {
     await nitroApp.hooks.callHook('nvent:adapters:ready' as any)
 
     // 4. Initialize flow wiring (event handlers)
-    const wiring = createWiringRegistry()
+    const wiring = createWiringRegistry({
+      streamWiring: {
+        enabled: true, // Enable for WebSocket support
+      },
+      stateWiring: {
+        // Strategy is read from config by default (queue.store.state.cleanup.strategy)
+        // Can be overridden here if needed
+      },
+    })
     wiring.start()
     logger.info('Flow wiring started')
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { getStateProvider } from '../../events/state/stateProvider'
+import { useStateAdapter } from '../../utils/adapters'
 import { useRuntimeConfig, useFlowEngine, useEventManager, useNventLogger } from '#imports'
 
 const logger = useNventLogger('node-runner')
@@ -54,19 +54,19 @@ function scopeKey(baseKey: string, flowId?: string) {
 }
 
 export function buildContext(partial?: Partial<RunContext>): RunContext {
-  // Provide a lazy StateProvider so ctx.state works without explicit wiring at callsites
+  // Provide a lazy StateAdapter so ctx.state works without explicit wiring at callsites
   const state = partial?.state || ((): RunState => {
     try {
-      const state = getStateProvider()
+      const stateAdapter = useStateAdapter()
       const rc: any = useRuntimeConfig()
       const cleanupCfg = rc?.queue?.state?.cleanup || { strategy: 'never' }
       return {
-        async get(key) { return state.get(scopeKey(key, partial?.flowId)) },
+        async get(key) { return stateAdapter.get(scopeKey(key, partial?.flowId)) },
         async set(key, value, opts) {
           const ttl = opts?.ttl ?? (cleanupCfg?.strategy === 'ttl' ? cleanupCfg?.ttlMs : undefined)
-          return state.set(scopeKey(key, partial?.flowId), value, ttl ? { ttl } : undefined)
+          return stateAdapter.set(scopeKey(key, partial?.flowId), value, ttl ? { ttl } : undefined)
         },
-        async delete(key) { return state.delete(scopeKey(key, partial?.flowId)) },
+        async delete(key) { return stateAdapter.delete(scopeKey(key, partial?.flowId)) },
       }
     }
     catch {
@@ -106,6 +106,29 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
         flowName: payload.flowName || partial?.flowName,
       }
       return baseFlowEngine.emit(trigger, enrichedPayload)
+    },
+    cancel: async () => {
+      // Auto-inject flowId and flowName from context
+      if (!partial?.flowName || !partial?.flowId) {
+        throw new Error('Cannot cancel flow: flowName or flowId not available in context')
+      }
+      return baseFlowEngine.cancelFlow(partial.flowName, partial.flowId)
+    },
+    isRunning: async (flowName?: string, runId?: string) => {
+      // Use provided flowName or current context flowName
+      const targetFlowName = flowName || partial?.flowName
+      if (!targetFlowName) {
+        throw new Error('flowName is required to check if flow is running')
+      }
+      return baseFlowEngine.isRunning(targetFlowName, runId)
+    },
+    getRunningFlows: async (flowName?: string) => {
+      // Use provided flowName or current context flowName
+      const targetFlowName = flowName || partial?.flowName
+      if (!targetFlowName) {
+        throw new Error('flowName is required to get running flows')
+      }
+      return baseFlowEngine.getRunningFlows(targetFlowName)
     },
   }
 

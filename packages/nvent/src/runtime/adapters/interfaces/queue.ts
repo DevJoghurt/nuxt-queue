@@ -50,6 +50,17 @@ export interface QueueAdapter {
   getJobCounts(queueName: string): Promise<JobCounts>
 
   /**
+   * Get scheduled/repeatable jobs (cron jobs)
+   */
+  getScheduledJobs?(queueName: string): Promise<ScheduledJobInfo[]>
+
+  /**
+   * Remove a scheduled/repeatable job
+   * @returns true if removed, false if not found
+   */
+  removeScheduledJob?(scheduleId: string): Promise<boolean>
+
+  /**
    * Pause the queue
    */
   pause(queueName: string): Promise<void>
@@ -142,6 +153,17 @@ export interface JobCounts {
   delayed: number
   waiting: number
   paused: number
+}
+
+export interface ScheduledJobInfo {
+  id: string
+  jobName: string
+  queueName: string
+  cron?: string
+  pattern?: string
+  nextRun?: Date
+  repeatCount?: number
+  limit?: number
 }
 
 export type QueueEvent = 'waiting' | 'active' | 'progress' | 'completed' | 'failed' | 'delayed' | 'paused' | 'stalled'

@@ -1,4 +1,4 @@
-import { $useQueueRegistry, useQueueAdapter, useEventManager, useNventLogger } from '#imports'
+import { $useQueueRegistry, useQueueAdapter, useEventManager, useNventLogger, useStoreAdapter, useStreamTopics } from '#imports'
 import { randomUUID } from 'node:crypto'
 
 const logger = useNventLogger('flow-engine')
@@ -20,9 +20,16 @@ export const useFlowEngine = () => {
       ? flow.entry.queue
       : flow.entry.queue?.name || flow.entry.queue
 
+    // Get default job options from registry worker config (includes attempts config)
+    // Find the entry worker for this flow to get its queue.defaultJobOptions
+    const entryWorker = (registry?.workers as any[])?.find((w: any) =>
+      w?.flow?.step === flow.entry.step && w?.queue?.name === queueName,
+    )
+    const opts = entryWorker?.queue?.defaultJobOptions || {}
+
     // Generate a flowId for the entire run
     const flowId = randomUUID()
-    const id = await queueAdapter.enqueue(queueName, { name: flow.entry.step, data: { ...payload, flowId, flowName } })
+    const id = await queueAdapter.enqueue(queueName, { name: flow.entry.step, data: { ...payload, flowId, flowName }, opts })
     // v0.4: Emit flow.start event
     try {
       await eventsManager.publishBus({ type: 'flow.start', runId: flowId, flowName, data: { input: payload } })
@@ -63,5 +70,85 @@ export const useFlowEngine = () => {
     return []
   }
 
-  return { startFlow, emit }
+  const cancelFlow = async (flowName: string, runId: string) => {
+    try {
+      // Emit flow.cancel event to mark the flow as canceled
+      await eventsManager.publishBus({
+        type: 'flow.cancel',
+        runId,
+        flowName,
+        data: {
+          canceledAt: new Date().toISOString(),
+        },
+      })
+
+      logger.info('Flow canceled', { flowName, runId })
+      return { success: true, runId, flowName }
+    }
+    catch (err) {
+      logger.error('Failed to cancel flow', { flowName, runId, error: err })
+      throw err
+    }
+  }
+
+  const isRunning = async (flowName: string, runId?: string) => {
+    try {
+      const store = useStoreAdapter()
+      const { SubjectPatterns } = useStreamTopics()
+
+      // Check if indexRead is available
+      if (!store.indexRead) {
+        return false
+      }
+
+      // If runId is provided, check specific run
+      if (runId) {
+        const runIndexKey = SubjectPatterns.flowRunIndex(flowName)
+        const entries = await store.indexRead(runIndexKey, { limit: 1000 })
+        const run = entries.find(e => e.id === runId)
+        return run?.metadata?.status === 'running'
+      }
+
+      // Otherwise, check if ANY run of this flow is running
+      const runIndexKey = SubjectPatterns.flowRunIndex(flowName)
+      const entries = await store.indexRead(runIndexKey, { limit: 1000 })
+      return entries.some(e => e.metadata?.status === 'running')
+    }
+    catch (err) {
+      logger.error('[isRunning] Error checking flow status:', err)
+      return false
+    }
+  }
+
+  const getRunningFlows = async (flowName: string) => {
+    try {
+      const store = useStoreAdapter()
+      const { SubjectPatterns } = useStreamTopics()
+
+      // Check if indexRead is available
+      if (!store.indexRead) {
+        return []
+      }
+
+      const runIndexKey = SubjectPatterns.flowRunIndex(flowName)
+      const entries = await store.indexRead(runIndexKey, { limit: 1000 })
+
+      return entries
+        .filter(e => e.metadata?.status === 'running')
+        .map(e => ({
+          id: e.id,
+          flowName,
+          status: e.metadata?.status,
+          startedAt: e.metadata?.startedAt,
+          stepCount: e.metadata?.stepCount || 0,
+          completedSteps: e.metadata?.completedSteps || 0,
+        }))
+    }
+    catch (err) {
+      logger.error('[getRunningFlows] Error getting running flows:', err)
+      return []
+    }
+  }
+
+  return { startFlow, emit, cancelFlow, isRunning, getRunningFlows }
 }

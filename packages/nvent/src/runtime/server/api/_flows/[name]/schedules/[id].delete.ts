@@ -1,4 +1,4 @@
-import { defineEventHandler, getRouterParam, createError, useRuntimeConfig, $useQueueRegistry } from '#imports'
+import { defineEventHandler, getRouterParam, createError, useRuntimeConfig, useQueueAdapter, $useQueueRegistry } from '#imports'
 import { Queue } from 'bullmq'
 
 export default defineEventHandler(async (event) => {
@@ -21,6 +21,34 @@ export default defineEventHandler(async (event) => {
     ? flow.entry.queue
     : flow.entry.queue?.name || flow.entry.queue
 
+  const adapter = useQueueAdapter()
+
+  // Try adapter's removeScheduledJob first (for file adapter)
+  if (adapter.removeScheduledJob) {
+    try {
+      const removed = await adapter.removeScheduledJob(scheduleId)
+
+      if (!removed) {
+        throw createError({ statusCode: 404, statusMessage: 'Schedule not found' })
+      }
+
+      return {
+        success: true,
+        message: 'Schedule deleted successfully',
+      }
+    }
+    catch (error: any) {
+      if (error.statusCode === 404) {
+        throw error
+      }
+      throw createError({
+        statusCode: 500,
+        statusMessage: `Failed to delete schedule: ${error.message}`,
+      })
+    }
+  }
+
+  // Fallback to BullMQ for Redis adapter
   const rc = useRuntimeConfig() as any
   const connection = rc.queue?.redis
 

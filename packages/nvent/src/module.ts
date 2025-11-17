@@ -76,11 +76,11 @@ export default defineNuxtModule<ModuleOptions>({
     }))
 
     // Prepare default configs from normalized config
-    // Extract queue options (excluding worker)
-    const { worker: _worker, ...queueOptions } = config.queue.defaultConfig || {}
+    // Extract worker config separately, pass rest as queue config
+    const { worker, ...queueOptions } = config.queue
     const defaultConfigs = {
       queue: queueOptions,
-      worker: config.queue.defaultConfig?.worker,
+      worker,
     }
 
     const compiledRegistry = await compileRegistryFromServerWorkers(layerInfos, config.dir || 'queues', defaultConfigs)
@@ -183,6 +183,9 @@ export default defineNuxtModule<ModuleOptions>({
         from: resolve('./runtime/utils/adapters'),
       }, {
         name: 'useStreamAdapter',
+        from: resolve('./runtime/utils/adapters'),
+      }, {
+        name: 'useStateAdapter',
         from: resolve('./runtime/utils/adapters'),
       },
       {

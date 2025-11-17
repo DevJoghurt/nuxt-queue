@@ -7,7 +7,7 @@ import { ref, computed, type Ref } from '#imports'
  */
 
 export interface FlowState {
-  status: 'running' | 'completed' | 'failed'
+  status: 'running' | 'completed' | 'failed' | 'canceled'
   startedAt?: string
   completedAt?: string
   steps: Record<string, StepState>
@@ -81,6 +81,12 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
         state.status = 'failed'
         state.completedAt = e.ts
         if (e.data?.error) state.meta = { ...state.meta, error: e.data.error }
+        break
+
+      case 'flow.cancel':
+      case 'flow.canceled':
+        state.status = 'canceled'
+        state.completedAt = e.ts
         break
 
       case 'step.started': {
@@ -276,6 +282,7 @@ export function useFlowState(initialEvents: EventRecord[] = []) {
   const isRunning = computed(() => state.value.status === 'running')
   const isCompleted = computed(() => state.value.status === 'completed')
   const isFailed = computed(() => state.value.status === 'failed')
+  const isCanceled = computed(() => state.value.status === 'canceled')
 
   const stepList = computed(() => {
     return Object.entries(state.value.steps).map(([key, step]) => ({
@@ -314,6 +321,7 @@ export function useFlowState(initialEvents: EventRecord[] = []) {
     isRunning,
     isCompleted,
     isFailed,
+    isCanceled,
     stepList,
     runningSteps,
     waitingSteps,

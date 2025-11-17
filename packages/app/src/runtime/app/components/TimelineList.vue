@@ -58,7 +58,7 @@
             v-if="item?.eventData?.progress"
             class="mt-2"
           >
-            <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-x-auto max-h-40 text-gray-700 dark:text-gray-300 font-mono">{{ pretty(item.eventData) }}</pre>
+            <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-y-auto max-h-40 text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap break-words">{{ pretty(item.eventData) }}</pre>
           </div>
         </div>
 
@@ -76,21 +76,21 @@
               class="flex items-start gap-2"
             >
               <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Input:</span>
-              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-x-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1 min-w-0">{{ pretty(item.eventData.input) }}</pre>
+              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-y-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1 min-w-0 whitespace-pre-wrap break-words">{{ pretty(item.eventData.input) }}</pre>
             </div>
             <div
               v-if="item.eventData.output"
               class="flex items-start gap-2"
             >
               <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Output:</span>
-              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-x-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1 min-w-0">{{ pretty(item.eventData.output) }}</pre>
+              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-y-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1 min-w-0 whitespace-pre-wrap break-words">{{ pretty(item.eventData.output) }}</pre>
             </div>
             <div
               v-if="item.eventData.error"
               class="flex items-start gap-2"
             >
               <span class="text-xs text-red-500 dark:text-red-400 font-medium min-w-[60px] flex-shrink-0">Error:</span>
-              <pre class="text-xs bg-red-50 dark:bg-red-900/20 rounded px-2 py-1 overflow-x-auto max-h-20 text-red-700 dark:text-red-300 font-mono flex-1 min-w-0">{{ pretty(item.eventData.error) }}</pre>
+              <pre class="text-xs bg-red-50 dark:bg-red-900/20 rounded px-2 py-1 overflow-y-auto max-h-20 text-red-700 dark:text-red-300 font-mono flex-1 min-w-0 whitespace-pre-wrap break-words">{{ pretty(item.eventData.error) }}</pre>
             </div>
           </div>
         </div>
@@ -100,7 +100,7 @@
           v-else-if="item.eventData && Object.keys(item.eventData).length > 0"
           class="mt-2"
         >
-          <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-x-auto max-h-40 text-gray-700 dark:text-gray-300 font-mono">{{ pretty(item.eventData) }}</pre>
+          <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-y-auto max-h-40 text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap break-words">{{ pretty(item.eventData) }}</pre>
         </div>
       </template>
     </UTimeline>
@@ -164,6 +164,7 @@ function eventIcon(type: string) {
   if (type === 'flow.start') return 'i-lucide-play-circle'
   if (type === 'flow.completed') return 'i-lucide-check-circle-2'
   if (type === 'flow.failed') return 'i-lucide-x-circle'
+  if (type === 'flow.cancel') return 'i-lucide-ban'
 
   // Step events
   if (type === 'step.started' || type === 'step.running') return 'i-lucide-arrow-right-circle'

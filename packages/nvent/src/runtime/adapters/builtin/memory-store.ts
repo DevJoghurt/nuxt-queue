@@ -17,19 +17,12 @@ import type {
   EventSubscription,
   ListOptions,
 } from '../interfaces/store'
-import type { StreamAdapter } from '../interfaces/stream'
 
 export interface MemoryStoreAdapterOptions {
-  /**
-   * Optional StreamAdapter for cross-instance pub/sub
-   * If provided, all mutations (append, save, delete, kv.set, indexAdd) will be published
-   */
-  streamAdapter?: StreamAdapter
+  // No additional options for memory store
 }
 
 export class MemoryStoreAdapter implements StoreAdapter {
-  private stream?: StreamAdapter
-
   // Event Stream storage: subject -> events
   private eventStreams = new Map<string, EventRecord[]>()
   private eventSubscriptions = new Map<string, Map<string, (event: EventRecord) => void>>()
@@ -42,7 +35,7 @@ export class MemoryStoreAdapter implements StoreAdapter {
   private kvStore = new Map<string, any>()
 
   constructor(opts?: MemoryStoreAdapterOptions) {
-    this.stream = opts?.streamAdapter
+    // No initialization needed
   }
 
   async close(): Promise<void> {
@@ -74,15 +67,6 @@ export class MemoryStoreAdapter implements StoreAdapter {
 
     // Notify in-process subscribers
     this.notifySubscribers(subject, eventRecord)
-
-    // Publish to StreamAdapter for cross-instance replication
-    if (this.stream) {
-      await this.stream.publish(`store:append:${subject}`, {
-        type: 'store.append',
-        data: { subject, event: eventRecord },
-        timestamp: Date.now(),
-      })
-    }
 
     return eventRecord
   }
@@ -186,15 +170,6 @@ export class MemoryStoreAdapter implements StoreAdapter {
 
     const collectionDocs = this.documents.get(collection)!
     collectionDocs.set(id, doc)
-
-    // Publish to StreamAdapter
-    if (this.stream) {
-      await this.stream.publish(`store:save:${collection}`, {
-        type: 'store.save',
-        data: { collection, id, doc },
-        timestamp: Date.now(),
-      })
-    }
   }
 
   async get(collection: string, id: string): Promise<Record<string, any> | null> {
@@ -257,15 +232,6 @@ export class MemoryStoreAdapter implements StoreAdapter {
       if (collectionDocs.size === 0) {
         this.documents.delete(collection)
       }
-
-      // Publish to StreamAdapter
-      if (this.stream) {
-        await this.stream.publish(`store:delete:${collection}`, {
-          type: 'store.delete',
-          data: { collection, id },
-          timestamp: Date.now(),
-        })
-      }
     }
   }
 
@@ -281,28 +247,10 @@ export class MemoryStoreAdapter implements StoreAdapter {
     set: async <T = any>(key: string, value: T, _ttl?: number): Promise<void> => {
       // TTL not supported in memory adapter (would need setTimeout)
       this.kvStore.set(key, value)
-
-      // Publish to StreamAdapter
-      if (this.stream) {
-        await this.stream.publish(`store:kv:${key}`, {
-          type: 'store.kv.set',
-          data: { key, value },
-          timestamp: Date.now(),
-        })
-      }
     },
 
     delete: async (key: string): Promise<void> => {
       this.kvStore.delete(key)
-
-      // Publish to StreamAdapter
-      if (this.stream) {
-        await this.stream.publish(`store:kv:${key}`, {
-          type: 'store.kv.delete',
-          data: { key },
-          timestamp: Date.now(),
-        })
-      }
     },
 
     clear: async (pattern: string): Promise<number> => {
@@ -364,15 +312,6 @@ export class MemoryStoreAdapter implements StoreAdapter {
 
     // Keep sorted by score (descending for ZREVRANGE-like behavior)
     index.sort((a, b) => b.score - a.score)
-
-    // Publish to StreamAdapter
-    if (this.stream) {
-      await this.stream.publish(`store:index:${key}`, {
-        type: 'store.index.add',
-        data: { key, id, score, metadata },
-        timestamp: Date.now(),
-      })
-    }
   }
 
   async indexGet(key: string, id: string): Promise<{ id: string, score: number, metadata?: any } | null> {

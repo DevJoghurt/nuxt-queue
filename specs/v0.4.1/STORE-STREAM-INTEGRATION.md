@@ -2,7 +2,9 @@
 
 ## Overview
 
-Implemented **Option A**: StoreAdapter has StreamAdapter as constructor dependency for automatic cross-instance replication.
+**NEW ARCHITECTURE (v0.4.1 Refined)**: Wiring layer coordinates streaming, not StoreAdapter.
+
+StoreAdapter is pure storage. StreamAdapter is pure pub/sub. The **Wiring Layer** (StreamCoordinator) connects them via the event bus.
 
 ## Architecture
 
@@ -11,17 +13,37 @@ Implemented **Option A**: StoreAdapter has StreamAdapter as constructor dependen
 │                     Application Code                        │
 │  (FlowWiring, Workers, API Endpoints)                       │
 └────────────────────┬────────────────────────────────────────┘
-                     │ calls append/save/delete/kv.set
+                     │ calls append/save/delete
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   StoreAdapter                              │
-│  (append, save, delete, kv.set, indexAdd)                  │
+│  (Pure storage - NO streaming logic)                       │
+│  - append() → writes to disk/memory                        │
+│  - save() → stores document                                │
+│  - delete() → removes document                             │
+│  - kv.set() → sets key-value                               │
 └────────────────────┬────────────────────────────────────────┘
-                     │ automatically publishes to
+                     │ publishes to
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Event Bus                              │
+│  (In-process pub/sub for coordination)                     │
+└────────────────────┬────────────────────────────────────────┘
+                     │ wiring subscribes
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                StreamCoordinator (Wiring)                   │
+│  - Subscribes to event bus                                 │
+│  - Decides which events need streaming                     │
+│  - Publishes to appropriate channels                       │
+└────────────────────┬────────────────────────────────────────┘
+                     │ publishes to 3 channels
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                  StreamAdapter                              │
-│  (publish, subscribe - cross-instance pub/sub)             │
+│  1. store-sync channel (cache invalidation)                │
+│  2. flow-events channel (orchestration)                    │
+│  3. client-messages channel (UI updates)                   │
 └────────────────────┬────────────────────────────────────────┘
                      │ replicates to
                      ▼
@@ -31,183 +53,174 @@ Implemented **Option A**: StoreAdapter has StreamAdapter as constructor dependen
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## Benefits of Wiring-Based Streaming
+
+### 1. Clean Separation of Concerns
+- **StoreAdapter**: Only storage logic, no streaming
+- **StreamAdapter**: Only pub/sub, no storage
+- **Wiring Layer**: Coordination and routing logic
+
+### 2. Extensibility
+- Easy to add new channels (triggers, webhooks, notifications)
+- Easy to add new wiring (trigger system, webhook handler)
+- No changes to adapters needed
+
+### 3. Flexibility
+- Configure channels per deployment
+- Enable/disable channels without touching adapters
+- Different channel configurations for dev/prod
+
+### 4. Maintainability
+- All routing logic in one place
+- Easy to understand event flow
+- Easy to debug streaming issues
+
 ## Implementation
 
-### StreamAdapter Types
+### Three Stream Channels
 
-- **MemoryStreamAdapter**: In-memory pub/sub (single instance)
-- **RedisStreamAdapter**: Redis Pub/Sub (multi-instance) - TODO
-- **No FileStreamAdapter**: File deployments use MemoryStreamAdapter (single instance)
+The StreamCoordinator manages three distinct channels:
 
-### 1. StoreAdapter accepts optional StreamAdapter
+#### 1. **store-sync** - Cross-instance data replication
+- **Purpose**: Cache invalidation and data consistency
+- **Topics**: `store-sync:append:{subject}`
+- **When**: After events are persisted to storage
+- **Use case**: Multi-instance deployments
 
-**MemoryStoreAdapter** and **FileStoreAdapter** both accept StreamAdapter in constructor:
+#### 2. **flow-events** - Flow orchestration
+- **Purpose**: Coordinate flow execution across instances
+- **Topics**: `flow:event:{runId}`, `flow:trigger:{flowName}`
+- **When**: Important lifecycle events (start, complete, fail, emit)
+- **Use case**: Distributed flow coordination
+
+#### 3. **client-messages** - Client communication
+- **Purpose**: Real-time UI updates via WebSocket/SSE
+- **Topics**: `client:flow:{runId}`, `client:ui:*`
+- **When**: All flow events that clients should see
+- **Use case**: Live dashboards and monitoring
+
+### StreamCoordinator Wiring
+
+The StreamCoordinator subscribes to the event bus and publishes to StreamAdapter:
 
 ```typescript
-export interface MemoryStoreAdapterOptions {
-  streamAdapter?: StreamAdapter
-}
-
-export class MemoryStoreAdapter implements StoreAdapter {
-  private stream?: StreamAdapter
+// packages/nvent/src/runtime/events/wiring/streamCoordinator.ts
+export function createStreamCoordinator(opts: StreamCoordinatorOptions = {}) {
+  const bus = getEventBus()
+  const stream = useStreamAdapter()
   
-  constructor(opts?: MemoryStoreAdapterOptions) {
-    this.stream = opts?.streamAdapter
-  }
-}
-```
-
-**FileStoreAdapter** extends the options:
-
-```typescript
-export interface FileStoreAdapterOptions extends MemoryStoreAdapterOptions {
-  dataDir: string
-}
-
-export class FileStoreAdapter extends MemoryStoreAdapter {
-  constructor(options: FileStoreAdapterOptions) {
-    super(options) // Pass streamAdapter to parent
-  }
-}
-```
-
-### 2. Storage Operations Automatically Publish
-
-Every mutation operation publishes to StreamAdapter if available:
-
-#### append()
-```typescript
-async append(subject: string, event: Omit<EventRecord, 'id' | 'ts'>): Promise<EventRecord> {
-  // ... store event ...
-  
-  // Publish to StreamAdapter for cross-instance replication
-  if (this.stream) {
-    await this.stream.publish(`store:append:${subject}`, {
-      type: 'store.append',
-      data: { subject, event: eventRecord },
-      timestamp: Date.now(),
-    })
-  }
-  
-  return eventRecord
-}
-```
-
-#### save()
-```typescript
-async save(collection: string, id: string, doc: Record<string, any>): Promise<void> {
-  // ... save document ...
-  
-  if (this.stream) {
-    await this.stream.publish(`store:save:${collection}`, {
-      type: 'store.save',
-      data: { collection, id, doc },
-      timestamp: Date.now(),
-    })
-  }
-}
-```
-
-#### delete()
-```typescript
-async delete(collection: string, id: string): Promise<void> {
-  // ... delete document ...
-  
-  if (this.stream) {
-    await this.stream.publish(`store:delete:${collection}`, {
-      type: 'store.delete',
-      data: { collection, id },
-      timestamp: Date.now(),
-    })
-  }
-}
-```
-
-#### kv.set()
-```typescript
-kv = {
-  set: async <T = any>(key: string, value: T, _ttl?: number): Promise<void> => {
-    // ... set value ...
-    
-    if (this.stream) {
-      await this.stream.publish(`store:kv:${key}`, {
-        type: 'store.kv.set',
-        data: { key, value },
+  function start() {
+    // Channel 1: store-sync (cache invalidation)
+    bus.onType('flow.start', async (e) => {
+      if (!e.id || !e.ts) return // Only published events
+      
+      await stream.publish(`store-sync:append:${subject}`, {
+        type: 'store.append',
+        data: { subject, event: e },
         timestamp: Date.now(),
+      })
+    })
+    
+    // Channel 2: flow-events (orchestration)
+    bus.onType('flow.completed', async (e) => {
+      await stream.publish(`flow:event:${e.runId}`, {
+        type: 'flow.completed',
+        data: { runId: e.runId, event: e },
+      })
+    })
+    
+    // Channel 3: client-messages (UI updates)
+    if (opts.enableClientMessages) {
+      bus.onType('*', async (e) => {
+        await stream.publish(`client:flow:${e.runId}`, {
+          type: 'flow.event',
+          data: { event: e },
+        })
       })
     }
   }
+  
+  return { start, stop }
 }
 ```
 
-#### kv.delete()
+### Wiring Registry
+
+The wiring registry initializes all wirings including the stream coordinator:
+
 ```typescript
-delete: async (key: string): Promise<void> => {
-  // ... delete key ...
+// packages/nvent/src/runtime/events/wiring/registry.ts
+export function createWiringRegistry(opts?: WiringRegistryOptions) {
+  const wirings = [
+    createFlowWiring(),           // Flow orchestration
+    createStreamCoordinator(opts), // Stream publishing
+    // Future: createTriggerWiring(), createWebhookWiring()
+  ]
   
-  if (this.stream) {
-    await this.stream.publish(`store:kv:${key}`, {
-      type: 'store.kv.delete',
-      data: { key },
-      timestamp: Date.now(),
-    })
+  return {
+    start() {
+      wirings.forEach(w => w.start())
+    },
+    stop() {
+      wirings.forEach(w => w.stop())
+    },
   }
 }
 ```
 
-#### indexAdd()
+## Configuration
+
 ```typescript
-async indexAdd(key: string, id: string, score: number, metadata?: Record<string, any>): Promise<void> {
-  // ... add to index ...
+// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ['nvent'],
   
-  if (this.stream) {
-    await this.stream.publish(`store:index:${key}`, {
-      type: 'store.index.add',
-      data: { key, id, score, metadata },
-      timestamp: Date.now(),
-    })
+  nvent: {
+    queue: { adapter: 'file' },
+    stream: { adapter: 'memory' }, // or 'redis' for multi-instance
+    store: { adapter: 'file' },
+    
+    // Optional: Configure stream channels
+    wiring: {
+      streamCoordinator: {
+        enableStoreSync: true,        // Cache invalidation
+        enableFlowEvents: true,        // Flow coordination
+        enableClientMessages: false,   // WebSocket (opt-in)
+      }
+    }
   }
-}
+})
 ```
 
-### 3. Factory Function
-
-Created `adapters/factory.ts` with `createAdapters()` that properly wires dependencies:
+## Usage Example
 
 ```typescript
-export async function createAdapters(config: AdapterConfig): Promise<AdapterSet> {
-  // 1. Create StreamAdapter first (no dependencies)
-  const stream = await createStreamAdapter(config.stream)
+// Application code just uses StoreAdapter
+const store = useStoreAdapter()
 
-  // 2. Create StoreAdapter with StreamAdapter dependency
-  const store = await createStoreAdapter(config.store, stream)
+await store.append('nq:flow:abc-123', {
+  type: 'step.completed',
+  data: { result: 42 },
+})
 
-  // 3. Create QueueAdapter (independent)
-  const queue = await createQueueAdapter(config.queue)
+// StreamCoordinator automatically publishes to:
+// - store-sync:append:nq:flow:abc-123 (for cache invalidation)
+// - flow:event:abc-123 (for orchestration)
+// - client:flow:abc-123 (if enabled, for UI)
 
-  return { queue, stream, store }
-}
+// Other instances subscribe to channels
+const stream = useStreamAdapter()
+
+await stream.subscribe('store-sync:append:*', async (event) => {
+  console.log('Remote store update:', event)
+  // Invalidate local cache
+})
+
+await stream.subscribe('flow:event:*', async (event) => {
+  console.log('Flow event:', event)
+  // Coordinate flow execution
+})
 ```
-
-**Key insight**: StreamAdapter is created first, then passed to StoreAdapter constructor.
-
-## Benefits
-
-1. **Automatic Replication**: All storage writes automatically replicate to other instances
-2. **No Manual Streaming**: New features just call StoreAdapter - streaming happens automatically
-3. **Clean Separation**: Storage layer (StoreAdapter) and replication layer (StreamAdapter) are separate
-4. **Optional Streaming**: File/Memory adapters work without StreamAdapter (single-instance)
-5. **v0.4 Compatible Pattern**: Matches Redis adapter's XADD + PUBLISH pattern
-
-## Topic Naming Convention
-
-Stream topics follow this pattern:
-
-- `store:append:{subject}` - Event stream appends
-- `store:save:{collection}` - Document saves
-- `store:delete:{collection}` - Document deletes
-- `store:kv:{key}` - KV operations
-- `store:index:{key}` - Index operations
 
 ## Usage Example
 
@@ -236,86 +249,76 @@ await adapters.stream.subscribe('store:append:*', async (event) => {
 })
 ```
 
-## Migration Path
-
-### Current State (v0.4)
-
-```typescript
-// Old EventStoreAdapter (single interface)
-const adapter = createRedisAdapter()
-await adapter.append(stream, event)
-// Redis adapter internally does: XADD + PUBLISH
-```
-
-### New State (Monorepo Refactoring)
-
-```typescript
-// New three-adapter architecture
-const adapters = await createAdapters(config)
-await adapters.store.append(stream, event)
-// StoreAdapter internally publishes to StreamAdapter
-```
-
-## WebSocket Integration
-
-**Current (v0.4)**: WebSocket uses `store.subscribe()` for in-process updates only
-
-**Future**: WebSocket should subscribe to StreamAdapter for cross-instance updates
-
-```typescript
-// OLD (v0.4 EventStoreAdapter)
-const unsub = store.subscribe(flowStream, (event) => {
-  peer.send({ type: 'event', event })
-})
-
-// NEW (StreamAdapter for cross-instance)
-const handle = await stream.subscribe(`store:append:${flowStream}`, (streamEvent) => {
-  peer.send({ type: 'event', event: streamEvent.data.event })
-})
-```
-
 ## Next Steps
 
-1. ✅ **DONE**: Memory and File store adapters accept StreamAdapter
-2. ✅ **DONE**: All mutation operations publish to StreamAdapter
-3. ✅ **DONE**: Factory function creates adapters with proper dependencies
+1. ✅ **DONE**: Remove StreamAdapter from StoreAdapter
+2. ✅ **DONE**: Create StreamCoordinator wiring
+3. ✅ **DONE**: Update adapter factory (no dependencies)
 4. ⏳ **TODO**: Create Redis adapters with StreamAdapter integration
-5. ⏳ **TODO**: Update WebSocket handler to subscribe via StreamAdapter
-6. ⏳ **TODO**: Update FlowWiring to use new adapter architecture
-7. ⏳ **TODO**: Deprecate old EventStoreAdapter system
+5. ⏳ **TODO**: Update WebSocket handler to subscribe via StreamAdapter channels
+6. ⏳ **TODO**: Add wiring configuration options to module config
+7. ⏳ **TODO**: Implement trigger wiring (when trigger system is ready)
 
 ## Compatibility
 
-- **Memory adapters**: Work with or without StreamAdapter (single-instance default)
-- **File adapters**: Work with or without StreamAdapter (single-instance default)
-- **Redis adapters**: MUST use StreamAdapter for cross-instance replication
-- **v0.4 code**: Still works via old EventStoreAdapter (parallel implementation)
-- **Migration**: Gradual - can run both systems side-by-side
+- **Memory adapters**: Single instance, no cross-instance streaming needed
+- **File adapters**: Single instance, no cross-instance streaming needed
+- **Redis adapters**: Multi-instance, stream channels enable coordination
+- **Configuration**: Channels can be enabled/disabled per deployment
+- **Migration**: Existing code works unchanged (wiring layer is transparent)
 
 ## Testing
 
 ### Single Instance (File/Memory)
 ```typescript
 const adapters = await createAdapters({
-  store: { type: 'file', options: { dataDir: '.data' } },
-  stream: { type: 'file' }, // Uses MemoryStreamAdapter internally
-  queue: { type: 'file', options: { dataDir: '.data' } },
+  store: { adapter: 'file', file: { dataDir: '.data' } },
+  stream: { adapter: 'memory' },
+  queue: { adapter: 'file', file: { dataDir: '.data' } },
 })
-// File config automatically uses MemoryStreamAdapter
-// Works fine - no cross-instance needed
+
+// StreamCoordinator runs but memory adapter is single-instance only
+// No cross-instance streaming, but architecture is consistent
 ```
 
-### Multi-Instance (Redis with StreamAdapter)
+### Multi-Instance (Redis with channels)
 ```typescript
 const adapters = await createAdapters({
-  store: { type: 'redis', options: { host: 'localhost' } },
-  stream: { type: 'redis', options: { host: 'localhost' } },
+  store: { adapter: 'redis', redis: { host: 'localhost' } },
+  stream: { adapter: 'redis', redis: { host: 'localhost' } },
+  queue: { adapter: 'redis', redis: { host: 'localhost' } },
 })
-// Store writes automatically replicate across instances
+
+// StreamCoordinator publishes to Redis channels
+// All instances receive updates via subscriptions
 ```
 
 ---
 
-**Status**: ✅ Core implementation complete  
+**Status**: ✅ Core refactoring complete  
 **Branch**: monorepo-refactoring  
-**Date**: 2025-11-08
+**Date**: 2025-11-13
+
+## Key Architectural Improvements
+
+### Before (Option A - Coupled)
+```
+StoreAdapter ──directly publishes to──> StreamAdapter
+```
+- Every store adapter needs streaming logic
+- Tight coupling between storage and messaging
+- Hard to extend with new channels
+
+### After (Wiring Layer - Decoupled)
+```
+StoreAdapter ──publishes to──> EventBus
+                                  │
+                            subscribes │
+                                  ▼
+                        StreamCoordinator ──routes to──> StreamAdapter
+                                                           (3 channels)
+```
+- StoreAdapter is pure storage
+- StreamCoordinator handles all routing
+- Easy to add channels (triggers, webhooks, notifications)
+- Clear separation of concerns

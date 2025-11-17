@@ -29,6 +29,7 @@
   "dependencies": {
     "@nuxt/kit": "4.2.1",
     "chokidar": "^4.0.3",
+    "cron-parser": "^4.9.0",
     "defu": "^6.1.4",
     "fastq": "^1.19.1",
     "globby": "15.0.0",

@@ -55,12 +55,19 @@ async function checkAndTriggerPendingSteps(
     const flowEntry = await store.indexGet(indexKey, runId)
     if (!flowEntry?.metadata) return
 
-    // Build sets of completed events and steps
-    const emittedEvents = new Set<string>(flowEntry.metadata.emittedEvents || [])
-
     // Read all events to get completed steps
     const streamName = SubjectPatterns.flowRun(runId)
     const allEvents = await store.read(streamName)
+
+    // Check if flow is canceled - if so, don't trigger any new steps
+    const isCanceled = allEvents.some(event => event.type === 'flow.cancel')
+    if (isCanceled) {
+      logger.debug('Flow is canceled, skipping pending step triggers', { flowName, runId })
+      return
+    }
+
+    // Build sets of completed events and steps
+    const emittedEvents = new Set<string>(flowEntry.metadata.emittedEvents || [])
 
     const completedSteps = new Set<string>()
     for (const event of allEvents) {
@@ -108,8 +115,16 @@ async function checkAndTriggerPendingSteps(
           }
           const jobId = `${runId}__${stepName}`
 
+          // Get default job options from registry worker config (includes attempts config)
+          // Find the worker for this step to get its queue.defaultJobOptions
+          const worker = (registry?.workers as any[])?.find((w: any) =>
+            w?.flow?.step === stepName && w?.queue?.name === stepMeta.queue,
+          )
+          const defaultOpts = worker?.queue?.defaultJobOptions || {}
+          const opts = { ...defaultOpts, jobId }
+
           try {
-            await queue.enqueue(stepMeta.queue, { name: stepName, data: payload, opts: { jobId } })
+            await queue.enqueue(stepMeta.queue, { name: stepName, data: payload, opts })
 
             logger.debug('Triggered pending step', {
               flowName,
@@ -143,12 +158,15 @@ export function analyzeFlowCompletion(
   entryStep: string | undefined,
   events: any[],
 ): {
-  status: 'running' | 'completed' | 'failed'
+  status: 'running' | 'completed' | 'failed' | 'canceled'
   totalSteps: number
   completedSteps: number
   startedAt: number
   completedAt: number
 } {
+  // Check if flow is canceled
+  const isCanceled = events.some(event => event.type === 'flow.cancel')
+
   // Include entry step in the list of all steps
   const allSteps = entryStep
     ? [entryStep, ...Object.keys(flowSteps)]
@@ -163,6 +181,9 @@ export function analyzeFlowCompletion(
   for (const event of events) {
     if (event.type === 'flow.start') {
       startedAt = typeof event.ts === 'string' ? new Date(event.ts).getTime() : 0
+    }
+    if (event.type === 'flow.cancel') {
+      completedAt = typeof event.ts === 'string' ? new Date(event.ts).getTime() : Date.now()
     }
     if (event.type === 'step.completed' && 'stepName' in event) {
       completedSteps.add(event.stepName)
@@ -251,6 +272,17 @@ export function analyzeFlowCompletion(
     }
   }
 
+  // Flow is canceled if flow.cancel event exists
+  if (isCanceled) {
+    return {
+      status: 'canceled',
+      totalSteps,
+      completedSteps: completedSteps.size,
+      startedAt,
+      completedAt,
+    }
+  }
+
   // Flow fails if there's a blocking failure
   if (hasBlockingFailure) {
     return {
@@ -268,7 +300,7 @@ export function analyzeFlowCompletion(
     completedSteps.has(step) || finalFailedSteps.has(step),
   )
 
-  let status: 'running' | 'completed' | 'failed' = 'running'
+  let status: 'running' | 'completed' | 'failed' | 'canceled' = 'running'
 
   if (allCompleted) {
     status = 'completed'
@@ -379,22 +411,28 @@ export function createFlowWiring() {
         if ('stepId' in e && (e as any).stepId) eventData.stepId = (e as any).stepId
         if ('attempt' in e && (e as any).attempt) eventData.attempt = (e as any).attempt
 
-        // Append to stream
-        await store.append(streamName, eventData)
+        // Append to stream - returns complete event with id and ts
+        const persistedEvent = await store.append(streamName, eventData)
+
+        // Republish complete event to bus so other wirings can react
+        // StreamWiring listens for persisted events (id+ts) and publishes to UI
+        await bus.publish(persistedEvent as any)
 
         if (e.type === 'flow.completed' || e.type === 'flow.failed') {
-          logger.info('Stored terminal event to stream', {
+          logger.info('Stored terminal event', {
             type: e.type,
             flowName,
             runId,
+            id: persistedEvent.id,
           })
         }
         else {
-          logger.debug('Stored event to stream', {
+          logger.debug('Stored event', {
             type: e.type,
             flowName,
             runId,
             stepName: 'stepName' in e ? e.stepName : undefined,
+            id: persistedEvent.id,
           })
         }
       }
@@ -443,6 +481,27 @@ export function createFlowWiring() {
             completedSteps: 0,
             emittedEvents: [],
           })
+        }
+
+        // For flow.cancel, update status to canceled
+        if (e.type === 'flow.cancel') {
+          try {
+            if (store.indexUpdateWithRetry) {
+              await store.indexUpdateWithRetry(indexKey, runId, {
+                status: 'canceled',
+                completedAt: Date.now(),
+              })
+
+              logger.info('Marked flow as canceled', { flowName, runId })
+            }
+          }
+          catch (err) {
+            logger.warn('Failed to update canceled status', {
+              flowName,
+              runId,
+              error: (err as any)?.message,
+            })
+          }
         }
 
         // For step.completed events, increment completedSteps counter
@@ -512,9 +571,6 @@ export function createFlowWiring() {
                 error: (err as any)?.message,
               })
             }
-
-            // ORCHESTRATION: Check if any steps can now be triggered
-            await checkAndTriggerPendingSteps(flowName, runId, store)
           }
         }
 
@@ -522,6 +578,7 @@ export function createFlowWiring() {
         // IMPORTANT: Do this AFTER incrementing completedSteps to avoid race condition
         if (e.type === 'step.completed' || e.type === 'step.failed') {
           // ORCHESTRATION: Check if any steps can now be triggered
+          // This handles both emit events and step completions, so we only need to call it here
           await checkAndTriggerPendingSteps(flowName, runId, store)
 
           // Small delay to ensure completedSteps increment is persisted
@@ -613,7 +670,7 @@ export function createFlowWiring() {
     // v0.4: Subscribe to event types with BOTH handlers
     // Order matters: Persistence runs first, then orchestration
     const eventTypes = [
-      'flow.start', 'flow.completed', 'flow.failed',
+      'flow.start', 'flow.completed', 'flow.failed', 'flow.cancel',
       'step.started', 'step.completed', 'step.failed', 'step.retry',
       'log', 'emit', 'state',
     ]
