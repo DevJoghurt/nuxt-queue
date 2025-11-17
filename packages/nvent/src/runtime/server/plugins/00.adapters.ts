@@ -7,17 +7,20 @@
  * - StoreAdapter: Storage - events, documents, KV, indices (from config.store)
  *
  * Uses normalized config with connection fallback from connections.*
+ *
+ * External adapters can register themselves via the nvent:registerAdapter Nitro hook
  */
 
 import { defineNitroPlugin, useRuntimeConfig, useNventLogger, setAdapters } from '#imports'
 import { createAdapters, shutdownAdapters } from '../../adapters/factory'
-import type { QueueModuleConfig } from '../../config/types'
+import { useAdapterRegistry } from '../../adapters/registry'
+import type { ModuleConfig } from '../../config/types'
 import { createWiringRegistry } from '../../events/wiring/registry'
 
 export default defineNitroPlugin(async (nitroApp) => {
   const logger = useNventLogger('adapters-plugin')
   const runtimeConfig = useRuntimeConfig()
-  const config = (runtimeConfig as any).nvent as QueueModuleConfig
+  const config = (runtimeConfig as any).nvent as ModuleConfig
 
   if (!config) {
     logger.error('No nvent config found in runtime config')
@@ -31,7 +34,20 @@ export default defineNitroPlugin(async (nitroApp) => {
   })
 
   try {
+    // Call hook to allow external adapters to register themselves
+    // External adapter modules listen to this hook and register their adapters
+    await nitroApp.hooks.callHook('nvent:register-adapters' as any)
+
+    const registry = useAdapterRegistry()
+
+    logger.info('Checking registered adapters', {
+      queueAdapters: registry.listQueueAdapters(),
+      streamAdapters: registry.listStreamAdapters(),
+      storeAdapters: registry.listStoreAdapters(),
+    })
+
     // Create and initialize all adapters with new config format
+    // Factory now checks registry first before falling back to built-in adapters
     const adapters = await createAdapters({
       queue: config.queue,
       stream: config.stream,

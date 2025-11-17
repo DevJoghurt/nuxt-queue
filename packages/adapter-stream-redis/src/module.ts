@@ -1,6 +1,6 @@
-import { defineNuxtModule } from '@nuxt/kit'
+import { defineNuxtModule, createResolver, addServerPlugin } from '@nuxt/kit'
 import { defu } from 'defu'
-import { RedisStreamAdapter } from './adapter'
+import { RedisStreamAdapter } from './runtime/adapter'
 
 export interface ModuleOptions {
   connection?: {
@@ -26,28 +26,14 @@ export default defineNuxtModule<ModuleOptions>({
     prefix: 'nq',
   },
   setup(options, nuxt) {
-    // Register the Redis stream adapter
-    nuxt.hook('nvent:registerAdapter', (registry: any) => {
-      // Allow configuration from nvent config as well
-      const nventConfig = nuxt.options.runtimeConfig.nvent || {}
-      const streamConfig = nventConfig.stream || {}
-      const redisConfig = streamConfig.redis || {}
+    const { resolve } = createResolver(import.meta.url)
 
-      const config = defu(
-        options,
-        redisConfig,
-        {
-          connection: { host: 'localhost', port: 6379 },
-          prefix: 'nq',
-        },
-      )
+    // Store module options in runtime config
+    nuxt.options.runtimeConfig.nventStreamRedis = {
+      ...options,
+    }
 
-      const adapter = new RedisStreamAdapter({
-        connection: config.connection!,
-        prefix: config.prefix,
-      })
-
-      registry.registerStream('redis', adapter)
-    })
+    // Add Nitro plugin that registers the adapter
+    addServerPlugin(resolve('./runtime/adapter'))
   },
 })

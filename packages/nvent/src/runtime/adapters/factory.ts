@@ -3,12 +3,16 @@
  *
  * Creates adapters independently without dependencies
  * StoreAdapter is pure storage - streaming handled by wiring layer
+ *
+ * Now supports external adapters via the adapter registry.
+ * External adapters registered via the nvent:registerAdapter hook take precedence.
  */
 
 import type { QueueAdapter } from './interfaces/queue'
 import type { StreamAdapter } from './interfaces/stream'
 import type { StoreAdapter } from './interfaces/store'
 import type { QueueConfig, StreamConfig, StoreConfig } from '../config/types'
+import { useAdapterRegistry } from './registry'
 
 import {
   MemoryQueueAdapter,
@@ -43,7 +47,16 @@ export async function createAdapters(config: {
 
 async function createStreamAdapter(config: StreamConfig): Promise<StreamAdapter> {
   const type = config.adapter || 'memory'
+  const registry = useAdapterRegistry()
 
+  // Check if an external adapter is registered
+  if (registry.hasStream(type)) {
+    const adapter = registry.getStream(type)
+    await adapter.init()
+    return adapter
+  }
+
+  // Fall back to built-in adapters
   switch (type) {
     case 'memory': {
       // Memory adapter for single-instance or dev environments
@@ -53,15 +66,12 @@ async function createStreamAdapter(config: StreamConfig): Promise<StreamAdapter>
     }
 
     case 'redis':
-      // TODO: Redis stream adapter not yet implemented
-      throw new Error('Redis stream adapter not yet implemented')
+      throw new Error('Redis stream adapter not registered. Install @nvent/adapter-stream-redis and add it to your nuxt.config modules.')
 
     case 'rabbitmq':
-      // TODO: RabbitMQ stream adapter not yet implemented
       throw new Error('RabbitMQ stream adapter not yet implemented')
 
     case 'kafka':
-      // TODO: Kafka stream adapter not yet implemented
       throw new Error('Kafka stream adapter not yet implemented')
 
     default:
@@ -73,7 +83,16 @@ async function createStoreAdapter(
   config: StoreConfig,
 ): Promise<StoreAdapter> {
   const type = config.adapter || 'file'
+  const registry = useAdapterRegistry()
 
+  // Check if an external adapter is registered
+  if (registry.hasStore(type)) {
+    const adapter = registry.getStore(type)
+    // StoreAdapter doesn't have init() method, only close()
+    return adapter
+  }
+
+  // Fall back to built-in adapters
   switch (type) {
     case 'memory': {
       // Memory adapter - pure in-memory storage
@@ -90,11 +109,9 @@ async function createStoreAdapter(
     }
 
     case 'redis':
-      // TODO: Redis store adapter not yet implemented
-      throw new Error('Redis store adapter not yet implemented')
+      throw new Error('Redis store adapter not registered. Install @nvent/adapter-store-redis and add it to your nuxt.config modules.')
 
     case 'postgres':
-      // TODO: Postgres store adapter not yet implemented
       throw new Error('Postgres store adapter not yet implemented')
 
     default:
@@ -104,7 +121,16 @@ async function createStoreAdapter(
 
 async function createQueueAdapter(config: QueueConfig): Promise<QueueAdapter> {
   const type = config.adapter || 'file'
+  const registry = useAdapterRegistry()
 
+  // Check if an external adapter is registered
+  if (registry.hasQueue(type)) {
+    const adapter = registry.getQueue(type)
+    await adapter.init()
+    return adapter
+  }
+
+  // Fall back to built-in adapters
   switch (type) {
     case 'memory': {
       const adapter = new MemoryQueueAdapter()
@@ -120,12 +146,10 @@ async function createQueueAdapter(config: QueueConfig): Promise<QueueAdapter> {
     }
 
     case 'redis':
-      // TODO: Redis queue adapter (BullMQ) not yet implemented
-      throw new Error('Redis queue adapter not yet implemented')
+      throw new Error('Redis queue adapter not registered. Install @nvent/adapter-queue-redis and add it to your nuxt.config modules.')
 
     case 'postgres':
-      // TODO: Postgres queue adapter (PGBoss) not yet implemented
-      throw new Error('Postgres queue adapter not yet implemented')
+      throw new Error('Postgres queue adapter (PGBoss) not yet implemented')
 
     default:
       throw new Error(`Unknown queue adapter type: ${type}`)

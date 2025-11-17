@@ -2,11 +2,6 @@ import type { StreamAdapter, StreamEvent, SubscriptionHandle } from '#nvent/adap
 import type IORedis from 'ioredis'
 import IORedisConstructor from 'ioredis'
 
-// Nitro plugin to auto-register this adapter
-import { defineNitroPlugin } from 'nitropack/runtime'
-import { useRuntimeConfig, registerStreamAdapter } from '#imports'
-import { defu } from 'defu'
-
 export interface RedisStreamAdapterOptions {
   connection: {
     host?: string
@@ -246,6 +241,11 @@ export class RedisStreamAdapter implements StreamAdapter {
     }
   }
 }
+
+// Nitro plugin to auto-register this adapter
+import { defineNitroPlugin } from 'nitropack/runtime'
+import { useRuntimeConfig, registerStreamAdapter } from '#imports'
+import { defu } from 'defu'
 
 export default defineNitroPlugin(async (nitroApp) => {
   // Listen to the registration hook from nvent

@@ -4,9 +4,9 @@
  * Registers BullMQ-based Redis queue adapter with nvent
  */
 
-import { defineNuxtModule, useLogger } from '@nuxt/kit'
-import { RedisQueueAdapter } from './adapter'
-import type { RedisQueueAdapterOptions } from './adapter'
+import { defineNuxtModule, useLogger, addServerPlugin, createResolver } from '@nuxt/kit'
+import { RedisQueueAdapter } from './runtime/adapter'
+import type { RedisQueueAdapterOptions } from './runtime/adapter'
 
 export interface ModuleOptions extends RedisQueueAdapterOptions {
   /**
@@ -30,29 +30,17 @@ export default defineNuxtModule<ModuleOptions>({
     }
 
     const logger = useLogger('@nvent/adapter-queue-redis')
+    const { resolve } = createResolver(import.meta.url)
 
-    // Register adapter with nvent via hook
-    nuxt.hook('nvent:registerAdapter', (registry: any, config: any) => {
-      logger.info('Registering Redis queue adapter')
+    logger.info('Setting up Redis queue adapter module')
 
-      // Get connection config from nvent config or module options
-      const connection = options.connection || config.queue?.redis
+    // Store module options in runtime config so the plugin can access them
+    nuxt.options.runtimeConfig.nventQueueRedis = {
+      ...options,
+    }
 
-      if (!connection) {
-        logger.warn('No Redis connection config found, adapter may not work correctly')
-      }
-
-      // Create adapter instance
-      const adapter = new RedisQueueAdapter({
-        connection,
-        prefix: options.prefix || config.queue?.defaultConfig?.prefix,
-        defaultJobOptions: options.defaultJobOptions || config.queue?.defaultConfig?.defaultJobOptions,
-      })
-
-      // Register with nvent adapter registry
-      registry.registerQueue('redis', adapter)
-
-      logger.success('Redis queue adapter registered')
-    })
+    // Add Nitro plugin that registers the adapter
+    // Named with -1 to ensure it runs before the main 00.adapters.ts plugin
+    addServerPlugin(resolve('./runtime/adapter'))
   },
 })

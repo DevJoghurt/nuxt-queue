@@ -6,7 +6,9 @@
  */
 
 import { Queue, QueueEvents, Worker } from 'bullmq'
-import type { JobsOptions, Job as BullJob, ConnectionOptions } from 'bullmq'
+import type { JobsOptions, Job as BullJob } from 'bullmq'
+import { defineNitroPlugin } from 'nitropack/runtime'
+import { useRuntimeConfig, registerQueueAdapter } from '#imports'
 import defu from 'defu'
 import type {
   QueueAdapter,
@@ -18,7 +20,7 @@ import type {
   JobCounts,
   WorkerHandler,
   WorkerOptions,
-} from 'nvent/adapters'
+} from '#nvent/adapters'
 
 export interface RedisQueueAdapterOptions {
   connection?: {
@@ -309,3 +311,39 @@ export class RedisQueueAdapter implements QueueAdapter {
     }
   }
 }
+
+// Nitro plugin to register this adapter via hook
+export default defineNitroPlugin(async (nitroApp) => {
+  // Listen to the registration hook from nvent
+  nitroApp.hooks.hook('nvent:register-adapters' as any, () => {
+    const runtimeConfig = useRuntimeConfig()
+    const moduleOptions = (runtimeConfig as any).nventQueueRedis || {}
+    const nventConfig = (runtimeConfig as any).nvent || {}
+
+    // Get connection from module options, nvent config, or connections config
+    const connection = moduleOptions.connection
+      || nventConfig.queue?.connection
+      || nventConfig.connections?.redis
+
+    if (!connection) {
+      console.warn('[adapter-queue-redis] No Redis connection config found')
+    }
+
+    const config = defu(moduleOptions, {
+      connection,
+      prefix: nventConfig.queue?.prefix || 'nq',
+      defaultJobOptions: nventConfig.queue?.defaultJobOptions,
+    })
+
+    // Create and register adapter
+    const adapter = new RedisQueueAdapter({
+      connection: config.connection,
+      prefix: config.prefix,
+      defaultJobOptions: config.defaultJobOptions,
+    })
+
+    registerQueueAdapter('redis', adapter)
+
+    console.log('[adapter-queue-redis] Redis queue adapter registered')
+  })
+})

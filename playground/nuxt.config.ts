@@ -2,7 +2,8 @@ export default defineNuxtConfig({
   modules: [
     '@nuxt/ui',
     'nuxt-mcp',
-    'nvent',
+    'nvent', // Must come before adapter modules
+    '@nvent/adapter-queue-redis',
     '@nvent/app',
   ],
 
@@ -39,7 +40,7 @@ export default defineNuxtConfig({
 
     // Queue adapter configuration
     queue: {
-      adapter: 'file', // Use file for development (change to 'redis' for production)
+      adapter: 'redis', // Use file for development (change to 'redis' for production)
       // redis connection inherited from connections.redis
       prefix: 'nq',
       defaultJobOptions: {

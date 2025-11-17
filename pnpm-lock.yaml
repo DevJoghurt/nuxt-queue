@@ -250,6 +250,9 @@ importers:
       '@nuxt/ui':
         specifier: '*'
         version: 4.1.0(@babel/parser@7.28.5)(change-case@5.4.4)(db0@0.3.4)(embla-carousel@8.6.0)(ioredis@5.8.2)(typescript@5.9.3)(vite@7.2.2(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(yaml@2.8.1))(vue-router@4.6.3(vue@3.5.24(typescript@5.9.3)))(vue@3.5.24(typescript@5.9.3))(zod@4.1.12)
+      '@nvent/adapter-queue-redis':
+        specifier: workspace:*
+        version: link:../packages/adapter-queue-redis
       '@nvent/app':
         specifier: workspace:*
         version: link:../packages/app

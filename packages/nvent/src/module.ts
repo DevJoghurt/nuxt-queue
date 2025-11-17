@@ -5,6 +5,7 @@ import {
   addServerScanDir,
   addServerImports,
   addTemplate,
+  addTypeTemplate,
   updateTemplates,
 } from '@nuxt/kit'
 import defu from 'defu'
@@ -16,9 +17,9 @@ import type { ModuleOptions, ModuleConfig } from './runtime/config/types'
 import type {} from '@nuxt/schema'
 
 const meta = {
-  name: 'queue',
-  version: '0.1',
-  configKey: 'queue',
+  name: 'nvent',
+  version: '0.4.1',
+  configKey: 'nvent',
 }
 
 declare module '@nuxt/schema' {
@@ -38,8 +39,12 @@ export default defineNuxtModule<ModuleOptions>({
   async setup(options, nuxt) {
     const { resolve } = createResolver(import.meta.url)
 
+    // In Nuxt 4, we need to merge both options parameter AND nuxt.options[configKey]
+    const userConfig = (nuxt.options as any)[meta.configKey] || {}
+    const mergedOptions = { ...userConfig, ...options }
+
     // Normalize and merge configuration
-    const config = normalizeModuleOptions(options)
+    const config = normalizeModuleOptions(mergedOptions)
 
     // Use addServerScanDir only for api/ and plugins/ directories
     // These follow Nuxt conventions and won't include .d.ts files in the build
@@ -132,6 +137,54 @@ export default defineNuxtModule<ModuleOptions>({
       getContents: () => generateAnalyzedFlowsTemplate(lastCompiledRegistry),
     })
 
+    // Add type template for adapter interfaces
+    // This allows external packages to import types via #nvent/adapters
+    addTypeTemplate({
+      filename: 'types/nvent-adapters.d.ts',
+      getContents: () => `
+// Auto-generated adapter type definitions
+// External adapter packages can import these types
+
+// Queue Adapter
+export type {
+  QueueAdapter,
+  JobInput,
+  Job,
+  JobsQuery,
+  JobOptions,
+  JobState,
+  ScheduleOptions,
+  JobCounts,
+  QueueEvent,
+  WorkerHandler,
+  WorkerContext,
+  WorkerOptions,
+} from ${JSON.stringify(resolve('./runtime/adapters/interfaces/queue'))}
+
+// Stream Adapter
+export type {
+  StreamAdapter,
+  StreamEvent,
+  SubscribeOptions,
+  SubscriptionHandle,
+} from ${JSON.stringify(resolve('./runtime/adapters/interfaces/stream'))}
+
+// Store Adapter
+export type {
+  StoreAdapter,
+  EventRecord,
+  EventReadOptions,
+  EventSubscription,
+  ListOptions,
+} from ${JSON.stringify(resolve('./runtime/adapters/interfaces/store'))}
+
+// Adapter Registry
+export type { AdapterRegistry } from ${JSON.stringify(resolve('./runtime/adapters/registry'))}
+      `.trim(),
+    })
+
+    nuxt.options.alias['#nvent/adapters'] = resolve(nuxt.options.buildDir, 'types/nvent-adapters')
+
     // add composables
     addServerImports([
       // Generated templates
@@ -197,6 +250,19 @@ export default defineNuxtModule<ModuleOptions>({
       }, {
         name: 'useStreamTopics',
         from: resolve('./runtime/utils/useStreamTopics'),
+      },
+      // Adapter registration utilities for external modules
+      {
+        name: 'registerQueueAdapter',
+        from: resolve('./runtime/utils/registerAdapter'),
+      },
+      {
+        name: 'registerStreamAdapter',
+        from: resolve('./runtime/utils/registerAdapter'),
+      },
+      {
+        name: 'registerStoreAdapter',
+        from: resolve('./runtime/utils/registerAdapter'),
       },
     ])
 
