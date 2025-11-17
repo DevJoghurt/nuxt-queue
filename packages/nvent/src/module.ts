@@ -83,7 +83,7 @@ export default defineNuxtModule<ModuleOptions>({
       worker,
     }
 
-    const compiledRegistry = await compileRegistryFromServerWorkers(layerInfos, config.dir || 'queues', defaultConfigs)
+    const compiledRegistry = await compileRegistryFromServerWorkers(layerInfos, config.dir || 'functions', defaultConfigs)
     // augment with defaults and metadata
     const compiledWithMeta = defu(compiledRegistry, {
       version: 1,
@@ -152,12 +152,12 @@ export default defineNuxtModule<ModuleOptions>({
       },
       // Core utilities for user code
       {
-        name: 'defineQueueConfig',
-        from: resolve('./runtime/utils/defineQueueConfig'),
+        name: 'defineFunctionConfig',
+        from: resolve('./runtime/utils/defineFunctionConfig'),
       },
       {
-        name: 'defineQueueWorker',
-        from: resolve('./runtime/utils/defineQueueWorker'),
+        name: 'defineFunction',
+        from: resolve('./runtime/utils/defineFunction'),
       },
       // Composables users may need in server code
       {
@@ -202,8 +202,8 @@ export default defineNuxtModule<ModuleOptions>({
 
     // Small helper to refresh registry and re-generate app (dev)
     const refreshRegistry = async (reason: string, changedPath?: string) => {
-      const queuesRel = config.dir || 'queues'
-      const updatedRegistry = await compileRegistryFromServerWorkers(layerInfos, queuesRel, defaultConfigs)
+      const functionsDir = config.dir || 'functions'
+      const updatedRegistry = await compileRegistryFromServerWorkers(layerInfos, functionsDir, defaultConfigs)
       // No merging: the compiled registry is the single source of truth
       lastCompiledRegistry = JSON.parse(JSON.stringify(defu(updatedRegistry, {
         version: 1,
@@ -239,15 +239,15 @@ export default defineNuxtModule<ModuleOptions>({
     }
 
     if (nuxt.options.dev) {
-      // Watch for changes in queue files and rebuild registry
-      const queuesRel = config.dir || 'queues'
+      // Watch for changes in function files and rebuild registry
+      const functionsDir = config.dir || 'functions'
 
       // Use chokidar-based watcher for reliable file watching
       // Vite HMR handles component updates automatically when templates change
       watchQueueFiles({
         nuxt,
         layerInfos,
-        queuesDir: queuesRel,
+        queuesDir: functionsDir,
         onRefresh: refreshRegistry,
       })
     }

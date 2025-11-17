@@ -165,8 +165,8 @@ export interface QueueWorkerConfig {
   // options?: WorkerOptionsLike
 }
 
-export type DefineQueueConfig = <T extends QueueWorkerConfig>(cfg: T) => T
+export type DefineFunctionConfig = <T extends QueueWorkerConfig>(cfg: T) => T
 
-export const defineQueueConfig: DefineQueueConfig = cfg => cfg
+export const defineFunctionConfig: DefineFunctionConfig = cfg => cfg
 
-export default defineQueueConfig
+export default defineFunctionConfig

@@ -31,8 +31,21 @@ export default defineEventHandler(async (event) => {
     return { error: 'Missing flow name' }
   }
 
-  const store = useStoreAdapter()
-  const { SubjectPatterns } = useStreamTopics()
+  // Check if adapters are initialized
+  let store: any
+  let SubjectPatterns: any
+  try {
+    store = useStoreAdapter()
+    const topics = useStreamTopics()
+    SubjectPatterns = topics.SubjectPatterns
+  }
+  catch (err) {
+    logger.error('[flows/runs] Adapters not initialized yet:', { error: err })
+    return {
+      error: 'Server initializing',
+      message: 'Please retry in a moment',
+    }
+  }
 
   try {
     // Use centralized naming function

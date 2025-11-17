@@ -9,7 +9,18 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const state = query.state as string | undefined
 
-  const queue = useQueueAdapter()
+  // Check if adapters are initialized
+  let queue: any
+  try {
+    queue = useQueueAdapter()
+  }
+  catch (err) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: 'Server initializing',
+      data: 'Queue adapter not ready yet, please retry',
+    })
+  }
 
   // Get all jobs (with state filter if provided)
   const jobs = await queue.getJobs(name, {

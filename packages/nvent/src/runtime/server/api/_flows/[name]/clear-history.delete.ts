@@ -14,10 +14,23 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Flow name required' })
   }
 
+  // Check if adapters are initialized
+  let store: any
+  let SubjectPatterns: any
   try {
-    const store = useStoreAdapter()
-    const { SubjectPatterns } = useStreamTopics()
+    store = useStoreAdapter()
+    const topics = useStreamTopics()
+    SubjectPatterns = topics.SubjectPatterns
+  }
+  catch (err) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: 'Server initializing',
+      data: 'Adapters not ready yet, please retry',
+    })
+  }
 
+  try {
     let deletedStreams = 0
     let deletedIndex = false
 

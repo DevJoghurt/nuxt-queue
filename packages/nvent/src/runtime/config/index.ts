@@ -4,35 +4,15 @@ import defu from 'defu'
 /**
  * Merge and normalize module options with defaults (v0.4.1).
  * Applies connection fallback: adapter-specific connections override connections.redis/postgres.
+ * Only includes connection defaults for adapters that are actually used.
  */
 export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleOptions> {
-  // Default shared connections
-  const defaultConnections = {
-    redis: {
-      host: '127.0.0.1',
-      port: 6379,
-    },
-    postgres: {
-      connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/nuxt_queue',
-    },
-    rabbitmq: {
-      host: 'localhost',
-      port: 5672,
-    },
-    kafka: {
-      brokers: ['localhost:9092'],
-    },
-    file: {
-      dataDir: '.data',
-    },
-  }
-
   // Base defaults for all adapters
   const defaults: Required<ModuleOptions> = {
-    dir: 'queues',
+    dir: 'functions',
     ui: true,
     debug: {},
-    connections: defaultConnections,
+    connections: {},
     queue: {
       adapter: 'file',
       prefix: 'nq',
@@ -64,6 +44,82 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
 
   // Merge user options with defaults
   const normalized = defu(options, defaults) as Required<ModuleOptions>
+
+  // Determine which connection types are needed based on adapter selections
+  const neededConnections = new Set<string>()
+
+  // Check queue adapter
+  const queueAdapter = normalized.queue.adapter
+  if (queueAdapter === 'redis') {
+    neededConnections.add('redis')
+  }
+  else if (queueAdapter === 'postgres') {
+    neededConnections.add('postgres')
+  }
+  else if (queueAdapter === 'file') {
+    neededConnections.add('file')
+  }
+
+  // Check stream adapter
+  const streamAdapter = normalized.stream.adapter
+  if (streamAdapter === 'redis') {
+    neededConnections.add('redis')
+  }
+  else if (streamAdapter === 'rabbitmq') {
+    neededConnections.add('rabbitmq')
+  }
+  else if (streamAdapter === 'kafka') {
+    neededConnections.add('kafka')
+  }
+
+  // Check store adapter
+  const storeAdapter = normalized.store.adapter
+  if (storeAdapter === 'redis') {
+    neededConnections.add('redis')
+  }
+  else if (storeAdapter === 'postgres') {
+    neededConnections.add('postgres')
+  }
+  else if (storeAdapter === 'file') {
+    neededConnections.add('file')
+  }
+
+  // Only add default connections for adapters that are actually used
+  if (!normalized.connections) {
+    normalized.connections = {}
+  }
+
+  if (neededConnections.has('redis') && !normalized.connections.redis) {
+    normalized.connections.redis = {
+      host: '127.0.0.1',
+      port: 6379,
+    }
+  }
+
+  if (neededConnections.has('postgres') && !normalized.connections.postgres) {
+    normalized.connections.postgres = {
+      connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/nuxt_queue',
+    }
+  }
+
+  if (neededConnections.has('rabbitmq') && !normalized.connections.rabbitmq) {
+    normalized.connections.rabbitmq = {
+      host: 'localhost',
+      port: 5672,
+    }
+  }
+
+  if (neededConnections.has('kafka') && !normalized.connections.kafka) {
+    normalized.connections.kafka = {
+      brokers: ['localhost:9092'],
+    }
+  }
+
+  if (neededConnections.has('file') && !normalized.connections.file) {
+    normalized.connections.file = {
+      dataDir: '.data',
+    }
+  }
 
   // Apply connection fallback for each adapter
   applyConnectionFallback(normalized)

@@ -1,6 +1,6 @@
-import { defineQueueConfig, defineQueueWorker } from '#imports'
+import { defineFunctionConfig, defineFunction } from '#imports'
 
-export const config = defineQueueConfig({
+export const config = defineFunctionConfig({
   queue: {
     name: 'example_queue',
   },
@@ -10,17 +10,20 @@ export const config = defineQueueConfig({
     name: ['example-flow'],
     role: 'step',
     // This worker handles the "second_step" job name
-    step: 'test',
+    step: 'test_parallel',
     // Must match the emit from first_step
     subscribes: ['parallel'],
-    emits: ['test.completed'],
+    emits: ['parallel_test.completed'],
+  },
+  worker: {
+    concurrency: 2, // Process up to 2 jobs in parallel
   },
 })
 
 // wait function
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-export default defineQueueWorker(
+export default defineFunction(
   async (input, ctx) => {
     // v0.4: Non-entry step - input is keyed by event name
     const parallelData = input['parallel']
@@ -32,13 +35,13 @@ export default defineQueueWorker(
       receivedData: parallelData,
     })
 
-    for (let i = 0; i < 5; i++) {
-      ctx.logger.log('info', `Test progress ${i + 1}/5`, { progress: i + 1 })
+    for (let i = 0; i < 10; i++) {
+      ctx.logger.log('info', `Test parallel progress ${i + 1}/10`, { progress: i + 1 })
       await wait(2000)
     }
 
-    await ctx.flow.emit('test.completed', {
-      result: 'Test step completed',
+    await ctx.flow.emit('parallel_test.completed', {
+      result: 'Parallel test step completed',
       fromParallel: parallelData,
     })
 

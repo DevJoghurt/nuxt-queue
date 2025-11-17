@@ -15,7 +15,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: `Flow '${flowName}' not found` })
   }
 
-  const adapter = useQueueAdapter()
+  // Check if adapters are initialized
+  let adapter: any
+  try {
+    adapter = useQueueAdapter()
+  }
+  catch (err) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: 'Server initializing',
+      data: 'Queue adapter not ready yet, please retry',
+    })
+  }
 
   // Check if adapter supports scheduled jobs removal
   if (!adapter.removeScheduledJob) {

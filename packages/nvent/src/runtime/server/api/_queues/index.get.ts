@@ -5,7 +5,16 @@ const logger = useNventLogger('api-queues-index')
 export default defineEventHandler(async () => {
   const rc: any = useRuntimeConfig()
   const registry = $useQueueRegistry() as any
-  const queue = useQueueAdapter()
+
+  // Check if adapters are initialized
+  let queue: any
+  try {
+    queue = useQueueAdapter()
+  }
+  catch (err) {
+    logger.error('[queues/index] Adapters not initialized yet:', { error: err })
+    return []
+  }
 
   // Get global queue config with defaults from runtime config
   // Structure is rc.nvent.queue (outer is module, inner is queue adapter config)

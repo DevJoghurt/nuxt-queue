@@ -36,7 +36,18 @@ export default defineEventHandler(async (event) => {
     ? flow.entry.queue
     : flow.entry.queue?.name || flow.entry.queue
 
-  const queue = useQueueAdapter()
+  // Check if adapters are initialized
+  let queue: any
+  try {
+    queue = useQueueAdapter()
+  }
+  catch (err) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: 'Server initializing',
+      data: 'Queue adapter not ready yet, please retry',
+    })
+  }
 
   // Create schedule options
   const scheduleOpts: any = {}

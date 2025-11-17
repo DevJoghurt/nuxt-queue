@@ -1,6 +1,6 @@
-import { defineQueueConfig, defineQueueWorker } from '#imports'
+import { defineFunctionConfig, defineFunction } from '#imports'
 
-export const config = defineQueueConfig({
+export const config = defineFunctionConfig({
   queue: {
     name: 'example_queue',
     defaultJobOptions: {
@@ -33,7 +33,7 @@ export const config = defineQueueConfig({
 // wait function
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-export default defineQueueWorker(
+export default defineFunction(
   async (input, ctx) => {
     // v0.4: Use flowId and flowName from context
     ctx.logger.log('info', `Starting new job ${ctx.jobId} on ${ctx.queue} (attempt ${ctx.attempt})`, {

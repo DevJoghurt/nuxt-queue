@@ -1,6 +1,6 @@
-import { defineQueueConfig, defineQueueWorker } from '#imports'
+import { defineFunctionConfig, defineFunction } from '#imports'
 
-export const config = defineQueueConfig({
+export const config = defineFunctionConfig({
   queue: {
     name: 'example_queue',
   },
@@ -16,7 +16,7 @@ export const config = defineQueueConfig({
   },
 })
 
-export default defineQueueWorker(
+export default defineFunction(
   async (input, ctx) => {
     // v0.4: Non-entry step with multiple dependencies - input is keyed by event name
     const testData = input['test.completed']

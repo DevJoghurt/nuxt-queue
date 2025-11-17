@@ -123,7 +123,19 @@ export default defineWebSocketHandler({
         return
       }
 
-      const queue = useQueueAdapter()
+      // Check if adapters are initialized
+      let queue: any
+      try {
+        queue = useQueueAdapter()
+      }
+      catch (err) {
+        logger.error('[ws:queues] Adapters not initialized yet:', err)
+        safeSend(peer, {
+          type: 'error',
+          message: 'Server initializing, please retry',
+        })
+        return
+      }
 
       // Unsubscribe from any existing subscription with same key
       const existingUnsub = context.subscriptions.get(queueName)

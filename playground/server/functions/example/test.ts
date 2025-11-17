@@ -1,6 +1,6 @@
-import { defineQueueConfig, defineQueueWorker } from '#imports'
+import { defineFunctionConfig, defineFunction } from '#imports'
 
-export const config = defineQueueConfig({
+export const config = defineFunctionConfig({
   queue: {
     name: 'example_queue',
   },
@@ -10,37 +10,36 @@ export const config = defineQueueConfig({
     name: ['example-flow'],
     role: 'step',
     // This worker handles the "second_step" job name
-    step: 'second_step',
+    step: 'test',
     // Must match the emit from first_step
-    subscribes: ['first_step.completed'],
+    subscribes: ['parallel'],
+    emits: ['test.completed'],
   },
 })
 
 // wait function
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-export default defineQueueWorker(
+export default defineFunction(
   async (input, ctx) => {
     // v0.4: Non-entry step - input is keyed by event name
-    const firstStepData = input['first_step.completed']
+    const parallelData = input['parallel']
 
     ctx.logger.log('info', `Starting job ${ctx.jobId} on ${ctx.queue}`, {
       jobId: ctx.jobId,
       flowId: ctx.flowId,
       flowName: ctx.flowName,
-      receivedData: firstStepData,
+      receivedData: parallelData,
     })
 
     for (let i = 0; i < 5; i++) {
-      ctx.logger.log('info', `Second step progress ${i + 1}/5`, { progress: i + 1 })
+      ctx.logger.log('info', `Test progress ${i + 1}/5`, { progress: i + 1 })
       await wait(2000)
-      throw new Error('Simulated error in second step with a long message to test logging and error handling in the worker execution context. This error should trigger a retry if attempts are configured properly.')
     }
 
-    // Emit data for next steps
-    await ctx.flow.emit('second_step.completed', {
-      secondStepResult: 'success',
-      fromFirstStep: firstStepData,
+    await ctx.flow.emit('test.completed', {
+      result: 'Test step completed',
+      fromParallel: parallelData,
     })
 
     return {

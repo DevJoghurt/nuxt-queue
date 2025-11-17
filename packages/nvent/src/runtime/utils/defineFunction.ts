@@ -7,9 +7,9 @@ export type ExtendedRunContext = RunContext & {
   registry: any
 }
 
-export type DefineQueueWorker = (handler: (input: any, ctx: ExtendedRunContext) => Promise<any>) => NodeHandler
+export type DefineFunction = (handler: (input: any, ctx: ExtendedRunContext) => Promise<any>) => NodeHandler
 
-export const defineQueueWorker: DefineQueueWorker = (handler) => {
+export const defineFunction: DefineFunction = (handler) => {
   // Adapt worker handler signature to NodeHandler used by the BullMQ adapter
   const wrapped: NodeHandler = async (input, ctx) => {
     // Lazily resolve provider and helpers at run time to avoid early init ordering issues
@@ -28,4 +28,4 @@ export const defineQueueWorker: DefineQueueWorker = (handler) => {
   return wrapped
 }
 
-export default defineQueueWorker
+export default defineFunction

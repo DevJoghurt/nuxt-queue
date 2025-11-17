@@ -1,6 +1,6 @@
-import { defineQueueConfig, defineQueueWorker } from '#imports'
+import { defineFunctionConfig, defineFunction } from '#imports'
 
-export const config = defineQueueConfig({
+export const config = defineFunctionConfig({
   queue: { name: 'email' },
   flow: {
     name: ['signup'],
@@ -10,7 +10,7 @@ export const config = defineQueueConfig({
   },
 })
 
-export default defineQueueWorker(
+export default defineFunction(
   async (input, ctx) => {
     await ctx.state.set('lastEmail', {
       test: 'sdfdsf',
