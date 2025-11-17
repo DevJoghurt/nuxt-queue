@@ -3,7 +3,7 @@ import { ref, computed, watch, type Ref } from '#imports'
 interface FlowRun {
   id: string
   flowName: string
-  status: 'running' | 'completed' | 'failed' | 'unknown'
+  status: 'running' | 'completed' | 'failed' | 'canceled' | 'unknown'
   createdAt: string
   startedAt?: string
   completedAt?: string

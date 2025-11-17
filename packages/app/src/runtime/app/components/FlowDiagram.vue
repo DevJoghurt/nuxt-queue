@@ -107,7 +107,7 @@ interface FlowMeta {
 }
 
 interface StepStatus {
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'retrying' | 'waiting' | 'timeout'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'retrying' | 'waiting' | 'timeout' | 'canceled'
   attempt?: number
   error?: string
 }
@@ -119,6 +119,7 @@ const props = defineProps<{
   showMiniMap?: boolean
   showBackground?: boolean
   stepStates?: Record<string, StepStatus> // Current execution state
+  flowStatus?: 'running' | 'completed' | 'failed' | 'canceled' // Overall flow status
 }>()
 
 const heightClass = computed(() => props.heightClass || 'h-80')
@@ -293,7 +294,7 @@ const nodes = computed<FlowNode[]>(() => {
 })
 
 // Map step status to node visual status
-function mapStatusToNodeStatus(status?: string): 'idle' | 'running' | 'error' | 'done' {
+function mapStatusToNodeStatus(status?: string): 'idle' | 'running' | 'error' | 'done' | 'canceled' {
   switch (status) {
     case 'running':
     case 'retrying':
@@ -304,6 +305,8 @@ function mapStatusToNodeStatus(status?: string): 'idle' | 'running' | 'error' | 
     case 'failed':
     case 'timeout':
       return 'error'
+    case 'canceled':
+      return 'canceled'
     default:
       return 'idle'
   }
@@ -323,16 +326,19 @@ const edges = computed<FlowEdge[]>(() => {
 
     // Determine if edge should be animated
     // Animate if source is completed and target is running/pending
+    // Don't animate if flow is canceled
     const sourceStep = source.split(':')[1]
     const targetStep = target.split(':')[1]
     const sourceState = sourceStep ? states[sourceStep] : undefined
     const targetState = targetStep ? states[targetStep] : undefined
 
-    const animated = sourceState?.status === 'completed'
+    // Don't animate if flow is canceled or completed/failed
+    const shouldAnimate = props.flowStatus === 'running'
+      && sourceState?.status === 'completed'
       && (targetState?.status === 'running' || targetState?.status === 'pending' || !targetState)
 
     added.add(id)
-    out.push({ id, source, target, label, animated })
+    out.push({ id, source, target, label, animated: shouldAnimate })
   }
 
   // Always use analyzed dependencies

@@ -121,7 +121,7 @@
 import { computed } from '#imports'
 import { UCard, UButton, UBadge, UIcon } from '#components'
 
-type Status = 'idle' | 'running' | 'error' | 'done' | string | undefined
+type Status = 'idle' | 'running' | 'error' | 'done' | 'canceled' | string | undefined
 
 const props = defineProps<{
   id: string
@@ -173,6 +173,7 @@ function statusColor(status: Status) {
     case 'running': return 'warning'
     case 'done': return 'success'
     case 'error': return 'error'
+    case 'canceled': return 'orange'
     default: return 'neutral'
   }
 }

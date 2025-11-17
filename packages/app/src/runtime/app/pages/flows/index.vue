@@ -266,6 +266,7 @@
                 :show-controls="true"
                 :show-background="true"
                 :step-states="diagramStepStates"
+                :flow-status="runSnapshot.status"
                 height-class="h-full"
                 @node-action="handleNodeAction"
               />
