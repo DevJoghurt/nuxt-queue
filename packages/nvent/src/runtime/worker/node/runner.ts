@@ -59,7 +59,7 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
     try {
       const stateAdapter = useStateAdapter()
       const rc: any = useRuntimeConfig()
-      const cleanupCfg = rc?.queue?.state?.cleanup || { strategy: 'never' }
+      const cleanupCfg = rc?.nvent?.state?.cleanup || { strategy: 'never' }
       return {
         async get(key) { return stateAdapter.get(scopeKey(key, partial?.flowId)) },
         async set(key, value, opts) {
@@ -177,7 +177,7 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
     const eventMgr = useEventManager()
     const rc: any = useRuntimeConfig()
     // v0.4.1: Read autoScope from store.state.autoScope
-    const autoScope: 'always' | 'flow' | 'never' = rc?.queue?.store?.state?.autoScope || 'always'
+    const autoScope: 'always' | 'flow' | 'never' = rc?.nvent?.store?.state?.autoScope || 'always'
     const providedFlow = job.data?.flowId
     // v0.4: Always use a proper flow identifier (UUID for new flows, never job ID)
     const flowId = providedFlow || (autoScope === 'always' ? randomUUID() : undefined)

@@ -364,7 +364,7 @@ export interface ModuleOptions {
 /**
  * Runtime config shape for nvent module (v0.4.1+)
  */
-export interface QueueModuleConfig {
+export interface ModuleConfig {
   debug?: Record<string, any>
   workers: any[]
   registry?: any

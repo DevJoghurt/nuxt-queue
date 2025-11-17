@@ -44,7 +44,7 @@ export function createStateWiring(opts?: StateWiringOptions) {
   if (!strategy) {
     try {
       const rc: any = useRuntimeConfig()
-      strategy = rc?.queue?.store?.state?.cleanup?.strategy || 'never'
+      strategy = rc?.nvent?.store?.state?.cleanup?.strategy || 'never'
     }
     catch {
       strategy = 'never'

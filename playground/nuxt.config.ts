@@ -20,7 +20,7 @@ export default defineNuxtConfig({
     preference: 'light',
   },
 
-  queue: {
+  nvent: {
     debug: {
       // Global log level: 'debug' | 'info' | 'warn' | 'error' | 'silent'
       level: 'info',

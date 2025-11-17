@@ -1,5 +1,4 @@
-import { defineEventHandler, getRouterParam, createError, useRuntimeConfig, useQueueAdapter, $useQueueRegistry } from '#imports'
-import { Queue } from 'bullmq'
+import { defineEventHandler, getRouterParam, createError, useQueueAdapter, $useQueueRegistry } from '#imports'
 
 export default defineEventHandler(async (event) => {
   const flowName = getRouterParam(event, 'name')
@@ -16,62 +15,22 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: `Flow '${flowName}' not found` })
   }
 
-  // Extract queue name (handle both string and object formats)
-  const queueName = typeof flow.entry.queue === 'string'
-    ? flow.entry.queue
-    : flow.entry.queue?.name || flow.entry.queue
-
   const adapter = useQueueAdapter()
 
-  // Try adapter's removeScheduledJob first (for file adapter)
-  if (adapter.removeScheduledJob) {
-    try {
-      const removed = await adapter.removeScheduledJob(scheduleId)
-
-      if (!removed) {
-        throw createError({ statusCode: 404, statusMessage: 'Schedule not found' })
-      }
-
-      return {
-        success: true,
-        message: 'Schedule deleted successfully',
-      }
-    }
-    catch (error: any) {
-      if (error.statusCode === 404) {
-        throw error
-      }
-      throw createError({
-        statusCode: 500,
-        statusMessage: `Failed to delete schedule: ${error.message}`,
-      })
-    }
+  // Check if adapter supports scheduled jobs removal
+  if (!adapter.removeScheduledJob) {
+    throw createError({
+      statusCode: 501,
+      statusMessage: 'Queue adapter does not support scheduled jobs removal',
+    })
   }
-
-  // Fallback to BullMQ for Redis adapter
-  const rc = useRuntimeConfig() as any
-  const connection = rc.queue?.redis
-
-  // Get queue prefix from registry worker config
-  let prefix: string | undefined
-  try {
-    if (registry && Array.isArray(registry.workers)) {
-      const worker = registry.workers.find((w: any) => w?.queue?.name === queueName)
-      if (worker?.queue?.prefix) {
-        prefix = worker.queue.prefix
-      }
-    }
-  }
-  catch {
-    // ignore
-  }
-
-  const queue = new Queue(queueName, { connection, prefix })
 
   try {
-    // Remove repeatable job by key
-    await queue.removeRepeatableByKey(scheduleId)
-    await queue.close()
+    const removed = await adapter.removeScheduledJob(scheduleId)
+
+    if (!removed) {
+      throw createError({ statusCode: 404, statusMessage: 'Schedule not found' })
+    }
 
     return {
       success: true,
@@ -79,7 +38,9 @@ export default defineEventHandler(async (event) => {
     }
   }
   catch (error: any) {
-    await queue.close()
+    if (error.statusCode === 404) {
+      throw error
+    }
     throw createError({
       statusCode: 500,
       statusMessage: `Failed to delete schedule: ${error.message}`,

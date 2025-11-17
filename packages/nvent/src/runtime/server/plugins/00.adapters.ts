@@ -17,11 +17,11 @@ import { createWiringRegistry } from '../../events/wiring/registry'
 export default defineNitroPlugin(async (nitroApp) => {
   const logger = useNventLogger('adapters-plugin')
   const runtimeConfig = useRuntimeConfig()
-  const config = (runtimeConfig as any).queue as QueueModuleConfig
+  const config = (runtimeConfig as any).nvent as QueueModuleConfig
 
   if (!config) {
-    logger.error('No queue config found in runtime config')
-    throw new Error('Missing queue configuration')
+    logger.error('No nvent config found in runtime config')
+    throw new Error('Missing nvent configuration')
   }
 
   logger.info('Initializing adapters', {

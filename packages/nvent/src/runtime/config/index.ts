@@ -1,4 +1,4 @@
-import type { ModuleOptions, QueueModuleConfig } from './types'
+import type { ModuleOptions, ModuleConfig } from './types'
 import defu from 'defu'
 
 /**
@@ -119,7 +119,7 @@ function applyConnectionFallback(config: Required<ModuleOptions>): void {
 /**
  * Convert normalized module options to runtime config format (v0.4.1).
  */
-export function toRuntimeConfig(normalizedOptions: Required<ModuleOptions>): QueueModuleConfig {
+export function toRuntimeConfig(normalizedOptions: Required<ModuleOptions>): ModuleConfig {
   return {
     debug: normalizedOptions.debug,
     workers: [],
@@ -155,4 +155,4 @@ export function getRedisStorageConfig(normalizedOptions: Required<ModuleOptions>
   }
 }
 
-export type { ModuleOptions, QueueModuleConfig } from './types'
+export type { ModuleOptions, ModuleConfig } from './types'

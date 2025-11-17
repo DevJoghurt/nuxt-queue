@@ -8,8 +8,8 @@ export default defineEventHandler(async () => {
   const queue = useQueueAdapter()
 
   // Get global queue config with defaults from runtime config
-  // Structure is rc.queue.queue (outer is module, inner is queue adapter config)
-  const globalQueueConfig = rc?.queue?.queue || {}
+  // Structure is rc.nvent.queue (outer is module, inner is queue adapter config)
+  const globalQueueConfig = rc?.nvent?.queue || {}
   const globalWorkerDefaults = globalQueueConfig.worker || {}
   const globalQueueDefaults = {
     prefix: globalQueueConfig.prefix,

@@ -144,8 +144,21 @@ export default defineWebSocketHandler({
         return
       }
 
-      const stream = useStreamAdapter()
-      const store = useStoreAdapter()
+      // Check if adapters are initialized
+      let stream: any
+      let store: any
+      try {
+        stream = useStreamAdapter()
+        store = useStoreAdapter()
+      }
+      catch (err) {
+        logger.error('[ws] Adapters not initialized yet:', { error: err })
+        safeSend(peer, {
+          type: 'error',
+          message: 'Server initializing, please retry',
+        })
+        return
+      }
       const subscriptionKey = `${flowName}:${runId}`
 
       // Unsubscribe from any existing subscription with same key

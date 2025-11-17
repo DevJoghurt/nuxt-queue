@@ -53,7 +53,7 @@ export function useNventLogger(scope: string): NventLogger {
   const rc = useRuntimeConfig()
 
   // Get global log level from config or env
-  const debugConfig = rc?.queue?.debug as Record<string, any> | undefined
+  const debugConfig = rc?.nvent?.debug as Record<string, any> | undefined
   const configLevel = debugConfig?.level || process.env.NQ_DEBUG_LEVEL || 'info'
   const globalLevelNum = configLevel === 'silent' ? Infinity : LOG_LEVELS[configLevel as LogLevel] ?? LOG_LEVELS.info
 
@@ -112,7 +112,7 @@ export function useNventLogger(scope: string): NventLogger {
  */
 export function isDebugEnabled(): boolean {
   const rc = useRuntimeConfig()
-  const debugConfig = rc?.queue?.debug as Record<string, any> | undefined
+  const debugConfig = rc?.nvent?.debug as Record<string, any> | undefined
   const level = debugConfig?.level || process.env.NQ_DEBUG_LEVEL
   return level === 'debug' || Object.keys(debugConfig || {}).some(key => key !== 'level')
 }

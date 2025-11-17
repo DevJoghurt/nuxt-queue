@@ -1,5 +1,4 @@
-import { defineEventHandler, getRouterParam, createError, useRuntimeConfig, useQueueAdapter, $useQueueRegistry } from '#imports'
-import { Queue } from 'bullmq'
+import { defineEventHandler, getRouterParam, createError, useQueueAdapter, $useQueueRegistry } from '#imports'
 
 export default defineEventHandler(async (event) => {
   const flowName = getRouterParam(event, 'name')
@@ -21,79 +20,36 @@ export default defineEventHandler(async (event) => {
 
   const adapter = useQueueAdapter()
 
-  // Try adapter's getScheduledJobs first (for file adapter)
-  if (adapter.getScheduledJobs) {
-    try {
-      const scheduledJobs = await adapter.getScheduledJobs(queueName)
-
-      // Filter for this flow's entry step
-      const schedules = scheduledJobs
-        .filter(job => job.jobName === flow.entry.step)
-        .map(job => ({
-          id: job.id,
-          flowName,
-          queue: queueName,
-          step: flow.entry.step,
-          schedule: {
-            cron: job.cron || job.pattern,
-          },
-          nextRun: job.nextRun ? job.nextRun.toISOString() : undefined,
-          repeatCount: job.repeatCount,
-          limit: job.limit,
-        }))
-
-      return schedules
-    }
-    catch (error: any) {
-      throw createError({
-        statusCode: 500,
-        statusMessage: `Failed to list schedules: ${error.message}`,
-      })
-    }
+  // Check if adapter supports scheduled jobs
+  if (!adapter.getScheduledJobs) {
+    throw createError({
+      statusCode: 501,
+      statusMessage: 'Queue adapter does not support scheduled jobs',
+    })
   }
 
-  // Fallback to BullMQ for Redis adapter
-  const rc = useRuntimeConfig() as any
-  const connection = rc.queue?.redis
-
-  // Get queue prefix from registry worker config
-  let prefix: string | undefined
   try {
-    if (registry && Array.isArray(registry.workers)) {
-      const worker = registry.workers.find((w: any) => w?.queue?.name === queueName)
-      if (worker?.queue?.prefix) {
-        prefix = worker.queue.prefix
-      }
-    }
-  }
-  catch {
-    // ignore
-  }
-
-  // Get repeatable jobs from BullMQ
-  const queue = new Queue(queueName, { connection, prefix })
-  try {
-    const repeatableJobs = await queue.getRepeatableJobs()
+    const scheduledJobs = await adapter.getScheduledJobs(queueName)
 
     // Filter for this flow's entry step
-    const schedules = repeatableJobs
-      .filter(job => job.name === flow.entry.step)
+    const schedules = scheduledJobs
+      .filter(job => job.jobName === flow.entry.step)
       .map(job => ({
-        id: job.key,
+        id: job.id,
         flowName,
         queue: queueName,
         step: flow.entry.step,
         schedule: {
-          cron: job.pattern,
+          cron: job.cron || job.pattern,
         },
-        nextRun: job.next ? new Date(job.next).toISOString() : undefined,
+        nextRun: job.nextRun ? job.nextRun.toISOString() : undefined,
+        repeatCount: job.repeatCount,
+        limit: job.limit,
       }))
 
-    await queue.close()
     return schedules
   }
   catch (error: any) {
-    await queue.close()
     throw createError({
       statusCode: 500,
       statusMessage: `Failed to list schedules: ${error.message}`,

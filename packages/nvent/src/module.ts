@@ -12,7 +12,7 @@ import { compileRegistryFromServerWorkers, type LayerInfo } from './registry'
 import { watchQueueFiles } from './utils/dev'
 import { generateRegistryTemplate, generateHandlersTemplate, generateAnalyzedFlowsTemplate } from './utils/templates'
 import { normalizeModuleOptions, toRuntimeConfig, getRedisStorageConfig } from './runtime/config'
-import type { ModuleOptions, QueueModuleConfig } from './runtime/config/types'
+import type { ModuleOptions, ModuleConfig } from './runtime/config/types'
 import type {} from '@nuxt/schema'
 
 const meta = {
@@ -23,7 +23,7 @@ const meta = {
 
 declare module '@nuxt/schema' {
   interface RuntimeConfig {
-    queue: QueueModuleConfig
+    nvent: ModuleConfig
   }
 }
 
@@ -63,11 +63,11 @@ export default defineNuxtModule<ModuleOptions>({
     const runtimeConfig = nuxt.options.runtimeConfig
 
     // Convert normalized config to runtime config format
-    runtimeConfig.queue = defu(runtimeConfig.queue || {}, toRuntimeConfig(config)) as any
+    runtimeConfig.nvent = defu(runtimeConfig.nvent || {}, toRuntimeConfig(config)) as any
 
     // Add rootDir to runtime config for file-based adapters
-    if (!runtimeConfig.queue) runtimeConfig.queue = {} as any
-    ;(runtimeConfig.queue as any).rootDir = nuxt.options.rootDir
+    if (!runtimeConfig.nvent) runtimeConfig.nvent = {} as any
+    ;(runtimeConfig.nvent as any).rootDir = nuxt.options.rootDir
 
     // Build real registry snapshot from disk
     const layerInfos: LayerInfo[] = nuxt.options._layers.map(l => ({

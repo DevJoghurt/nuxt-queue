@@ -101,7 +101,7 @@ export function useStateAdapter(): StateAdapter {
   let namespace = 'nq'
   try {
     const rc: any = useRuntimeConfig()
-    namespace = rc?.queue?.state?.namespace || 'nq'
+    namespace = rc?.nvent?.state?.namespace || 'nq'
   }
   catch {
     // Fallback to default namespace if config not available
