@@ -1,6 +1,4 @@
 import { defineNuxtModule, createResolver, addServerPlugin } from '@nuxt/kit'
-import { defu } from 'defu'
-import { RedisStreamAdapter } from './runtime/adapter'
 
 export interface ModuleOptions {
   connection?: {

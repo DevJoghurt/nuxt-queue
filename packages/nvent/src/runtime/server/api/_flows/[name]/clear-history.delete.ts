@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
     const topics = useStreamTopics()
     SubjectPatterns = topics.SubjectPatterns
   }
-  catch (err) {
+  catch {
     throw createError({
       statusCode: 503,
       statusMessage: 'Server initializing',

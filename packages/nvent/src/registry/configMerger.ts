@@ -22,7 +22,7 @@ export interface DefaultConfigs {
 
 /**
  * Merge default configurations from nuxt.config with per-worker defineFunctionConfig.
- * 
+ *
  * Priority (lowest to highest):
  * 1. Built-in defaults (handled by adapters)
  * 2. nuxt.config.nvent.queue.* (passed as defaults parameter)

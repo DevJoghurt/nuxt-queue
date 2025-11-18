@@ -148,13 +148,13 @@ const radioItems = computed(() => {
       showAllIndicator: true,
     },
   }
-  
+
   const stepItems = props.steps.map(step => ({
     value: step.key,
     label: step.key,
     step,
   }))
-  
+
   return [allItem, ...stepItems]
 })
 

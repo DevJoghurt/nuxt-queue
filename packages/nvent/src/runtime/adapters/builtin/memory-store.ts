@@ -18,10 +18,6 @@ import type {
   ListOptions,
 } from '../interfaces/store'
 
-export interface MemoryStoreAdapterOptions {
-  // No additional options for memory store
-}
-
 export class MemoryStoreAdapter implements StoreAdapter {
   // Event Stream storage: subject -> events
   private eventStreams = new Map<string, EventRecord[]>()
@@ -33,10 +29,6 @@ export class MemoryStoreAdapter implements StoreAdapter {
 
   // Key-Value Store storage: key -> value
   private kvStore = new Map<string, any>()
-
-  constructor(opts?: MemoryStoreAdapterOptions) {
-    // No initialization needed
-  }
 
   async close(): Promise<void> {
     this.eventStreams.clear()

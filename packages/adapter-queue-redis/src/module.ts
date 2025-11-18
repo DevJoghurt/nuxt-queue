@@ -5,7 +5,6 @@
  */
 
 import { defineNuxtModule, useLogger, addServerPlugin, createResolver } from '@nuxt/kit'
-import { RedisQueueAdapter } from './runtime/adapter'
 import type { RedisQueueAdapterOptions } from './runtime/adapter'
 
 export interface ModuleOptions extends RedisQueueAdapterOptions {

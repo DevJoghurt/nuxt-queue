@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
   try {
     queue = useQueueAdapter()
   }
-  catch (err) {
+  catch {
     throw createError({
       statusCode: 503,
       statusMessage: 'Server initializing',

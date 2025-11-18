@@ -619,7 +619,7 @@ const handleSelectStep = (stepKey: string | null) => {
 // Handle cancel flow
 const handleCancelFlow = async () => {
   if (!selectedFlow.value || !selectedRunId.value) return
-  
+
   try {
     await $fetch(`/api/_flows/${selectedFlow.value}/runs/${selectedRunId.value}/cancel`, {
       method: 'POST',
