@@ -41,39 +41,78 @@ export default defineEventHandler(async () => {
         // Find all workers for this queue from registry
         const workers = registry?.workers?.filter((w: any) => w.queue.name === name) || []
 
-        // Find first worker that has queue/worker config defined
-        const workerWithQueueConfig = workers.find((w: any) => w.queue && Object.keys(w.queue).length > 1)
-        const workerWithWorkerConfig = workers.find((w: any) => w.worker && Object.keys(w.worker).length > 0)
+        // Merge queue configs from all workers on this queue (already merged with defaults in configMerger)
+        // Strategy: Collect all unique values across workers, preferring non-default values
+        // This ensures step overrides aren't lost when multiple workers share a queue
+        const mergedQueueConfig = workers.reduce((acc: any, w: any) => {
+          if (!w.queue) return acc
 
-        const queueConfig = workerWithQueueConfig?.queue || workers[0]?.queue || {}
-        const baseWorkerConfig = workerWithWorkerConfig?.worker || {}
+          const result = {
+            ...acc,
+            name: w.queue.name,
+          }
 
-        // For multiple workers, show max concurrency across all workers
-        const maxConcurrency = workers.reduce((max: number, w: any) => {
-          const c = w.worker?.concurrency || 0
-          return Math.max(max, c)
-        }, baseWorkerConfig.concurrency || 0)
+          // Only update prefix/limiter if explicitly different from current
+          if (w.queue.prefix && w.queue.prefix !== acc.prefix) {
+            result.prefix = w.queue.prefix
+          }
+          if (w.queue.limiter) {
+            result.limiter = w.queue.limiter
+          }
+
+          // For defaultJobOptions, deep merge but preserve any existing non-default values
+          if (w.queue.defaultJobOptions) {
+            result.defaultJobOptions = { ...acc.defaultJobOptions }
+
+            // Merge each property, preferring higher/non-default values
+            const wOpts = w.queue.defaultJobOptions
+            const accOpts = acc.defaultJobOptions || {}
+
+            // For attempts: use max value (higher attempts = more retries = step override likely)
+            if (typeof wOpts.attempts === 'number') {
+              result.defaultJobOptions.attempts = Math.max(wOpts.attempts, accOpts.attempts || 0)
+            }
+
+            // For backoff: prefer non-default delay values
+            if (wOpts.backoff) {
+              if (!accOpts.backoff
+                || (wOpts.backoff.delay && wOpts.backoff.delay !== globalQueueDefaults.defaultJobOptions?.backoff?.delay)) {
+                result.defaultJobOptions.backoff = wOpts.backoff
+              }
+            }
+
+            // Other options: merge with worker values
+            if (typeof wOpts.priority === 'number') result.defaultJobOptions.priority = wOpts.priority
+            if (typeof wOpts.timeout === 'number') result.defaultJobOptions.timeout = wOpts.timeout
+            if (typeof wOpts.delay === 'number') result.defaultJobOptions.delay = wOpts.delay
+            if (typeof wOpts.lifo === 'boolean') result.defaultJobOptions.lifo = wOpts.lifo
+            if (wOpts.removeOnComplete !== undefined) result.defaultJobOptions.removeOnComplete = wOpts.removeOnComplete
+            if (wOpts.removeOnFail !== undefined) result.defaultJobOptions.removeOnFail = wOpts.removeOnFail
+          }
+
+          return result
+        }, { ...globalQueueDefaults, name })
+
+        // Merge worker configs from all workers on this queue
+        const mergedWorkerConfig = workers.reduce((acc: any, w: any) => {
+          if (!w.worker) return acc
+          return {
+            concurrency: Math.max(acc.concurrency || 0, w.worker.concurrency || 0), // Use max concurrency
+            lockDurationMs: w.worker.lockDurationMs ?? acc.lockDurationMs,
+            maxStalledCount: w.worker.maxStalledCount ?? acc.maxStalledCount,
+            drainDelayMs: w.worker.drainDelayMs ?? acc.drainDelayMs,
+            autorun: w.worker.autorun ?? acc.autorun,
+            pollingIntervalMs: w.worker.pollingIntervalMs ?? acc.pollingIntervalMs,
+          }
+        }, { ...globalWorkerDefaults })
 
         return {
           name,
           counts,
           isPaused,
           config: {
-            queue: {
-              // Worker-specific config overrides global defaults
-              prefix: queueConfig.prefix || globalQueueDefaults.prefix,
-              defaultJobOptions: queueConfig.defaultJobOptions || globalQueueDefaults.defaultJobOptions,
-              limiter: queueConfig.limiter || globalQueueDefaults.limiter,
-            },
-            worker: {
-              // Worker-specific config overrides global defaults
-              concurrency: maxConcurrency || globalWorkerDefaults.concurrency,
-              lockDurationMs: baseWorkerConfig.lockDurationMs || globalWorkerDefaults.lockDurationMs,
-              maxStalledCount: baseWorkerConfig.maxStalledCount || globalWorkerDefaults.maxStalledCount,
-              drainDelayMs: baseWorkerConfig.drainDelayMs || globalWorkerDefaults.drainDelayMs,
-              autorun: baseWorkerConfig.autorun ?? globalWorkerDefaults.autorun,
-              pollingIntervalMs: baseWorkerConfig.pollingIntervalMs ?? globalWorkerDefaults.pollingIntervalMs,
-            },
+            queue: mergedQueueConfig,
+            worker: mergedWorkerConfig,
           },
         }
       }

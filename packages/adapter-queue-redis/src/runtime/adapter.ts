@@ -276,14 +276,29 @@ export class RedisQueueAdapter implements QueueAdapter {
       return result
     }
 
-    // Create BullMQ Worker
+    // Create BullMQ Worker with all supported options
     const concurrency = opts?.concurrency || 1
-    const worker = new Worker(queueName, dispatcher, {
+    const workerOpts: any = {
       connection: connection as any,
       prefix,
       concurrency,
       autorun: opts?.autorun !== false, // Default to true
-    })
+    }
+
+    // Add BullMQ-specific worker options if provided
+    // Cast opts to access BullMQ-specific properties
+    const bullOpts = opts as any
+    if (typeof bullOpts?.lockDurationMs === 'number') {
+      workerOpts.lockDuration = bullOpts.lockDurationMs
+    }
+    if (typeof bullOpts?.maxStalledCount === 'number') {
+      workerOpts.maxStalledCount = bullOpts.maxStalledCount
+    }
+    if (typeof bullOpts?.drainDelayMs === 'number') {
+      workerOpts.drainDelay = bullOpts.drainDelayMs
+    }
+
+    const worker = new Worker(queueName, dispatcher, workerOpts)
 
     // Error handling
     worker.on('failed', (job, err) => {

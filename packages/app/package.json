@@ -1,5 +1,5 @@
 {
-  "name": "@nvent/app",
+  "name": "@nvent-addon/app",
   "version": "0.4.1",
   "description": "nvent app module for Nuxt.js",
   "repository": "DevJoghurt/nvent",

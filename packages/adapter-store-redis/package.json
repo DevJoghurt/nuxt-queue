@@ -1,5 +1,5 @@
 {
-  "name": "@nvent/adapter-store-redis",
+  "name": "@nvent-addon/adapter-store-redis",
   "version": "0.4.1",
   "description": "Redis store adapter for nvent using Redis Streams",
   "repository": "DevJoghurt/nvent",

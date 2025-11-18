@@ -1,5 +1,5 @@
 {
-  "name": "@nvent/adapter-stream-redis",
+  "name": "@nvent-addon/adapter-stream-redis",
   "version": "0.4.1",
   "description": "Redis Pub/Sub stream adapter for nvent",
   "repository": "DevJoghurt/nvent",

@@ -42,13 +42,23 @@ export default defineNitroPlugin(async (nitroApp) => {
         }
 
         if (typeof handler === 'function') {
-          const cfg = (w && w.worker) || {}
+          const workerCfg = (w && w.worker) || {}
+          const queueCfg = (w && w.queue) || {}
+
           // Map generic WorkerConfig -> adapter-agnostic options
+          // Priority: step config > nuxt.config (already merged in configMerger)
           const opts: any = {}
-          if (typeof cfg.concurrency === 'number') opts.concurrency = cfg.concurrency
-          if (typeof cfg.autorun === 'boolean') opts.autorun = cfg.autorun
+
+          // Worker options
+          if (typeof workerCfg.concurrency === 'number') opts.concurrency = workerCfg.concurrency
+          if (typeof workerCfg.autorun === 'boolean') opts.autorun = workerCfg.autorun
           // Note: lockDurationMs, maxStalledCount, drainDelayMs are BullMQ-specific
           // and should be handled by the BullMQ adapter implementation if needed
+
+          // Queue options (for job defaults) - pass to adapter
+          if (queueCfg.defaultJobOptions) opts.defaultJobOptions = queueCfg.defaultJobOptions
+          if (queueCfg.prefix) opts.prefix = queueCfg.prefix
+          if (queueCfg.limiter) opts.limiter = queueCfg.limiter
 
           // Wrap the raw NodeHandler with the processor that builds RunContext
           const processor = createJobProcessor(handler, queue)

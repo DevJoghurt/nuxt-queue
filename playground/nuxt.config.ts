@@ -42,7 +42,7 @@ export default defineNuxtConfig({
 
     // Queue adapter configuration
     queue: {
-      adapter: 'file', // Use file for development (change to 'redis' for production)
+      adapter: 'redis', // Use file for development (change to 'redis' for production)
       // redis connection inherited from connections.redis
       prefix: 'nq',
       defaultJobOptions: {
@@ -72,7 +72,7 @@ export default defineNuxtConfig({
 
     // Store adapter configuration
     store: {
-      adapter: 'file', // Use file for development (change to 'redis' for production)
+      adapter: 'redis', // Use file for development (change to 'redis' for production)
       // file.dataDir inherited from connections.file → becomes '.data/store'
       prefix: 'nq',
       state: {

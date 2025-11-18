@@ -21,8 +21,17 @@ export interface DefaultConfigs {
 }
 
 /**
- * Merge default configurations from nuxt.config with per-worker defineQueueConfig.
- * Per-worker config takes priority over defaults.
+ * Merge default configurations from nuxt.config with per-worker defineFunctionConfig.
+ * 
+ * Priority (lowest to highest):
+ * 1. Built-in defaults (handled by adapters)
+ * 2. nuxt.config.nvent.queue.* (passed as defaults parameter)
+ * 3. defineFunctionConfig() in step file (worker parameter)
+ *
+ * When multiple steps share the same queue name, their configs must be merged:
+ * - concurrency: Use maximum value across all steps
+ * - defaultJobOptions: Deep merge, last-registered wins for conflicting keys
+ * - limiter: Last-registered wins
  *
  * @param worker - Worker entry from registry scan
  * @param defaults - Default configs from nuxt.config
@@ -32,6 +41,7 @@ export function mergeWorkerConfig(worker: WorkerEntry, defaults: DefaultConfigs)
   const merged = { ...worker }
 
   // Merge queue config: worker config > defaults
+  // defu gives priority to the first argument (worker config)
   if (defaults.queue || worker.queue) {
     merged.queue = defu(
       worker.queue || {},
