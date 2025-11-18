@@ -2,9 +2,6 @@
 
 set -xe
 
-# Restore all git changes
-git restore --source=HEAD --staged --worktree -- package.json yarn.lock
-
 # Update token
 if [[ ! -z ${NPM_TOKEN} ]] ; then
   echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
@@ -13,43 +10,34 @@ if [[ ! -z ${NPM_TOKEN} ]] ; then
   npm whoami
 fi
 
-# Determine which package to publish (default: both)
-PUBLISH_PACKAGE="${PUBLISH_PACKAGE:-both}"
-echo "📦 PUBLISH_PACKAGE is set to: '$PUBLISH_PACKAGE'"
-echo "📦 Checking condition for nuxt-queue publish..."
-echo "📦 Condition 1: PUBLISH_PACKAGE = nuxt-queue? $([[ "$PUBLISH_PACKAGE" = "nuxt-queue" ]] && echo YES || echo NO)"
-echo "📦 Condition 2: PUBLISH_PACKAGE = both? $([[ "$PUBLISH_PACKAGE" = "both" ]] && echo YES || echo NO)"
+echo "📦 Publishing nvent monorepo packages"
 
-# Save original package.json
-cp package.json package.json.bak
+# Publish core nvent package
+echo "⚡ Publishing nvent"
+cd packages/nvent
+npm publish --access public --tolerate-republish
+cd ../..
 
-# Publish as nuxt-queue
-if [[ "$PUBLISH_PACKAGE" = "nuxt-queue" ]] || [[ "$PUBLISH_PACKAGE" = "both" ]]; then
-  echo "⚡ Publishing as nuxt-queue with tag latest"
-  npx npm@8.17.0 publish --tag latest --access public --tolerate-republish
-else
-  echo "⏭️  Skipping nuxt-queue publish (PUBLISH_PACKAGE='$PUBLISH_PACKAGE')"
-fi
+# Publish @nvent-addon/app
+echo "⚡ Publishing @nvent-addon/app"
+cd packages/app
+npm publish --access public --tolerate-republish
+cd ../..
 
-# Publish as nvent (change name AFTER publishing nuxt-queue)
-if [[ "$PUBLISH_PACKAGE" = "nvent" ]] || [[ "$PUBLISH_PACKAGE" = "both" ]]; then
-  echo "⚡ Publishing as nvent with tag latest"
-  echo "📦 Changing package name from 'nuxt-queue' to 'nvent'"
-  # Change the name in package.json and remove prepack script
-  if [ -f "package.json.bak" ]; then
-    jq '.name = "nvent" | del(.scripts.prepack)' package.json.bak > package.json
-  else
-    jq '.name = "nvent" | del(.scripts.prepack)' package.json > package.nvent.json
-    mv package.nvent.json package.json
-  fi
-  cat package.json | grep '"name"'
-  # Publish without running prepack (already built)
-  npx npm@8.17.0 publish --tag latest --access public --tolerate-republish
-else
-  echo "⏭️  Skipping nvent publish (PUBLISH_PACKAGE='$PUBLISH_PACKAGE')"
-fi
+# Publish adapter packages
+echo "⚡ Publishing @nvent-addon/adapter-queue-redis"
+cd packages/adapter-queue-redis
+npm publish --access public --tolerate-republish
+cd ../..
 
-# Restore original package.json
-if [ -f "package.json.bak" ]; then
-  mv package.json.bak package.json
-fi
+echo "⚡ Publishing @nvent-addon/adapter-store-redis"
+cd packages/adapter-store-redis
+npm publish --access public --tolerate-republish
+cd ../..
+
+echo "⚡ Publishing @nvent-addon/adapter-stream-redis"
+cd packages/adapter-stream-redis
+npm publish --access public --tolerate-republish
+cd ../..
+
+echo "✅ All packages published successfully"

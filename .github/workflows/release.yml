@@ -27,16 +27,16 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: yarn install
+        run: pnpm install
 
-      - name: Build package
-        run: yarn build
+      - name: Build packages
+        run: pnpm build
 
       - run: npx changelogithub
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Publish packages (nuxt-queue and nvent)
+      - name: Publish packages to npm
         run: |
           chmod +x ./scripts/release.sh
           ./scripts/release.sh
