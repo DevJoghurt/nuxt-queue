@@ -157,6 +157,7 @@
                     :is-completed="r.status === 'completed'"
                     :is-failed="r.status === 'failed'"
                     :is-canceled="r.status === 'canceled'"
+                    :is-stalled="r.status === 'stalled'"
                   />
                 </div>
               </div>

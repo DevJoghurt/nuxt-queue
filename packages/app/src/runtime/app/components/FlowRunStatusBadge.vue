@@ -6,6 +6,7 @@
       'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800': isFailed,
       'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800': isRunning,
       'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800': isCanceled,
+      'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800': isStalled,
       'bg-gray-50 dark:bg-gray-900/30 border-gray-200 dark:border-gray-800': isIdle,
     }"
   >
@@ -17,6 +18,7 @@
         'bg-blue-500 animate-pulse': isRunning && !isReconnecting,
         'bg-amber-500 animate-pulse': isReconnecting,
         'bg-orange-500': isCanceled,
+        'bg-amber-600': isStalled,
         'bg-gray-400': isIdle,
       }"
     />
@@ -27,6 +29,7 @@
         'text-red-700 dark:text-red-400': isFailed,
         'text-blue-700 dark:text-blue-400': isRunning,
         'text-orange-700 dark:text-orange-400': isCanceled,
+        'text-amber-700 dark:text-amber-400': isStalled,
         'text-gray-600 dark:text-gray-400': isIdle,
       }"
     >
@@ -45,6 +48,9 @@
       <template v-else-if="isCanceled">
         Canceled
       </template>
+      <template v-else-if="isStalled">
+        Stalled
+      </template>
       <template v-else>
         Idle
       </template>
@@ -60,6 +66,7 @@ interface Props {
   isCompleted?: boolean
   isFailed?: boolean
   isCanceled?: boolean
+  isStalled?: boolean
   isReconnecting?: boolean
 }
 
@@ -68,10 +75,11 @@ const props = withDefaults(defineProps<Props>(), {
   isCompleted: false,
   isFailed: false,
   isCanceled: false,
+  isStalled: false,
   isReconnecting: false,
 })
 
 const isIdle = computed(() => {
-  return !props.isRunning && !props.isCompleted && !props.isFailed && !props.isCanceled
+  return !props.isRunning && !props.isCompleted && !props.isFailed && !props.isCanceled && !props.isStalled
 })
 </script>

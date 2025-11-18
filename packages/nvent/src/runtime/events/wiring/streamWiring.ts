@@ -15,7 +15,7 @@
  * - Clear separation of concerns
  */
 
-import type { EventRecord } from '../../types'
+import type { EventRecord } from '../../adapters/interfaces/store'
 import { getEventBus } from '../eventBus'
 import { useNventLogger, useStreamAdapter, useStreamTopics } from '#imports'
 

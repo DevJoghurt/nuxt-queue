@@ -178,13 +178,18 @@ export interface StoreAdapter {
 
 /**
  * Event record in the event stream
+ * This is the storage representation - converts FlowEvent to/from storage format
  */
 export interface EventRecord {
-  id: string
-  ts: number
-  type: string
-  data: any
-  metadata?: Record<string, any>
+  id: string // Auto-generated stream ID
+  ts: number // Unix timestamp in milliseconds
+  type: string // Event type
+  runId: string // Flow run UUID
+  flowName: string // Flow definition name
+  stepName?: string // Step name (for step events)
+  stepId?: string // Step ID (for step events)
+  attempt?: number // Attempt number (for step events)
+  data?: any // Event-specific data payload
 }
 
 /**

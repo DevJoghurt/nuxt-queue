@@ -16,7 +16,7 @@
  * - Clear separation of concerns
  */
 
-import type { EventRecord } from '../../types'
+import type { EventRecord } from '../../adapters/interfaces/store'
 import { getEventBus } from '../eventBus'
 import { useNventLogger, useStateAdapter, useRuntimeConfig } from '#imports'
 

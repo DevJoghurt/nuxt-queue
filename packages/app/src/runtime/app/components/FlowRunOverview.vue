@@ -204,6 +204,7 @@ const getStatusColor = (status?: string) => {
     case 'failed': return 'bg-red-500'
     case 'running': return 'bg-blue-500 animate-pulse'
     case 'canceled': return 'bg-orange-500'
+    case 'stalled': return 'bg-amber-600'
     default: return 'bg-gray-300'
   }
 }

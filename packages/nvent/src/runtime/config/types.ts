@@ -215,6 +215,42 @@ export interface StreamConfig {
 }
 
 /**
+ * Flow configuration
+ */
+export interface FlowConfig {
+  /**
+   * Stall detection configuration
+   * Detects and marks flows that have been running without activity for too long
+   */
+  stallDetection?: {
+    /**
+     * Enable stall detection
+     * @default true
+     */
+    enabled?: boolean
+
+    /**
+     * Time in milliseconds after which a running flow without activity is considered stalled
+     * @default 1800000 (30 minutes)
+     */
+    stallTimeout?: number
+
+    /**
+     * Interval in milliseconds for periodic stall checks
+     * @default 900000 (15 minutes)
+     */
+    checkInterval?: number
+
+    /**
+     * Enable periodic background checks
+     * Set to false to use only lazy detection (when flows are queried)
+     * @default true
+     */
+    enablePeriodicCheck?: boolean
+  }
+}
+
+/**
  * State management configuration
  */
 export interface StateManagementConfig {
@@ -354,6 +390,12 @@ export interface ModuleOptions {
   store?: StoreConfig
 
   /**
+   * Flow-specific configuration
+   * @since v0.4.1
+   */
+  flows?: FlowConfig
+
+  /**
    * Shared connection configurations
    * Used as fallback if adapters don't specify their own connections
    * @since v0.4.1
@@ -366,11 +408,10 @@ export interface ModuleOptions {
  */
 export interface ModuleConfig {
   debug?: Record<string, any>
-  workers: any[]
-  registry?: any
   queue: Required<QueueConfig>
   stream: Required<StreamConfig>
   store: Required<StoreConfig>
+  flows: Required<FlowConfig>
   connections: Required<ConnectionsConfig>
   rootDir?: string
 }

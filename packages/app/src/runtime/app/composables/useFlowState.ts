@@ -7,7 +7,7 @@ import { ref, computed, type Ref } from '#imports'
  */
 
 export interface FlowState {
-  status: 'running' | 'completed' | 'failed' | 'canceled'
+  status: 'running' | 'completed' | 'failed' | 'canceled' | 'stalled'
   startedAt?: string
   completedAt?: string
   steps: Record<string, StepState>
@@ -87,6 +87,12 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
       case 'flow.canceled':
         state.status = 'canceled'
         state.completedAt = e.ts
+        break
+
+      case 'flow.stalled':
+        state.status = 'stalled'
+        if (e.data?.lastActivityAt) state.meta = { ...state.meta, lastActivityAt: e.data.lastActivityAt }
+        if (e.data?.stallTimeout) state.meta = { ...state.meta, stallTimeout: e.data.stallTimeout }
         break
 
       case 'step.started': {
@@ -283,6 +289,7 @@ export function useFlowState(initialEvents: EventRecord[] = []) {
   const isCompleted = computed(() => state.value.status === 'completed')
   const isFailed = computed(() => state.value.status === 'failed')
   const isCanceled = computed(() => state.value.status === 'canceled')
+  const isStalled = computed(() => state.value.status === 'stalled')
 
   const stepList = computed(() => {
     return Object.entries(state.value.steps).map(([key, step]) => ({
@@ -322,6 +329,7 @@ export function useFlowState(initialEvents: EventRecord[] = []) {
     isCompleted,
     isFailed,
     isCanceled,
+    isStalled,
     stepList,
     runningSteps,
     waitingSteps,

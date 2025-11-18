@@ -1,6 +1,8 @@
-import type { EventRecord, EmitEvent } from '../../types'
+import type { EmitEvent } from '../types'
+import type { EventRecord } from '../../adapters/interfaces/store'
 import { getEventBus } from '../eventBus'
-import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, useStreamTopics } from '#imports'
+import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, useStreamTopics, useRuntimeConfig } from '#imports'
+import { createStallDetector } from '../utils/stallDetector'
 
 /**
  * Check if all dependencies for a step are met
@@ -328,6 +330,7 @@ export function createFlowWiring() {
   const bus = getEventBus()
   const unsubs: Array<() => void> = []
   let wired = false
+  let stallDetector: ReturnType<typeof createStallDetector> | undefined
 
   /**
    * Add flow run to sorted set index for listing
@@ -477,6 +480,7 @@ export function createFlowWiring() {
           await indexFlowRun(flowName, runId, timestamp, {
             status: 'running',
             startedAt: timestamp,
+            lastActivityAt: timestamp, // Initialize for stall detection
             stepCount: 0,
             completedSteps: 0,
             emittedEvents: [],
@@ -501,6 +505,13 @@ export function createFlowWiring() {
               runId,
               error: (err as any)?.message,
             })
+          }
+        }
+
+        // For step events, update activity timestamp (stall detection)
+        if (e.type === 'step.started' || e.type === 'step.completed' || e.type === 'step.failed' || e.type === 'step.retry') {
+          if (stallDetector) {
+            await stallDetector.updateActivity(flowName, runId)
           }
         }
 
@@ -530,13 +541,11 @@ export function createFlowWiring() {
 
         // For emit events, track emitted events in metadata
         if (e.type === 'emit') {
-          const emitEvent = e as EmitEvent
-
           // Emit events use 'name' field, not 'topic' - extract from data
-          const eventName = (emitEvent.data as any)?.name || emitEvent.data?.topic
+          const eventName = (e.data as any)?.name || e.data?.topic
 
           if (!eventName) {
-            logger.warn('Emit event missing name/topic', { flowName, runId, data: emitEvent.data })
+            logger.warn('Emit event missing name/topic', { flowName, runId, data: e.data })
           }
           else {
             try {
@@ -684,10 +693,26 @@ export function createFlowWiring() {
     for (const type of eventTypes) {
       unsubs.push(bus.onType(type, handleOrchestration))
     }
+
+    // Initialize and start stall detector
+    const config = useRuntimeConfig()
+    const flowConfig = (config as any).nvent.flows
+    stallDetector = createStallDetector(store, flowConfig.stallDetection)
+    if (flowConfig.stallDetection.enabled) {
+      stallDetector.start()
+      logger.info('Stall detector started')
+    }
   }
 
   function stop() {
     const logger = useNventLogger('flow-wiring')
+
+    // Stop stall detector first
+    if (stallDetector) {
+      stallDetector.stop()
+      stallDetector = undefined
+    }
+
     for (const u of unsubs.splice(0)) {
       try {
         u()

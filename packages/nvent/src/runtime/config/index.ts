@@ -40,6 +40,14 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
       eventTTL: 604800, // 7 days
       metadataTTL: 2592000, // 30 days
     },
+    flows: {
+      stallDetection: {
+        enabled: true,
+        stallTimeout: 30 * 60 * 1000, // 30 minutes
+        checkInterval: 15 * 60 * 1000, // 15 minutes
+        enablePeriodicCheck: true,
+      },
+    },
   }
 
   // Merge user options with defaults
@@ -178,13 +186,12 @@ function applyConnectionFallback(config: Required<ModuleOptions>): void {
 export function toRuntimeConfig(normalizedOptions: Required<ModuleOptions>): ModuleConfig {
   return {
     debug: normalizedOptions.debug,
-    workers: [],
-    registry: undefined,
     rootDir: undefined,
     queue: normalizedOptions.queue as Required<typeof normalizedOptions.queue>,
     stream: normalizedOptions.stream as Required<typeof normalizedOptions.stream>,
     store: normalizedOptions.store as Required<typeof normalizedOptions.store>,
     connections: normalizedOptions.connections as Required<typeof normalizedOptions.connections>,
+    flows: normalizedOptions.flows as Required<typeof normalizedOptions.flows>,
   }
 }
 

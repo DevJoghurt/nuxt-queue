@@ -95,10 +95,7 @@ export default defineNuxtModule<ModuleOptions>({
       compiledAt: new Date().toISOString(),
       provider: { name: config.queue.adapter === 'postgres' ? 'pgboss' : 'bullmq' },
       logger: { name: 'console', level: 'info' },
-      state: config.state,
-      eventStore: config.eventStore,
       runner: { ts: { isolate: 'inprocess' }, py: { enabled: false, cmd: 'python3', importMode: 'file' } },
-      workers: [],
       flows: {},
       eventIndex: {},
     })
@@ -177,6 +174,26 @@ export type {
   EventSubscription,
   ListOptions,
 } from ${JSON.stringify(resolve('./runtime/adapters/interfaces/store'))}
+
+// Event Types
+export type {
+  EventType,
+  BaseEvent,
+  StepEvent,
+  FlowStartEvent,
+  FlowCompletedEvent,
+  FlowFailedEvent,
+  FlowCancelEvent,
+  FlowStalledEvent,
+  StepStartedEvent,
+  StepCompletedEvent,
+  StepFailedEvent,
+  StepRetryEvent,
+  LogEvent,
+  EmitEvent,
+  StateEvent,
+  FlowEvent,
+} from ${JSON.stringify(resolve('./runtime/events/types'))}
 
 // Adapter Registry
 export type { AdapterRegistry } from ${JSON.stringify(resolve('./runtime/adapters/registry'))}
@@ -276,10 +293,7 @@ export type { AdapterRegistry } from ${JSON.stringify(resolve('./runtime/adapter
         compiledAt: new Date().toISOString(),
         provider: { name: config.queue.adapter === 'postgres' ? 'pgboss' : 'bullmq' },
         logger: { name: 'console', level: 'info' },
-        state: config.state,
-        eventStore: config.eventStore,
         runner: { ts: { isolate: 'inprocess' }, py: { enabled: false, cmd: 'python3', importMode: 'file' } },
-        workers: [],
         flows: {},
         eventIndex: {},
       })))

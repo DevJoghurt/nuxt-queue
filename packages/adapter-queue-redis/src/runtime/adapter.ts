@@ -189,6 +189,49 @@ export class RedisQueueAdapter implements QueueAdapter {
     await queue.resume()
   }
 
+  async getScheduledJobs(queueName: string): Promise<Array<any>> {
+    const { queue } = this.ensureQueue(queueName)
+
+    // Get all repeatable jobs from BullMQ
+    const repeatableJobs = await queue.getRepeatableJobs()
+
+    return repeatableJobs.map(job => ({
+      id: job.key, // BullMQ uses 'key' as the unique identifier for repeatable jobs
+      jobName: job.name,
+      queueName,
+      cron: job.pattern,
+      pattern: job.pattern,
+      nextRun: job.next ? new Date(job.next) : undefined,
+      repeatCount: undefined, // BullMQ doesn't track this directly
+      limit: undefined, // Not exposed in RepeatableJob type
+    }))
+  }
+
+  async removeScheduledJob(scheduleId: string): Promise<boolean> {
+    // The scheduleId is the job key from BullMQ
+    // We need to parse it to extract queue name and job details
+    // BullMQ repeatable job keys are in format: "repeat:{name}:{id}:{pattern}"
+
+    // Try to find the job across all queues
+    for (const [queueName, { queue }] of this.queues.entries()) {
+      try {
+        const repeatableJobs = await queue.getRepeatableJobs()
+        const job = repeatableJobs.find(j => j.key === scheduleId)
+
+        if (job) {
+          await queue.removeRepeatableByKey(scheduleId)
+          console.info(`[RedisQueueAdapter] Removed scheduled job: ${scheduleId}`)
+          return true
+        }
+      }
+      catch (error) {
+        console.error(`[RedisQueueAdapter] Error removing scheduled job ${scheduleId} from queue ${queueName}:`, error)
+      }
+    }
+
+    return false
+  }
+
   registerWorker(
     queueName: string,
     jobName: string,
@@ -223,12 +266,12 @@ export class RedisQueueAdapter implements QueueAdapter {
         throw new Error(error)
       }
 
-      // Execute handler with (payload, ctx)
-      const result = await handler(job.data, {
+      // Execute handler - handler expects (job, context) where job is the full BullMQ job
+      // The worker processor (createJobProcessor) will extract job.data and build RunContext
+      const result = await handler(job as any, {
         jobId: job.id as string,
         queueName,
-        job, // Include full BullMQ job for advanced features
-      })
+      } as any)
 
       return result
     }
@@ -236,7 +279,7 @@ export class RedisQueueAdapter implements QueueAdapter {
     // Create BullMQ Worker
     const concurrency = opts?.concurrency || 1
     const worker = new Worker(queueName, dispatcher, {
-      connection,
+      connection: connection as any,
       prefix,
       concurrency,
       autorun: opts?.autorun !== false, // Default to true
