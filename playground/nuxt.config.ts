@@ -2,7 +2,11 @@ export default defineNuxtConfig({
   modules: [
     '@nuxt/ui',
     'nuxt-mcp',
-    '../src/module',
+    'nvent',
+    '@nvent/adapter-queue-redis',
+    '@nvent/adapter-stream-redis',
+    '@nvent/adapter-store-redis',
+    '@nvent/app',
   ],
 
   imports: {
@@ -19,52 +23,66 @@ export default defineNuxtConfig({
     preference: 'light',
   },
 
-  queue: {
+  nvent: {
     debug: {
       // Global log level: 'debug' | 'info' | 'warn' | 'error' | 'silent'
-      level: 'warn',
+      level: 'info',
     },
 
-    // Shortcut: Configure all backends to use Redis
-    store: {
-      adapter: 'redis',
+    // v0.4.1: New config structure with shared connections
+    connections: {
       redis: {
         host: '127.0.0.1',
         port: 6379,
       },
-    },
-    state: {
-      adapter: 'redis',
-      cleanup: {
-        strategy: 'on-complete',
+      file: {
+        dataDir: '.data',
       },
     },
-    // You can still override individual configs:
-    eventStore: {
-      adapter: 'redis', // Use file for events in development
-    },
+
+    // Queue adapter configuration
     queue: {
-      adapter: 'redis',
-      defaultConfig: {
-        // Queue options
-        prefix: 'nq',
-        defaultJobOptions: {
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 1000,
-          },
-          timeout: 120000,
-          removeOnComplete: 100,
-          removeOnFail: 50,
+      adapter: 'redis', // Use file for development (change to 'redis' for production)
+      // redis connection inherited from connections.redis
+      prefix: 'nq',
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 1000,
         },
-        // Worker options
-        worker: {
-          concurrency: 2,
-          lockDurationMs: 120000,
-          maxStalledCount: 2,
+        timeout: 120000,
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      },
+      worker: {
+        concurrency: 2,
+        autorun: true,
+        lockDurationMs: 120000,
+        maxStalledCount: 2,
+        pollingIntervalMs: 1000,
+      },
+    },
+
+    // Stream adapter configuration
+    stream: {
+      adapter: 'redis', // Use memory for single-instance dev
+      prefix: 'nq',
+    },
+
+    // Store adapter configuration
+    store: {
+      adapter: 'redis', // Use file for development (change to 'redis' for production)
+      // file.dataDir inherited from connections.file → becomes '.data/store'
+      prefix: 'nq',
+      state: {
+        autoScope: 'always',
+        cleanup: {
+          strategy: 'on-complete', // Clean up state when flows complete
         },
       },
+      eventTTL: 604800, // 7 days
+      metadataTTL: 2592000, // 30 days
     },
   },
 })

@@ -1,0 +1,60 @@
+import { createFlowWiring } from './flowWiring'
+import { createStreamWiring } from './streamWiring'
+import { createStateWiring } from './stateWiring'
+
+export interface Wiring {
+  start(): void
+  stop(): void
+}
+
+export interface WiringRegistryOptions {
+  /**
+   * Stream wiring options
+   */
+  streamWiring?: {
+    enabled?: boolean
+  }
+  /**
+   * State wiring options
+   */
+  stateWiring?: {
+    strategy?: 'never' | 'on-complete' | 'immediate' | 'ttl'
+  }
+}
+
+export function createWiringRegistry(opts?: WiringRegistryOptions): Wiring {
+  // v0.4.1: Multiple wirings
+  const wirings: Wiring[] = [
+    // 1. Flow orchestration (persistence, completion tracking, step triggering)
+    createFlowWiring(),
+
+    // 2. Stream wiring (publish persisted events to UI clients)
+    createStreamWiring(opts?.streamWiring || {
+      enabled: true,
+    }),
+
+    // 3. State wiring (automatic state cleanup)
+    createStateWiring(opts?.stateWiring),
+
+    // Future wirings: triggers, webhooks, etc.
+  ]
+  let started = false
+  return {
+    start() {
+      if (started) return
+      started = true
+      for (const w of wirings) w.start()
+    },
+    stop() {
+      for (const w of wirings) {
+        try {
+          w.stop()
+        }
+        catch {
+          // ignore
+        }
+      }
+      started = false
+    },
+  }
+}
