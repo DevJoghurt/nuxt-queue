@@ -1,4 +1,6 @@
 import type { StoreAdapter, EventRecord, EventReadOptions, ListOptions } from '#nvent/adapters'
+import { useRuntimeConfig, registerStoreAdapter, defineNitroPlugin } from '#imports'
+import { defu } from 'defu'
 import IORedis from 'ioredis'
 
 export interface RedisStoreAdapterOptions {
@@ -309,13 +311,17 @@ export class RedisStoreAdapter implements StoreAdapter {
     const records: EventRecord[] = []
     for (const [id, arr] of resp) {
       try {
-        const data = this.parseFields(arr)
+        const fields = this.parseFields(arr)
         const record: EventRecord = {
           id,
-          ts: data.ts || 0,
-          type: data.type || 'unknown',
-          data: data.data,
-          metadata: data.metadata,
+          ts: fields.ts || 0,
+          type: fields.type || 'unknown',
+          runId: fields.runId,
+          flowName: fields.flowName,
+          stepName: fields.stepName,
+          stepId: fields.stepId,
+          attempt: fields.attempt,
+          data: fields.data,
         }
 
         // Filter by type if specified
@@ -616,11 +622,6 @@ export class RedisStoreAdapter implements StoreAdapter {
     }
   }
 }
-
-// Nitro plugin to auto-register this adapter
-import { defineNitroPlugin } from 'nitropack/runtime'
-import { useRuntimeConfig, registerStoreAdapter } from '#imports'
-import { defu } from 'defu'
 
 export default defineNitroPlugin(async (nitroApp) => {
   // Listen to the registration hook from nvent

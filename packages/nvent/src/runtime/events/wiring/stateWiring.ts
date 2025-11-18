@@ -71,8 +71,8 @@ export function createStateWiring(opts?: StateWiringOptions) {
 
     // Cleanup when flow completes (recommended)
     if (strategy === 'on-complete') {
-      // Cleanup on flow completion
-      const handleFlowCompleted = async (event: EventRecord) => {
+      // Generic cleanup handler for terminal flow states
+      const cleanupFlowState = async (event: EventRecord, reason: string) => {
         const flowId = event.runId
         if (!flowId) return
 
@@ -81,48 +81,38 @@ export function createStateWiring(opts?: StateWiringOptions) {
           const deletedCount = await stateAdapter.clear(pattern)
 
           if (deletedCount > 0) {
-            logger.info('Cleaned up state after flow completion', {
+            logger.info(`Cleaned up state after ${reason}`, {
               flowId,
               deletedCount,
             })
           }
         }
         catch (error) {
-          logger.error('Error cleaning up state after flow completion', {
+          logger.error(`Error cleaning up state after ${reason}`, {
             flowId,
             error: (error as any)?.message,
           })
         }
       }
+
+      // Cleanup on flow completion
+      const handleFlowCompleted = (event: EventRecord) => cleanupFlowState(event, 'flow completion')
 
       // Cleanup on flow failure
-      const handleFlowFailed = async (event: EventRecord) => {
-        const flowId = event.runId
-        if (!flowId) return
+      const handleFlowFailed = (event: EventRecord) => cleanupFlowState(event, 'flow failure')
 
-        try {
-          const pattern = `flow:${flowId}:*`
-          const deletedCount = await stateAdapter.clear(pattern)
+      // Cleanup on flow cancel
+      const handleFlowCanceled = (event: EventRecord) => cleanupFlowState(event, 'flow cancellation')
 
-          if (deletedCount > 0) {
-            logger.info('Cleaned up state after flow failure', {
-              flowId,
-              deletedCount,
-            })
-          }
-        }
-        catch (error) {
-          logger.error('Error cleaning up state after flow failure', {
-            flowId,
-            error: (error as any)?.message,
-          })
-        }
-      }
+      // Cleanup on flow stalled
+      const handleFlowStalled = (event: EventRecord) => cleanupFlowState(event, 'flow stall')
 
       unsubs.push(bus.onType('flow.completed', handleFlowCompleted))
       unsubs.push(bus.onType('flow.failed', handleFlowFailed))
+      unsubs.push(bus.onType('flow.cancel', handleFlowCanceled))
+      unsubs.push(bus.onType('flow.stalled', handleFlowStalled))
 
-      logger.debug('State cleanup enabled: on-complete')
+      logger.debug('State cleanup enabled: on-complete (includes stalled and canceled)')
     }
 
     // Cleanup immediately after each step completes

@@ -280,8 +280,6 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
             data: {
               stepName: job.name,
               queue: queueName,
-              error: String((err as any)?.message || err),
-              stack: (err as any)?.stack,
               attempt,
               maxAttempts,
               nextAttempt: attempt + 1,

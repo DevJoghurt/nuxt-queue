@@ -27,7 +27,7 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@iconify-json/devicon": "^1.2.48",
+    "@iconify-json/devicon": "^1.2.49",
     "@iconify-json/heroicons": "1.2.3",
     "@iconify-json/lucide": "^1.2.73",
     "@nuxt/kit": "4.2.1",
@@ -46,6 +46,6 @@
     "@nuxt/schema": "4.2.1",
     "@types/node": "^24.10.1",
     "typescript": "latest",
-    "vitest": "^4.0.8"
+    "vitest": "^4.0.10"
   }
 }

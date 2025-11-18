@@ -1,11 +1,8 @@
 {
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "composite": true,
-    "rootDir": ".",
-    "outDir": "dist"
-  },
-  "include": [
-    "src"
+  "extends": "../../playground/.nuxt/tsconfig.server.json",
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules", 
+    "dist"
   ]
 }

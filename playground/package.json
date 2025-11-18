@@ -12,6 +12,8 @@
     "@nuxt/ui": "*",
     "nvent": "workspace:*",
     "@nvent/app": "workspace:*",
-    "@nvent/adapter-queue-redis": "workspace:*"
+    "@nvent/adapter-queue-redis": "workspace:*",
+    "@nvent/adapter-store-redis": "workspace:*",
+    "@nvent/adapter-stream-redis": "workspace:*"
   }
 }

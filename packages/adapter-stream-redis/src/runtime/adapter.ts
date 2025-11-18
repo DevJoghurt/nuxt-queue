@@ -1,4 +1,6 @@
 import type { StreamAdapter, StreamEvent, SubscriptionHandle } from '#nvent/adapters'
+import { useRuntimeConfig, registerStreamAdapter, defineNitroPlugin } from '#imports'
+import { defu } from 'defu'
 import type IORedis from 'ioredis'
 import IORedisConstructor from 'ioredis'
 
@@ -241,11 +243,6 @@ export class RedisStreamAdapter implements StreamAdapter {
     }
   }
 }
-
-// Nitro plugin to auto-register this adapter
-import { defineNitroPlugin } from 'nitropack/runtime'
-import { useRuntimeConfig, registerStreamAdapter } from '#imports'
-import { defu } from 'defu'
 
 export default defineNitroPlugin(async (nitroApp) => {
   // Listen to the registration hook from nvent

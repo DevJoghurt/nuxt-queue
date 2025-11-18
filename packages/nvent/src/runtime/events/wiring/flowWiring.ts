@@ -1,4 +1,3 @@
-import type { EmitEvent } from '../types'
 import type { EventRecord } from '../../adapters/interfaces/store'
 import { getEventBus } from '../eventBus'
 import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, useStreamTopics, useRuntimeConfig } from '#imports'

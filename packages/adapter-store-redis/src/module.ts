@@ -1,6 +1,4 @@
 import { defineNuxtModule, createResolver, addServerPlugin } from '@nuxt/kit'
-import { defu } from 'defu'
-import { RedisStoreAdapter } from './runtime/adapter'
 
 export interface ModuleOptions {
   connection?: {
@@ -48,6 +46,6 @@ export default defineNuxtModule<ModuleOptions>({
     }
 
     // Add Nitro plugin that registers the adapter
-    addServerPlugin(resolve('./runtime/'))
+    addServerPlugin(resolve('./runtime/adapter'))
   },
 })

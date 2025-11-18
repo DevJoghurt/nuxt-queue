@@ -100,8 +100,6 @@ export interface StepRetryEvent extends StepEvent {
   data?: {
     stepName: string
     queue: string
-    error?: string
-    stack?: string
     attempt: number
     maxAttempts: number
     nextAttempt: number
