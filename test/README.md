@@ -62,11 +62,24 @@ pnpm test test/e2e/queue.test.ts
 
 ## Test Results (v0.4.5)
 
-### Unit Tests ✅
-- **23/23 passing**
-- Configuration system validation
-- Default values and merging
-- Adapter configuration validation
+### Unit Tests
+- **Configuration Tests: 23/23 passing** ✅
+  - Configuration system validation
+  - Default values and merging
+  - Adapter configuration validation
+
+- **Memory Adapter Tests: 12/34 passing** ⚠️ (needs API alignment)
+  - Queue operations (partial)
+  - Store operations (partial)
+  - Stream operations (needs implementation)
+
+- **File Adapter Tests: 4/16 passing** ⚠️ (needs API alignment)
+  - Queue persistence (partial)
+  - Store persistence (partial)
+
+- **Function Definition Tests: Not yet run** ⚠️
+  - Config utilities
+  - Handler utilities
 
 ### E2E Tests
 - **Queue Adapter: 6/6 passing** ✅
