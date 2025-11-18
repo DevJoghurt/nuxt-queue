@@ -239,6 +239,29 @@ export function useFlowWebSocket() {
       return
     }
 
+    // If we already have an open connection, just change the subscription
+    if (ws.value && ws.value.readyState === WebSocket.OPEN) {
+      console.log('[useFlowWebSocket] Reusing connection, switching subscription')
+      // Unsubscribe from previous flow if exists
+      if (currentSubscription) {
+        send({
+          type: 'unsubscribe',
+          flowName: currentSubscription.flowName,
+          runId: currentSubscription.runId,
+        })
+      }
+
+      // Update subscription and subscribe to new flow
+      currentSubscription = subscription
+      send({
+        type: 'subscribe',
+        flowName: subscription.flowName,
+        runId: subscription.runId,
+      })
+      return
+    }
+
+    // No active connection, close any stale connection and create new one
     if (ws.value) {
       stop()
     }

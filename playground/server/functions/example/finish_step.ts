@@ -7,7 +7,7 @@ export const config = defineFunctionConfig({
   // Optional: let queue name default to file name ("second_step")
   flow: {
     // Must include the flow name(s) this step participates in
-    name: ['example-flow'],
+    name: 'example-flow',
     role: 'step',
     // This worker handles the "second_step" job name
     step: 'finish',

@@ -69,11 +69,9 @@ export function useFlowRunTimeline(flowId: Ref<string>, runId: Ref<string>) {
 
   // Auto-start when runId changes
   watch(runId, async (newRunId, oldRunId) => {
-    // Stop old stream to prevent orphaned connections
+    // Unsubscribe from old flow (keeps connection open for reuse)
     if (oldRunId && oldRunId !== newRunId) {
-      stopStream()
-      // Wait a bit for cleanup
-      await new Promise(resolve => setTimeout(resolve, 100))
+      flowWs.unsubscribe()
     }
 
     if (newRunId) {

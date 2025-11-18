@@ -1,11 +1,6 @@
-import { ref, computed, onUnmounted, type Ref } from '#imports'
+import { ref, computed, watch, onUnmounted, type Ref } from '#imports'
 import type { QueueCounts } from './useQueues'
-
-interface QueueEvent {
-  eventType: 'waiting' | 'active' | 'completed' | 'failed' | 'progress'
-  jobId?: string
-  [key: string]: any
-}
+import { useQueuesWebSocket, type QueueEvent } from './useQueuesWebSocket'
 
 interface QueueState {
   counts: QueueCounts | null
@@ -15,147 +10,54 @@ interface QueueState {
 }
 
 /**
- * Composable for real-time queue updates via WebSocket
+ * Composable for real-time queue updates
  */
 export function useQueueUpdates(queueName: Ref<string>) {
-  const ws = ref<WebSocket | null>(null)
-  const isConnected = ref(false)
-  const isReconnecting = ref(false)
+  const queueWs = useQueuesWebSocket()
   const state = ref<QueueState>({
     counts: null,
     lastEvent: null,
     countsUpdatedAt: null,
     shouldRefreshJobs: false,
   })
+  let subscriptionId: string | null = null
 
-  let reconnectTimeout: NodeJS.Timeout | null = null
-  let reconnectAttempts = 0
-  const maxReconnectAttempts = 5
+  const subscribe = (name: string) => {
+    if (!import.meta.client || !name) return
 
-  const connect = () => {
-    if (!import.meta.client || !queueName.value) return
-
-    // Close existing connection
-    if (ws.value) {
-      try {
-        ws.value.close()
-      }
-      catch {
-        // Ignore
-      }
-      ws.value = null
-    }
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/api/_queues/ws`
-
-    try {
-      const socket = new WebSocket(wsUrl)
-      ws.value = socket
-
-      socket.onopen = () => {
-        console.log('[useQueueUpdates] connected')
-        isConnected.value = true
-        isReconnecting.value = false
-        reconnectAttempts = 0
-
-        // Subscribe to queue
-        socket.send(JSON.stringify({
-          type: 'subscribe',
-          queueName: queueName.value,
-        }))
-      }
-
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data)
-
-          if (message.type === 'event') {
-            state.value.lastEvent = message.event
-
-            // Trigger job list refresh for state-changing events
-            const eventType = message.event?.eventType
-            if (['waiting', 'active', 'completed', 'failed'].includes(eventType)) {
-              state.value.shouldRefreshJobs = true
-            }
-          }
-          else if (message.type === 'counts') {
-            state.value.counts = message.counts
-            state.value.countsUpdatedAt = Date.now()
-          }
-          else if (message.type === 'error') {
-            console.error('[useQueueUpdates] error:', message.message)
-          }
+    subscriptionId = queueWs.subscribe(
+      name,
+      (counts) => {
+        state.value.counts = counts
+        state.value.countsUpdatedAt = Date.now()
+      },
+      (event) => {
+        state.value.lastEvent = event
+        if (['waiting', 'active', 'completed', 'failed'].includes(event?.eventType)) {
+          state.value.shouldRefreshJobs = true
         }
-        catch (err) {
-          console.error('[useQueueUpdates] parse error:', err)
-        }
-      }
-
-      socket.onerror = (error) => {
-        console.error('[useQueueUpdates] error:', error)
-      }
-
-      socket.onclose = () => {
-        console.log('[useQueueUpdates] disconnected')
-        isConnected.value = false
-
-        // Attempt reconnection if not manually closed
-        if (reconnectAttempts < maxReconnectAttempts && queueName.value) {
-          isReconnecting.value = true
-          reconnectAttempts++
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000)
-          reconnectTimeout = setTimeout(() => {
-            console.log(`[useQueueUpdates] reconnecting (attempt ${reconnectAttempts})...`)
-            connect()
-          }, delay)
-        }
-        else {
-          isReconnecting.value = false
-        }
-      }
-    }
-    catch (err) {
-      console.error('[useQueueUpdates] connection error:', err)
-      isConnected.value = false
-    }
+      },
+    )
   }
 
-  const disconnect = () => {
-    if (reconnectTimeout) {
-      clearTimeout(reconnectTimeout)
-      reconnectTimeout = null
-    }
-
-    if (ws.value) {
-      try {
-        // Send unsubscribe before closing
-        if (ws.value.readyState === WebSocket.OPEN) {
-          ws.value.send(JSON.stringify({
-            type: 'unsubscribe',
-            queueName: queueName.value,
-          }))
-        }
-        ws.value.close()
-      }
-      catch {
-        // Ignore
-      }
-      ws.value = null
-    }
-
-    isConnected.value = false
-    isReconnecting.value = false
-  }
-
-  // Connect on mount
+  // Subscribe to initial queue
   if (import.meta.client && queueName.value) {
-    connect()
+    subscribe(queueName.value)
   }
 
-  // Cleanup on unmount
+  // Watch for queue name changes
+  watch(queueName, (newName, oldName) => {
+    if (oldName && subscriptionId) {
+      queueWs.unsubscribe(oldName, subscriptionId)
+    }
+    if (newName) subscribe(newName)
+  })
+
+  // Cleanup
   onUnmounted(() => {
-    disconnect()
+    if (queueName.value && subscriptionId) {
+      queueWs.unsubscribe(queueName.value, subscriptionId)
+    }
   })
 
   const resetRefreshFlag = () => {
@@ -163,14 +65,12 @@ export function useQueueUpdates(queueName: Ref<string>) {
   }
 
   return {
-    isConnected: computed(() => isConnected.value),
-    isReconnecting: computed(() => isReconnecting.value),
+    isConnected: queueWs.connected,
+    isReconnecting: queueWs.reconnecting,
     counts: computed(() => state.value.counts),
     lastEvent: computed(() => state.value.lastEvent),
     countsUpdatedAt: computed(() => state.value.countsUpdatedAt),
     shouldRefreshJobs: computed(() => state.value.shouldRefreshJobs),
     resetRefreshFlag,
-    connect,
-    disconnect,
   }
 }

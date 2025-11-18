@@ -1,6 +1,6 @@
 {
   "name": "nvent",
-  "version": "0.4.1",
+  "version": "0.4.5",
   "description": "Event-driven workflows for Nuxt",
   "repository": "DevJoghurt/nvent",
   "license": "MIT",
@@ -9,10 +9,6 @@
     ".": {
       "types": "./dist/types.d.mts",
       "import": "./dist/module.mjs"
-    },
-    "./adapters": {
-      "types": "./dist/adapters.d.mts",
-      "import": "./dist/adapters.mjs"
     }
   },
   "main": "./dist/module.mjs",

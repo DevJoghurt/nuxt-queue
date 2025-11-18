@@ -221,7 +221,7 @@ export default defineFunction(async (job, ctx) => {
 
 export const config = defineFunctionConfig({
   flow: {
-    names: ['my-flow'],
+    name: ['my-flow'],
     role: 'entry',
     step: 'start',
     emits: ['data.prepared']
@@ -240,7 +240,7 @@ export default defineFunction(async (job, ctx) => {
 
 export const config = defineFunctionConfig({
   flow: {
-    names: ['my-flow'],
+    name: ['my-flow'],
     role: 'step',
     step: 'process',
     subscribes: ['data.prepared'],  // Triggered by start
@@ -257,7 +257,7 @@ export default defineFunction(async (job, ctx) => {
 
 export const config = defineFunctionConfig({
   flow: {
-    names: ['my-flow'],
+    name: ['my-flow'],
     role: 'step',
     step: 'validate',
     subscribes: ['data.prepared'],  // Also triggered by start (parallel with process)
