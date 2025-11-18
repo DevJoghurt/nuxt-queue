@@ -7,14 +7,14 @@ import { loadJsConfig } from './loaders/js'
 import { loadTsConfig } from './loaders/ts'
 import { loadPyConfig } from './loaders/py'
 
-export async function scanWorkers(layers: LayerInfo[], queuesDir = 'queues'): Promise<{ workers: WorkerEntry[], flowSources: FlowSource[] }> {
+export async function scanWorkers(layers: LayerInfo[], functionsDir = 'functions'): Promise<{ workers: WorkerEntry[], flowSources: FlowSource[] }> {
   const logger = useLogger()
   const workerByVirtualPath = new Map<string, WorkerEntry>()
   const seenFiles = new Set<string>()
   const flowSources: FlowSource[] = []
 
   for (const layer of layers) {
-    const base = join(layer.serverDir, queuesDir)
+    const base = join(layer.serverDir, functionsDir)
     if (!existsSync(base)) continue
 
     const files = await globby('**/*.{ts,js,mjs,cjs,mts,cts,py}', { cwd: base, dot: false })

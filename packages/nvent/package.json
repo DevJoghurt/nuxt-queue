@@ -19,8 +19,7 @@
   "scripts": {
     "build": "nuxt-module-build build",
     "dev": "nuxt-module-build build --stub",
-    "prepack": "pnpm build",
-    "test": "vitest"
+    "prepack": "pnpm build"
   },
   "dependencies": {
     "@nuxt/kit": "4.2.1",

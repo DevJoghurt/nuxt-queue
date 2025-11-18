@@ -1,5 +1,5 @@
 import { getEventBus } from '../events/eventBus'
-import type { EventRecord } from '../types'
+import type { EventRecord } from '../adapters/interfaces/store'
 import { useNventLogger } from '#imports'
 
 export interface EventManager {

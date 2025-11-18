@@ -7,19 +7,21 @@
   "type": "module",
   "private": true,
   "scripts": {
-		"build": "pnpm prepare && pnpm --filter \"./packages/**\" prepack",
+    "build": "pnpm prepare && pnpm --filter \"./packages/**\" prepack",
     "build:stub": "pnpm prepare",
     "prepare": "pnpm --filter \"./packages/**\" prepack --stub && nuxi prepare playground",
     "dev": "nuxi dev playground",
     "dev:build": "nuxi build playground",
     "dev:preview": "nuxi preview playground",
-    "test": "pnpm -r test",
+    "test": "vitest run",
+    "test:unit": "vitest test/unit",
+    "test:e2e": "vitest test/e2e",
+    "test:coverage": "vitest --coverage",
     "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit",
     "lint": "eslint --ext .ts,.js,.mjs,.cjs,.vue .",
     "cleanup": "rimraf dist*/ **/node_modules .nuxt* playground/.data packages/**/dist",
     "bumpp": "bumpp"
   },
-  "dependencies": {},
   "devDependencies": {
     "@nuxt/devtools": "^3.1.0",
     "@nuxt/eslint-config": "^1.10.0",
@@ -31,11 +33,12 @@
     "bumpp": "10.3.1",
     "changelogen": "^0.6.2",
     "eslint": "^9.39.1",
+    "happy-dom": "^20.0.10",
     "nuxi": "^3.30.0",
     "nuxt-mcp": "0.2.6",
     "rimraf": "^6.1.0",
     "typescript": "latest",
-    "vitest": "^4.0.10",
+    "vitest": "^3.2.4",
     "vue-tsc": "^3.1.4"
   },
   "packageManager": "pnpm@10.20.0"
