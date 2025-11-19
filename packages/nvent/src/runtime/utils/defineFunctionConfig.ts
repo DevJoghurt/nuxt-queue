@@ -26,6 +26,93 @@ export interface FlowConfig {
    * The compiler normalizes this to `string[]` under `subscribes`.
    */
   subscribes?: string | string[]
+  /**
+   * Entry trigger configuration (v0.5)
+   * Subscribe to existing triggers to start flow runs
+   */
+  triggers?: {
+    /**
+     * Array of trigger names to subscribe to
+     */
+    subscribe: string[]
+    /**
+     * Trigger mode: 'auto' (immediate) or 'manual' (requires approval)
+     */
+    mode?: 'auto' | 'manual'
+  }
+  /**
+   * Await pattern: Wait BEFORE step execution (v0.5)
+   * Step won't execute until trigger fires
+   */
+  awaitBefore?: AwaitConfig
+  /**
+   * Await pattern: Wait AFTER step execution (v0.5)
+   * Next steps won't trigger until trigger fires
+   */
+  awaitAfter?: AwaitConfig
+}
+
+/**
+ * Await configuration (run-scoped triggers)
+ * Declared in config, no functions allowed (AST-parsed)
+ */
+export interface AwaitConfig {
+  /**
+   * Trigger type
+   */
+  type: 'webhook' | 'event' | 'schedule' | 'time'
+
+  // Webhook-specific
+  /**
+   * URL path for webhook (supports template variables: {runId}, {stepId})
+   */
+  path?: string
+  /**
+   * HTTP method for webhook
+   */
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+
+  // Event-specific
+  /**
+   * Event name to wait for
+   */
+  event?: string
+  /**
+   * Key to match between event and step data
+   * e.g., 'orderId' matches event.orderId === step.orderId
+   * Supports nested paths: 'order.id' matches event.order.id === step.order.id
+   */
+  filterKey?: string
+
+  // Schedule-specific
+  /**
+   * Cron expression (e.g., '0 9 * * *' for 9 AM daily)
+   */
+  cron?: string
+  /**
+   * Hours to add after step completion before calculating next cron occurrence
+   */
+  nextAfterHours?: number
+  /**
+   * Timezone for cron expression
+   */
+  timezone?: string
+
+  // Time-specific
+  /**
+   * Delay in milliseconds
+   */
+  delay?: number
+
+  // Common options
+  /**
+   * Maximum wait time in milliseconds
+   */
+  timeout?: number
+  /**
+   * Action to take on timeout
+   */
+  timeoutAction?: 'fail' | 'continue' | 'retry'
 }
 
 // Provider-agnostic job defaults applied when enqueuing jobs for this queue

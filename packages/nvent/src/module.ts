@@ -11,7 +11,7 @@ import {
 import defu from 'defu'
 import { compileRegistryFromServerWorkers, type LayerInfo } from './registry'
 import { watchQueueFiles } from './utils/dev'
-import { generateRegistryTemplate, generateHandlersTemplate, generateAnalyzedFlowsTemplate } from './utils/templates'
+import { generateRegistryTemplate, generateHandlersTemplate, generateAnalyzedFlowsTemplate, generateTriggerRegistryTemplate } from './utils/templates'
 import { normalizeModuleOptions, toRuntimeConfig, getRedisStorageConfig } from './runtime/config'
 import type { ModuleOptions, ModuleConfig } from './runtime/config/types'
 import type {} from '@nuxt/schema'
@@ -108,9 +108,10 @@ export default defineNuxtModule<ModuleOptions>({
     const REGISTRY_TEMPLATE = 'queue-registry.mjs'
     const HANDLERS_TEMPLATE = 'worker-handlers.mjs'
     const ANALYZED_FLOWS_TEMPLATE = 'analyzed-flows.mjs'
+    const TRIGGER_REGISTRY_TEMPLATE = 'trigger-registry.mjs'
 
     // add dynamic ts files to build transpile list
-    for (const templateName of [REGISTRY_TEMPLATE, HANDLERS_TEMPLATE, ANALYZED_FLOWS_TEMPLATE] as const) {
+    for (const templateName of [REGISTRY_TEMPLATE, HANDLERS_TEMPLATE, ANALYZED_FLOWS_TEMPLATE, TRIGGER_REGISTRY_TEMPLATE] as const) {
       const templatePath = resolve(nuxt.options.buildDir, templateName)
       nuxt.options.build.transpile.push(templatePath)
     }
@@ -132,6 +133,12 @@ export default defineNuxtModule<ModuleOptions>({
       filename: ANALYZED_FLOWS_TEMPLATE,
       write: true,
       getContents: () => generateAnalyzedFlowsTemplate(lastCompiledRegistry),
+    })
+
+    addTemplate({
+      filename: TRIGGER_REGISTRY_TEMPLATE,
+      write: true,
+      getContents: () => generateTriggerRegistryTemplate(lastCompiledRegistry),
     })
 
     // Add type template for adapter interfaces
@@ -220,6 +227,11 @@ export type { AdapterRegistry } from ${JSON.stringify(resolve('./runtime/adapter
         as: '$useAnalyzedFlows',
         from: resolve(nuxt.options.buildDir, 'analyzed-flows'),
       },
+      {
+        name: 'useTriggerRegistry',
+        as: '$useTriggerRegistry',
+        from: resolve(nuxt.options.buildDir, 'trigger-registry'),
+      },
       // Core utilities for user code
       {
         name: 'defineFunctionConfig',
@@ -267,6 +279,12 @@ export type { AdapterRegistry } from ${JSON.stringify(resolve('./runtime/adapter
       }, {
         name: 'useStreamTopics',
         from: resolve('./runtime/utils/useStreamTopics'),
+      }, {
+        name: 'useTrigger',
+        from: resolve('./runtime/utils/useTrigger'),
+      }, {
+        name: 'useAwait',
+        from: resolve('./runtime/utils/useAwait'),
       },
       // Adapter registration utilities for external modules
       {
@@ -308,6 +326,7 @@ export type { AdapterRegistry } from ${JSON.stringify(resolve('./runtime/adapter
           const match = template.filename === REGISTRY_TEMPLATE
             || template.filename === HANDLERS_TEMPLATE
             || template.filename === ANALYZED_FLOWS_TEMPLATE
+            || template.filename === TRIGGER_REGISTRY_TEMPLATE
           if (match) {
             console.log(`[nuxt-queue] updating template: ${template.filename}`)
           }

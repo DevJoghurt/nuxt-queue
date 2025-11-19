@@ -63,6 +63,26 @@ function getClientFlowTopic(runId: string): string {
 }
 
 /**
+ * Get topic for trigger events
+ * Pattern: trigger:event:{triggerName}
+ * Published when: Trigger fires and routes to subscribed flows
+ * Used by: Trigger wiring for cross-instance trigger coordination
+ */
+function getTriggerEventTopic(triggerName: string): string {
+  return `trigger:event:${triggerName}`
+}
+
+/**
+ * Get topic for await trigger events
+ * Pattern: await:event:{runId}:{stepName}
+ * Published when: Await trigger is registered, resolved, or timed out
+ * Used by: Await wiring for step coordination
+ */
+function getAwaitEventTopic(runId: string, stepName: string): string {
+  return `await:event:${runId}:${stepName}`
+}
+
+/**
  * Common subject patterns for event streams
  */
 const SubjectPatterns = {
@@ -85,6 +105,54 @@ const SubjectPatterns = {
    * Worker heartbeat subject
    */
   workerHeartbeat: (workerId: string) => `worker:${workerId}`,
+
+  // ============================================================
+  // Trigger System (v0.5)
+  // ============================================================
+
+  /**
+   * Trigger registry (all registered triggers)
+   */
+  triggerRegistry: () => `nq:trigger:registry`,
+
+  /**
+   * Trigger event stream (when trigger fires)
+   */
+  triggerFired: (triggerName: string) => `nq:trigger:${triggerName}`,
+
+  /**
+   * Trigger subscriptions collection
+   */
+  triggerSubscriptions: () => `trigger-subscriptions`,
+
+  /**
+   * Triggers collection
+   */
+  triggers: () => `triggers`,
+
+  // ============================================================
+  // Await Patterns (v0.5) - Run-scoped ephemeral triggers
+  // ============================================================
+
+  /**
+   * Await trigger event stream (for a specific step in a run)
+   */
+  awaitTrigger: (runId: string, stepName: string) => `nq:await:${runId}:${stepName}`,
+
+  /**
+   * Await registry for a run (all awaits in this run)
+   */
+  awaitRegistry: (runId: string) => `nq:await:${runId}`,
+
+  /**
+   * Await status in KV store
+   */
+  awaitStatus: (runId: string, stepName: string) => `await:${runId}:${stepName}:status`,
+
+  /**
+   * Webhook route mapping in KV store
+   */
+  webhookRoute: (path: string) => `webhook:route:${path}`,
 } as const
 
 export function useStreamTopics() {
@@ -95,6 +163,8 @@ export function useStreamTopics() {
     getStoreKvTopic,
     getFlowEventTopic,
     getClientFlowTopic,
+    getTriggerEventTopic,
+    getAwaitEventTopic,
     SubjectPatterns,
   }
 }

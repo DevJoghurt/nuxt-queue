@@ -24,7 +24,75 @@ export type WorkerEntry = {
     step: string | string[]
     emits?: string[]
     subscribes?: string[]
+    // v0.5: Trigger configuration
+    triggers?: {
+      subscribe: string[]
+      mode?: 'auto' | 'manual'
+    }
+    awaitBefore?: AwaitConfig
+    awaitAfter?: AwaitConfig
   }
+}
+
+/**
+ * Await configuration (v0.5)
+ */
+export type AwaitConfig = {
+  type: 'webhook' | 'event' | 'schedule' | 'time'
+  path?: string
+  method?: string
+  event?: string
+  filterKey?: string
+  cron?: string
+  nextAfterHours?: number
+  timezone?: string
+  delay?: number
+  timeout?: number
+  timeoutAction?: 'fail' | 'continue' | 'retry'
+}
+
+/**
+ * Trigger definition (v0.5)
+ * Registered programmatically via registerTrigger()
+ */
+export type TriggerEntry = {
+  name: string
+  type: 'event' | 'webhook' | 'schedule' | 'manual'
+  scope: 'flow' | 'run'
+  displayName?: string
+  description?: string
+  source?: string
+
+  // Optional validation hints (not enforced)
+  expectedSubscribers?: string[]
+
+  // Type-specific config
+  webhook?: {
+    path: string
+    method?: string
+    auth?: any
+  }
+  schedule?: {
+    cron: string
+    timezone?: string
+    enabled?: boolean
+  }
+
+  // Metadata
+  registeredAt: string
+  registeredBy: 'code' | 'runtime'
+}
+
+/**
+ * Trigger subscription (v0.5)
+ * Runtime index of flow -> trigger subscriptions
+ */
+export type TriggerSubscription = {
+  triggerName: string
+  flowName: string
+  mode: 'auto' | 'manual'
+  source: 'config' | 'programmatic'
+  registeredAt: string
 }
 
 export type FlowEntry = {
