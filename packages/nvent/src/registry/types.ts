@@ -134,6 +134,7 @@ export type ConfigMeta = {
   queue?: { name?: string, defaultJobOptions?: any, prefix?: string, limiter?: any }
   worker?: { concurrency?: number, lockDurationMs?: number, maxStalledCount?: number, drainDelayMs?: number, autorun?: boolean, pollingIntervalMs?: number }
   hasDefaultExport?: boolean
+  hasHooks?: boolean
 }
 
 export type NuxtQueueLogger = {

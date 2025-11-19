@@ -1,8 +1,9 @@
 import { defineNitroPlugin, $useWorkerHandlers, $useQueueRegistry, useQueueAdapter } from '#imports'
 import type { NodeHandler } from '../../worker/node/runner'
 import { createJobProcessor } from '../../worker/node/runner'
+import { useHookRegistry, type LifecycleHooks } from '../../utils/useHookRegistry'
 
-type HandlerEntry = { queue: string, id: string, absPath: string, handler: NodeHandler }
+type HandlerEntry = { queue: string, id: string, absPath: string, handler: NodeHandler, module?: any }
 
 export default defineNitroPlugin(async (nitroApp) => {
   // Close all workers on shutdown or HMR reload
@@ -25,7 +26,7 @@ export default defineNitroPlugin(async (nitroApp) => {
       const registeredQueues = new Set<string>()
 
       for (const entry of handlers) {
-        const { queue, id, handler } = entry as any
+        const { queue, id, handler, module } = entry as any
 
         // Match exact worker by id; fallback to queue + absPath if needed
         const w = (registry.workers as any[]).find(rw => (rw?.id === id) || (rw?.queue?.name === queue && rw?.absPath === entry.absPath))
@@ -39,6 +40,28 @@ export default defineNitroPlugin(async (nitroApp) => {
         else {
           // Fallback: extract from worker id (e.g., "example/first_step" -> "first_step")
           jobName = id.includes('/') ? id.split('/').pop() : id
+        }
+
+        // Extract lifecycle hooks if present (v0.5 await integration)
+        if (module && w?.flow) {
+          const hooks: LifecycleHooks = {}
+          if (typeof module.onAwaitRegister === 'function') {
+            hooks.onAwaitRegister = module.onAwaitRegister
+          }
+          if (typeof module.onAwaitResolve === 'function') {
+            hooks.onAwaitResolve = module.onAwaitResolve
+          }
+
+          // Register hooks if any exist
+          if (Object.keys(hooks).length > 0) {
+            const hookRegistry = useHookRegistry()
+            const flowNames = Array.isArray(w.flow.names) ? w.flow.names : [w.flow.names]
+            for (const flowName of flowNames) {
+              if (flowName) {
+                hookRegistry.register(flowName, jobName, hooks)
+              }
+            }
+          }
         }
 
         if (typeof handler === 'function') {

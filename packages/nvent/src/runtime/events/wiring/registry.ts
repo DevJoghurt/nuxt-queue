@@ -1,6 +1,7 @@
 import { createFlowWiring } from './flowWiring'
 import { createStreamWiring } from './streamWiring'
 import { createStateWiring } from './stateWiring'
+import { createTriggerWiring } from './triggerWiring'
 
 export interface Wiring {
   start(): void
@@ -36,7 +37,8 @@ export function createWiringRegistry(opts?: WiringRegistryOptions): Wiring {
     // 3. State wiring (automatic state cleanup)
     createStateWiring(opts?.stateWiring),
 
-    // Future wirings: triggers, webhooks, etc.
+    // 4. Trigger wiring (v0.5: trigger.fired, await.registered, await.resolved)
+    createTriggerWiring(),
   ]
   let started = false
   return {

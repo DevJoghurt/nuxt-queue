@@ -13,7 +13,7 @@
  */
 
 import type { StoreAdapter } from '../../adapters/interfaces/store'
-import { useNventLogger, useStreamTopics } from '#imports'
+import { useNventLogger, useStreamTopics, $useAnalyzedFlows } from '#imports'
 
 export interface StallDetectorConfig {
   /**
@@ -112,6 +112,34 @@ export class FlowStallDetector {
   }
 
   /**
+   * Get stall timeout for a specific flow
+   * Uses flow-specific timeout from analyzed metadata, falls back to global config
+   */
+  private async getFlowStallTimeout(flowName: string): Promise<number> {
+    try {
+      const analyzedFlows = $useAnalyzedFlows() as any[]
+      const flowMeta = analyzedFlows.find((f: any) => f.id === flowName)
+
+      if (flowMeta?.stallTimeout) {
+        this.logger.debug('Using flow-specific stall timeout', {
+          flowName,
+          timeout: `${flowMeta.stallTimeout / 1000}s`,
+        })
+        return flowMeta.stallTimeout
+      }
+    }
+    catch (error) {
+      this.logger.warn('Failed to get flow-specific stall timeout', {
+        flowName,
+        error: (error as Error).message,
+      })
+    }
+
+    // Fall back to global config
+    return this.config.stallTimeout
+  }
+
+  /**
    * Update activity timestamp for a flow
    * Should be called on every step event (started, completed, failed, retry)
    */
@@ -142,6 +170,7 @@ export class FlowStallDetector {
   /**
    * Check if a specific flow is stalled (lazy detection)
    * Returns true if the flow should be marked as stalled
+   * v0.5: Await-aware - uses flow-specific timeout and skips awaiting flows
    */
   async isStalled(flowName: string, runId: string): Promise<boolean> {
     const { SubjectPatterns } = useStreamTopics()
@@ -156,16 +185,31 @@ export class FlowStallDetector {
       // Only check running flows
       if (flowEntry.metadata.status !== 'running') return false
 
+      // v0.5: Skip flows with active awaits - they are legitimately paused
+      const awaitingSteps = flowEntry.metadata.awaitingSteps || {}
+      const hasActiveAwaits = Object.keys(awaitingSteps).length > 0
+      if (hasActiveAwaits) {
+        this.logger.debug('Flow has active awaits, skipping stall check', {
+          flowName,
+          runId,
+          awaitingSteps: Object.keys(awaitingSteps),
+        })
+        return false
+      }
+
+      // v0.5: Use flow-specific stall timeout
+      const stallTimeout = await this.getFlowStallTimeout(flowName)
+
       // Check activity timestamp
       const lastActivity = flowEntry.metadata.lastActivityAt || flowEntry.metadata.startedAt || 0
       const timeSinceActivity = Date.now() - lastActivity
 
-      if (timeSinceActivity > this.config.stallTimeout) {
+      if (timeSinceActivity > stallTimeout) {
         this.logger.info('Flow detected as stalled (lazy check)', {
           flowName,
           runId,
           timeSinceActivity: `${Math.round(timeSinceActivity / 1000)}s`,
-          stallTimeout: `${this.config.stallTimeout / 1000}s`,
+          stallTimeout: `${stallTimeout / 1000}s`,
         })
         return true
       }
@@ -262,6 +306,9 @@ export class FlowStallDetector {
       for (const flowName of flowNames) {
         const indexKey = SubjectPatterns.flowRunIndex(flowName)
 
+        // v0.5: Get flow-specific stall timeout
+        const stallTimeout = await this.getFlowStallTimeout(flowName)
+
         // Get all flow runs from the index
         const entries = await this.store.indexRead(indexKey, { limit: 1000 })
 
@@ -273,11 +320,17 @@ export class FlowStallDetector {
           // Only check running flows
           if (entry.metadata.status !== 'running') continue
 
+          // v0.5: Skip flows with active awaits
+          const awaitingSteps = entry.metadata.awaitingSteps || {}
+          if (Object.keys(awaitingSteps).length > 0) {
+            continue
+          }
+
           // Check if stalled
           const lastActivity = entry.metadata.lastActivityAt || entry.metadata.startedAt || 0
           const timeSinceActivity = Date.now() - lastActivity
 
-          if (timeSinceActivity > this.config.stallTimeout) {
+          if (timeSinceActivity > stallTimeout) {
             await this.markAsStalled(flowName, entry.id, 'Periodic check detected no activity')
             stalledCount++
           }

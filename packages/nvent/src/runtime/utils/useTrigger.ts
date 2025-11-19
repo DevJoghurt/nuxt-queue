@@ -1,5 +1,6 @@
 import type { TriggerEntry, TriggerSubscription } from '../../registry/types'
 import { useStoreAdapter, useNventLogger, useStreamTopics } from '#imports'
+import { getEventBus } from '../events/eventBus'
 
 /**
  * Runtime trigger state
@@ -230,10 +231,10 @@ export function useTrigger() {
 
     /**
      * Emit trigger (fire event)
-     * This is handled by triggerWiring.ts
+     * Uses event bus - trigger wiring will handle persistence and flow starts
      */
     async emitTrigger(name: string, data: any) {
-      const { SubjectPatterns } = useStreamTopics()
+      const eventBus = getEventBus()
 
       // Warn if trigger is not registered (but still allow emission for flexibility)
       if (!runtime.triggers.has(name)) {
@@ -251,10 +252,8 @@ export function useTrigger() {
         )
       }
 
-      // Use centralized topic patterns
-      const streamName = SubjectPatterns.triggerFired(name)
-
-      await store.append(streamName, {
+      // Publish to event bus - trigger wiring will handle the rest
+      await eventBus.publish({
         type: 'trigger.fired',
         triggerName: name,
         data,

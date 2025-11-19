@@ -58,7 +58,15 @@ export async function loadTsConfig(absPath: string): Promise<ConfigMeta> {
       ? { ...cfg.worker }
       : undefined
 
-    return { queueName, flow, runtype, queue: queueCfg, worker: workerCfg, hasDefaultExport }
+    // v0.5: Check for lifecycle hooks exports
+    // We can detect these by looking for exported functions with these names
+    // They can be plain functions or wrapped with defineAwaitRegisterHook/defineAwaitResolveHook
+    const hasHooks = !!(
+      mod.exports.onAwaitRegister
+      || mod.exports.onAwaitResolve
+    )
+
+    return { queueName, flow, runtype, queue: queueCfg, worker: workerCfg, hasDefaultExport, hasHooks }
   }
   catch (error) {
     throw new Error(`Failed to parse config from ${absPath}: ${error}`)

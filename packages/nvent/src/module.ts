@@ -257,7 +257,28 @@ export type { AdapterRegistry } from ${JSON.stringify(resolve('./runtime/adapter
       {
         name: 'useNventLogger',
         from: resolve('./runtime/utils/useNventLogger'),
-      }, {
+      },
+      {
+        name: 'useHookRegistry',
+        from: resolve('./runtime/utils/useHookRegistry'),
+      },
+      {
+        name: 'useAwait',
+        from: resolve('./runtime/utils/useAwait'),
+      },
+      {
+        name: 'useRunContext',
+        from: resolve('./runtime/utils/useRunContext'),
+      },
+      {
+        name: 'defineAwaitRegisterHook',
+        from: resolve('./runtime/utils/defineHooks'),
+      },
+      {
+        name: 'defineAwaitResolveHook',
+        from: resolve('./runtime/utils/defineHooks'),
+      },
+      {
         name: 'useQueueAdapter',
         from: resolve('./runtime/utils/adapters'),
       }, {

@@ -2,6 +2,7 @@ import type { EventRecord } from '../../adapters/interfaces/store'
 import { getEventBus } from '../eventBus'
 import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, useStreamTopics, useRuntimeConfig } from '#imports'
 import { createStallDetector } from '../utils/stallDetector'
+import { cleanupFlowAwaits } from '../utils/awaitCleanup'
 
 /**
  * Check if all dependencies for a step are met
@@ -34,7 +35,7 @@ export function checkPendingStepTriggers(
  * Check all steps in the flow and trigger any that now have all dependencies satisfied
  * This is called after emit events and step completions
  */
-async function checkAndTriggerPendingSteps(
+export async function checkAndTriggerPendingSteps(
   flowName: string,
   runId: string,
   store: ReturnType<typeof useStoreAdapter>,
@@ -83,6 +84,19 @@ async function checkAndTriggerPendingSteps(
 
       // Skip if step doesn't have dependencies or already completed
       if (!step.subscribes || completedSteps.has(stepName)) continue
+
+      // v0.5: Check await state - skip if step is currently awaiting
+      const awaitState = flowEntry?.metadata?.awaitingSteps?.[stepName]
+      if (awaitState) {
+        logger.debug('Step is awaiting, skipping trigger', {
+          flowName,
+          runId,
+          stepName,
+          awaitType: awaitState.awaitType,
+          position: awaitState.position,
+        })
+        continue
+      }
 
       // Check if all dependencies are now satisfied
       const canTrigger = checkPendingStepTriggers(step, emittedEvents, completedSteps)
@@ -675,6 +689,53 @@ export function createFlowWiring() {
       }
     }
 
+    // ============================================================================
+    // HANDLER 3: AWAIT CLEANUP - Clean up await patterns when flow reaches terminal state
+    // ============================================================================
+    const handleFlowCompleted = async (e: EventRecord) => {
+      if (!e.id || !e.ts) return // Only process persisted events
+      if (e.type !== 'flow.completed') return
+
+      const { flowName, runId } = e
+      if (!flowName || !runId) return
+
+      logger.debug('Flow completed, cleaning up awaits', { flowName, runId })
+      await cleanupFlowAwaits(flowName, runId, 'completed')
+    }
+
+    const handleFlowFailed = async (e: EventRecord) => {
+      if (!e.id || !e.ts) return // Only process persisted events
+      if (e.type !== 'flow.failed') return
+
+      const { flowName, runId } = e
+      if (!flowName || !runId) return
+
+      logger.debug('Flow failed, cleaning up awaits', { flowName, runId })
+      await cleanupFlowAwaits(flowName, runId, 'failed')
+    }
+
+    const handleFlowCanceled = async (e: EventRecord) => {
+      if (!e.id || !e.ts) return // Only process persisted events
+      if (e.type !== 'flow.cancel') return
+
+      const { flowName, runId } = e
+      if (!flowName || !runId) return
+
+      logger.debug('Flow canceled, cleaning up awaits', { flowName, runId })
+      await cleanupFlowAwaits(flowName, runId, 'canceled')
+    }
+
+    const handleFlowStalled = async (e: EventRecord) => {
+      if (!e.id || !e.ts) return // Only process persisted events
+      if (e.type !== 'flow.stalled') return
+
+      const { flowName, runId } = e
+      if (!flowName || !runId) return
+
+      logger.debug('Flow stalled, cleaning up awaits', { flowName, runId })
+      await cleanupFlowAwaits(flowName, runId, 'stalled')
+    }
+
     // v0.4: Subscribe to event types with BOTH handlers
     // Order matters: Persistence runs first, then orchestration
     const eventTypes = [
@@ -692,6 +753,12 @@ export function createFlowWiring() {
     for (const type of eventTypes) {
       unsubs.push(bus.onType(type, handleOrchestration))
     }
+
+    // Register cleanup handlers for terminal flow states (run after persistence)
+    unsubs.push(bus.onType('flow.completed', handleFlowCompleted))
+    unsubs.push(bus.onType('flow.failed', handleFlowFailed))
+    unsubs.push(bus.onType('flow.cancel', handleFlowCanceled))
+    unsubs.push(bus.onType('flow.stalled', handleFlowStalled))
 
     // Initialize and start stall detector
     const config = useRuntimeConfig()

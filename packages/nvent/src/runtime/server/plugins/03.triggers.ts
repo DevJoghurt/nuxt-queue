@@ -1,60 +1,63 @@
-import { defineNitroPlugin, $useTriggerRegistry, useTrigger, useNventLogger } from '#imports'
-import { setupTriggerWiring, setupAwaitWiring } from '../../events/wiring/triggerWiring'
+import { defineNitroPlugin, $useTriggerRegistry, useNventLogger } from '#imports'
+import { getEventBus } from '../../events/eventBus'
 
 /**
- * Trigger System Initialization Plugin
+ * Trigger Registration Plugin
  *
- * Phase 4: Integration
- * - Loads pre-analyzed trigger subscriptions from build-time registry
- * - Initializes trigger runtime and wiring
- * - Sets up event listeners
+ * Loads pre-analyzed triggers and subscriptions from build-time registry
+ * and registers them via event bus (trigger.registered events).
+ * The trigger wiring will handle the actual registration logic.
+ *
+ * This plugin is ONLY for registering dev/build-time discovered triggers.
+ * Trigger wiring and event handling is done in the wiring registry.
  */
 export default defineNitroPlugin(async (nitroApp) => {
   // Wait for adapters to be ready
   nitroApp.hooks.hook('nvent:adapters:ready' as any, async () => {
-    const logger = useNventLogger('trigger-init')
-    const trigger = useTrigger()
+    const logger = useNventLogger('trigger-registration')
+    const eventBus = getEventBus()
 
     try {
-      logger.info('Initializing trigger system...')
+      logger.info('Registering build-time triggers...')
 
       // Get pre-analyzed trigger registry from build-time template
       // @ts-ignore - generated at build time
       const triggerRegistry = $useTriggerRegistry()
       const subscriptions = triggerRegistry?.subscriptions || []
-      const index = triggerRegistry?.index || { triggerToFlows: {}, flowToTriggers: {} }
+      const triggers = triggerRegistry?.triggers || []
 
-      logger.info(`Loaded ${subscriptions.length} trigger subscriptions from registry`)
-      logger.debug('Trigger index loaded', {
-        triggers: Object.keys(index.triggerToFlows).length,
-        flows: Object.keys(index.flowToTriggers).length,
-      })
+      logger.info(`Found ${triggers.length} triggers and ${subscriptions.length} subscriptions from build`)
 
-      // Register subscriptions in runtime
-      for (const sub of subscriptions) {
-        await trigger.subscribeTrigger({
-          trigger: sub.triggerName,
-          flow: sub.flowName,
-          mode: sub.mode,
-        })
+      // Publish trigger.registered events for each discovered trigger
+      // The trigger wiring will handle the actual registration
+      for (const trigger of triggers) {
+        await eventBus.publish({
+          type: 'trigger.registered',
+          triggerName: trigger.name,
+          data: trigger,
+        } as any)
       }
 
-      // Setup event wiring
-      await setupTriggerWiring()
-      await setupAwaitWiring()
+      // Publish subscription.registered events
+      // The trigger wiring will handle subscribing flows to triggers
+      for (const sub of subscriptions) {
+        await eventBus.publish({
+          type: 'subscription.registered',
+          data: {
+            trigger: sub.triggerName,
+            flow: sub.flowName,
+            mode: sub.mode,
+            source: 'build-time',
+          },
+        } as any)
+      }
 
-      logger.info('Trigger system initialized successfully')
+      logger.info('Build-time trigger registration complete')
     }
     catch (error) {
-      logger.error('Failed to initialize trigger system', {
+      logger.error('Failed to register build-time triggers', {
         error: error instanceof Error ? error.message : String(error),
       })
     }
-  })
-
-  // Cleanup on close
-  nitroApp.hooks.hook('close', async () => {
-    // Trigger runtime cleanup if needed
-    // (Currently no cleanup needed as runtime state is in-memory)
   })
 })
