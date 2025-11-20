@@ -4,10 +4,10 @@
  * Used by external adapter modules to register their adapters with nvent
  */
 
-import { useAdapterRegistry } from '../adapters/registry'
-import type { QueueAdapter } from '../adapters/interfaces/queue'
-import type { StreamAdapter } from '../adapters/interfaces/stream'
-import type { StoreAdapter } from '../adapters/interfaces/store'
+import { useAdapterRegistry } from '../../adapters/registry'
+import type { QueueAdapter } from '../../adapters/interfaces/queue'
+import type { StreamAdapter } from '../../adapters/interfaces/stream'
+import type { StoreAdapter } from '../../adapters/interfaces/store'
 
 /**
  * Register a queue adapter

@@ -2,7 +2,8 @@ import { join } from 'node:path'
 import {
   defineNuxtModule,
   createResolver,
-  addServerScanDir,
+  addServerPlugin,
+  addServerHandler,
   addServerImports,
   addTemplate,
   addTypeTemplate,
@@ -11,7 +12,8 @@ import {
 import defu from 'defu'
 import { compileRegistryFromServerWorkers, type LayerInfo } from './registry'
 import { watchQueueFiles } from './utils/dev'
-import { generateRegistryTemplate, generateHandlersTemplate, generateAnalyzedFlowsTemplate, generateTriggerRegistryTemplate } from './utils/templates'
+import { generateRegistryTemplate, generateHandlersTemplate, generateAnalyzedFlowsTemplate, generateTriggerRegistryTemplate, generateAdapterTypesTemplate } from './utils/templates'
+import { getServerImports } from './utils/serverImports'
 import { normalizeModuleOptions, toRuntimeConfig, getRedisStorageConfig } from './runtime/config'
 import type { ModuleOptions, ModuleConfig } from './runtime/config/types'
 import type {} from '@nuxt/schema'
@@ -28,7 +30,7 @@ declare module '@nuxt/schema' {
   }
 }
 
-export default defineNuxtModule<ModuleOptions>({
+export default defineNuxtModule<ModuleOptions>().with({
   meta,
   defaults: {},
   moduleDependencies: {
@@ -45,10 +47,6 @@ export default defineNuxtModule<ModuleOptions>({
 
     // Normalize and merge configuration
     const config = normalizeModuleOptions(mergedOptions)
-
-    // Use addServerScanDir only for api/ and plugins/ directories
-    // These follow Nuxt conventions and won't include .d.ts files in the build
-    addServerScanDir(resolve('./runtime/server'))
 
     nuxt.hook('nitro:config', (nitro) => {
       // Ensure Redis storage is configured for unstorage so StateProvider persists to Redis.
@@ -145,182 +143,28 @@ export default defineNuxtModule<ModuleOptions>({
     // This allows external packages to import types via #nvent/adapters
     addTypeTemplate({
       filename: 'types/nvent-adapters.d.ts',
-      getContents: () => `
-// Auto-generated adapter type definitions
-// External adapter packages can import these types
-
-// Queue Adapter
-export type {
-  QueueAdapter,
-  JobInput,
-  Job,
-  JobsQuery,
-  JobOptions,
-  JobState,
-  ScheduleOptions,
-  JobCounts,
-  QueueEvent,
-  WorkerHandler,
-  WorkerContext,
-  WorkerOptions,
-} from ${JSON.stringify(resolve('./runtime/adapters/interfaces/queue'))}
-
-// Stream Adapter
-export type {
-  StreamAdapter,
-  StreamEvent,
-  SubscribeOptions,
-  SubscriptionHandle,
-} from ${JSON.stringify(resolve('./runtime/adapters/interfaces/stream'))}
-
-// Store Adapter
-export type {
-  StoreAdapter,
-  EventRecord,
-  EventReadOptions,
-  EventSubscription,
-  ListOptions,
-} from ${JSON.stringify(resolve('./runtime/adapters/interfaces/store'))}
-
-// Event Types
-export type {
-  EventType,
-  BaseEvent,
-  StepEvent,
-  FlowStartEvent,
-  FlowCompletedEvent,
-  FlowFailedEvent,
-  FlowCancelEvent,
-  FlowStalledEvent,
-  StepStartedEvent,
-  StepCompletedEvent,
-  StepFailedEvent,
-  StepRetryEvent,
-  LogEvent,
-  EmitEvent,
-  StateEvent,
-  FlowEvent,
-} from ${JSON.stringify(resolve('./runtime/events/types'))}
-
-// Adapter Registry
-export type { AdapterRegistry } from ${JSON.stringify(resolve('./runtime/adapters/registry'))}
-      `.trim(),
+      getContents: () => generateAdapterTypesTemplate(resolve),
     })
-
     nuxt.options.alias['#nvent/adapters'] = resolve(nuxt.options.buildDir, 'types/nvent-adapters')
 
-    // add composables
-    addServerImports([
-      // Generated templates
-      {
-        name: 'useQueueRegistry',
-        as: '$useQueueRegistry',
-        from: resolve(nuxt.options.buildDir, 'queue-registry'),
-      },
-      {
-        name: 'useWorkerHandlers',
-        as: '$useWorkerHandlers',
-        from: resolve(nuxt.options.buildDir, 'worker-handlers'),
-      },
-      {
-        name: 'useAnalyzedFlows',
-        as: '$useAnalyzedFlows',
-        from: resolve(nuxt.options.buildDir, 'analyzed-flows'),
-      },
-      {
-        name: 'useTriggerRegistry',
-        as: '$useTriggerRegistry',
-        from: resolve(nuxt.options.buildDir, 'trigger-registry'),
-      },
-      // Core utilities for user code
-      {
-        name: 'defineFunctionConfig',
-        from: resolve('./runtime/utils/defineFunctionConfig'),
-      },
-      {
-        name: 'defineFunction',
-        from: resolve('./runtime/utils/defineFunction'),
-      },
-      // Composables users may need in server code
-      {
-        name: 'useFlowEngine',
-        from: resolve('./runtime/utils/useFlowEngine'),
-      },
-      {
-        name: 'useEventManager',
-        from: resolve('./runtime/utils/useEventManager'),
-      },
-      {
-        name: 'usePeerManager',
-        from: resolve('./runtime/utils/wsPeerManager'),
-      },
-      {
-        name: 'useNventLogger',
-        from: resolve('./runtime/utils/useNventLogger'),
-      },
-      {
-        name: 'useHookRegistry',
-        from: resolve('./runtime/utils/useHookRegistry'),
-      },
-      {
-        name: 'useAwait',
-        from: resolve('./runtime/utils/useAwait'),
-      },
-      {
-        name: 'useRunContext',
-        from: resolve('./runtime/utils/useRunContext'),
-      },
-      {
-        name: 'defineAwaitRegisterHook',
-        from: resolve('./runtime/utils/defineHooks'),
-      },
-      {
-        name: 'defineAwaitResolveHook',
-        from: resolve('./runtime/utils/defineHooks'),
-      },
-      {
-        name: 'useQueueAdapter',
-        from: resolve('./runtime/utils/adapters'),
-      }, {
-        name: 'useStoreAdapter',
-        from: resolve('./runtime/utils/adapters'),
-      }, {
-        name: 'useStreamAdapter',
-        from: resolve('./runtime/utils/adapters'),
-      }, {
-        name: 'useStateAdapter',
-        from: resolve('./runtime/utils/adapters'),
-      },
-      {
-        name: 'getAdapters',
-        from: resolve('./runtime/utils/adapters'),
-      }, {
-        name: 'setAdapters',
-        from: resolve('./runtime/utils/adapters'),
-      }, {
-        name: 'useStreamTopics',
-        from: resolve('./runtime/utils/useStreamTopics'),
-      }, {
-        name: 'useTrigger',
-        from: resolve('./runtime/utils/useTrigger'),
-      }, {
-        name: 'useAwait',
-        from: resolve('./runtime/utils/useAwait'),
-      },
-      // Adapter registration utilities for external modules
-      {
-        name: 'registerQueueAdapter',
-        from: resolve('./runtime/utils/registerAdapter'),
-      },
-      {
-        name: 'registerStreamAdapter',
-        from: resolve('./runtime/utils/registerAdapter'),
-      },
-      {
-        name: 'registerStoreAdapter',
-        from: resolve('./runtime/utils/registerAdapter'),
-      },
-    ])
+    // Add server plugin to initialize nvent in Nitro
+    addServerPlugin(resolve('./runtime/nitro/plugins/00.adapters'))
+    addServerPlugin(resolve('./runtime/nitro/plugins/01.ws-lifecycle'))
+    addServerPlugin(resolve('./runtime/nitro/plugins/02.workers'))
+    addServerPlugin(resolve('./runtime/nitro/plugins/03.triggers'))
+
+    // add webhook handler
+    addServerHandler({
+      route: '/api/_webhook/await/**',
+      handler: resolve('./runtime/nitro/routes/webhook.await'),
+    })
+    addServerHandler({
+      route: '/api/_webhook/trigger/:triggerName',
+      handler: resolve('./runtime/nitro/routes/webhook.start'),
+    })
+
+    // Add server auto-imports
+    addServerImports(getServerImports(resolve, nuxt.options.buildDir))
 
     // Small helper to refresh registry and re-generate app (dev)
     const refreshRegistry = async (reason: string, changedPath?: string) => {

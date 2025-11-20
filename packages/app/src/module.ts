@@ -4,6 +4,7 @@ import {
   addImportsDir,
   addComponent,
   addComponentsDir,
+  addServerScanDir,
   addPlugin,
 } from '@nuxt/kit'
 import defu from 'defu'
@@ -32,6 +33,9 @@ export default defineNuxtModule<ModuleOptions>({
     addImportsDir(resolve('./runtime/shared/utils'))
 
     addImportsDir(resolve('./runtime/app/composables'))
+
+    // Scan server directory for auto-imports
+    addServerScanDir(resolve('./runtime/server'))
 
     // add vueflow assets
     nuxt.options.css = nuxt.options.css || []

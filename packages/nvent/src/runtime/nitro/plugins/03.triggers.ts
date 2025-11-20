@@ -21,7 +21,6 @@ export default defineNitroPlugin(async (nitroApp) => {
       logger.info('Registering build-time triggers...')
 
       // Get pre-analyzed trigger registry from build-time template
-      // @ts-ignore - generated at build time
       const triggerRegistry = $useTriggerRegistry()
       const subscriptions = triggerRegistry?.subscriptions || []
       const triggers = triggerRegistry?.triggers || []

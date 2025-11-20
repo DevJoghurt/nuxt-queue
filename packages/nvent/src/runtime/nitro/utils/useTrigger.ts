@@ -1,6 +1,6 @@
-import type { TriggerEntry, TriggerSubscription } from '../../registry/types'
+import type { TriggerEntry, TriggerSubscription } from '../../../registry/types'
 import { useStoreAdapter, useNventLogger, useStreamTopics } from '#imports'
-import { getEventBus } from '../events/eventBus'
+import { getEventBus } from '../../events/eventBus'
 
 /**
  * Runtime trigger state

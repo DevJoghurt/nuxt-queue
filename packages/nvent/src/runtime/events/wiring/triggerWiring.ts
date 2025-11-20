@@ -2,12 +2,12 @@ import type { EventRecord } from '../../adapters/interfaces/store'
 import type { TriggerFiredEvent, AwaitRegisteredEvent, AwaitResolvedEvent } from '../types'
 import { getEventBus } from '../eventBus'
 import { checkAndTriggerPendingSteps } from './flowWiring'
-import { useRunContext, useHookRegistry, useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, useStreamTopics } from '#imports'
+import { useRunContext, useTrigger, useHookRegistry, useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, useStreamTopics } from '#imports'
 
 /**
  * Create trigger event wiring
  * Listens to trigger.fired events and starts subscribed flows
- * v0.5: Handles await.registered and await.resolved events
+ * Handles await.registered and await.resolved events
  */
 export function createTriggerWiring() {
   const unsubs: Array<() => void> = []
@@ -19,7 +19,6 @@ export function createTriggerWiring() {
 
     const logger = useNventLogger('trigger-wiring')
     const eventBus = getEventBus()
-    const { useTrigger } = await import('../../utils/useTrigger')
     const trigger = useTrigger()
 
     // Initialize trigger runtime
@@ -86,7 +85,7 @@ export function createTriggerWiring() {
       }
     }))
 
-    // v0.5: Listen to await.registered events
+    // Listen to await.registered events
     unsubs.push(eventBus.onType('await.registered', async (event: EventRecord) => {
       try {
         await handleAwaitRegistered(event as unknown as AwaitRegisteredEvent)
@@ -98,7 +97,7 @@ export function createTriggerWiring() {
       }
     }))
 
-    // v0.5: Listen to await.resolved events
+    // Listen to await.resolved events
     unsubs.push(eventBus.onType('await.resolved', async (event: EventRecord) => {
       try {
         await handleAwaitResolved(event as unknown as AwaitResolvedEvent)
@@ -110,7 +109,7 @@ export function createTriggerWiring() {
       }
     }))
 
-    // v0.5: Listen to await.timeout events
+    // Listen to await.timeout events
     unsubs.push(eventBus.onType('await.timeout', async (event: EventRecord) => {
       const { SubjectPatterns } = useStreamTopics()
       const store = useStoreAdapter()
@@ -171,7 +170,6 @@ export function createTriggerWiring() {
  */
 export async function handleTriggerFired(event: TriggerFiredEvent) {
   const logger = useNventLogger('trigger-wiring')
-  const { useTrigger } = await import('../../utils/useTrigger')
   const trigger = useTrigger()
 
   const { triggerName, data } = event

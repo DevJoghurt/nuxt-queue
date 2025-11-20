@@ -167,3 +167,68 @@ export const useTriggerRegistry = () => triggerRegistry;
 export default useTriggerRegistry;
 `
 }
+
+/**
+ * Generate adapter type definitions template
+ * Used by external adapter packages to import types
+ */
+export function generateAdapterTypesTemplate(resolverFn: (path: string) => string): string {
+  return `// Auto-generated adapter type definitions
+// External adapter packages can import these types
+
+// Queue Adapter
+export type {
+  QueueAdapter,
+  JobInput,
+  Job,
+  JobsQuery,
+  JobOptions,
+  JobState,
+  ScheduleOptions,
+  JobCounts,
+  QueueEvent,
+  WorkerHandler,
+  WorkerContext,
+  WorkerOptions,
+} from ${JSON.stringify(resolverFn('./runtime/adapters/interfaces/queue'))}
+
+// Stream Adapter
+export type {
+  StreamAdapter,
+  StreamEvent,
+  SubscribeOptions,
+  SubscriptionHandle,
+} from ${JSON.stringify(resolverFn('./runtime/adapters/interfaces/stream'))}
+
+// Store Adapter
+export type {
+  StoreAdapter,
+  EventRecord,
+  EventReadOptions,
+  EventSubscription,
+  ListOptions,
+} from ${JSON.stringify(resolverFn('./runtime/adapters/interfaces/store'))}
+
+// Event Types
+export type {
+  EventType,
+  BaseEvent,
+  StepEvent,
+  FlowStartEvent,
+  FlowCompletedEvent,
+  FlowFailedEvent,
+  FlowCancelEvent,
+  FlowStalledEvent,
+  StepStartedEvent,
+  StepCompletedEvent,
+  StepFailedEvent,
+  StepRetryEvent,
+  LogEvent,
+  EmitEvent,
+  StateEvent,
+  FlowEvent,
+} from ${JSON.stringify(resolverFn('./runtime/events/types'))}
+
+// Adapter Registry
+export type { AdapterRegistry } from ${JSON.stringify(resolverFn('./runtime/adapters/registry'))}`
+}

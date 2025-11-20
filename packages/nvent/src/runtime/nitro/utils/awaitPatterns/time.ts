@@ -1,6 +1,6 @@
-import type { AwaitConfig } from '../../../registry/types'
+import type { AwaitConfig } from '../../../../registry/types'
 import { useNventLogger, useStoreAdapter, useStreamTopics } from '#imports'
-import { getEventBus } from '../../events/eventBus'
+import { getEventBus } from '../../../events/eventBus'
 
 /**
  * Await Pattern: Time
