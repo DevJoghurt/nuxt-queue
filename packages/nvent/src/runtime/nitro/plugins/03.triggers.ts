@@ -1,4 +1,4 @@
-import { defineNitroPlugin, $useTriggerRegistry, useNventLogger } from '#imports'
+import { defineNitroPlugin, $useTriggerRegistry, useNventLogger, useTrigger } from '#imports'
 import { getEventBus } from '../../events/eventBus'
 
 /**
@@ -16,6 +16,7 @@ export default defineNitroPlugin(async (nitroApp) => {
   nitroApp.hooks.hook('nvent:adapters:ready' as any, async () => {
     const logger = useNventLogger('trigger-registration')
     const eventBus = getEventBus()
+    const trigger = useTrigger()
 
     try {
       logger.info('Registering build-time triggers...')
@@ -27,31 +28,51 @@ export default defineNitroPlugin(async (nitroApp) => {
 
       logger.info(`Found ${triggers.length} triggers and ${subscriptions.length} subscriptions from build`)
 
-      // Publish trigger.registered events for each discovered trigger
-      // The trigger wiring will handle the actual registration
-      for (const trigger of triggers) {
-        await eventBus.publish({
-          type: 'trigger.registered',
-          triggerName: trigger.name,
-          data: trigger,
-        } as any)
+      // Only publish events for NEW triggers that don't exist in runtime yet
+      // This prevents duplicate events on every restart
+      let newTriggers = 0
+      for (const triggerData of triggers) {
+        // Check if trigger already exists
+        if (!trigger.hasTrigger(triggerData.name)) {
+          await eventBus.publish({
+            type: 'trigger.registered',
+            triggerName: triggerData.name,
+            data: triggerData,
+          } as any)
+          newTriggers++
+        }
+        else {
+          logger.debug(`Trigger '${triggerData.name}' already registered, skipping`)
+        }
       }
 
-      // Publish subscription.registered events
-      // The trigger wiring will handle subscribing flows to triggers
+      // Only publish events for NEW subscriptions
+      let newSubscriptions = 0
       for (const sub of subscriptions) {
-        await eventBus.publish({
-          type: 'subscription.registered',
-          data: {
-            trigger: sub.triggerName,
-            flow: sub.flowName,
-            mode: sub.mode,
-            source: 'build-time',
-          },
-        } as any)
+        // Check if subscription already exists
+        const existing = trigger.getSubscription(sub.triggerName, sub.flowName)
+        if (!existing) {
+          await eventBus.publish({
+            type: 'subscription.added',
+            triggerName: sub.triggerName,
+            data: {
+              trigger: sub.triggerName,
+              flow: sub.flowName,
+              mode: sub.mode,
+              source: 'build-time',
+            },
+          } as any)
+          newSubscriptions++
+        }
+        else {
+          logger.debug(`Subscription '${sub.flowName}' -> '${sub.triggerName}' already exists, skipping`)
+        }
       }
 
-      logger.info('Build-time trigger registration complete')
+      logger.info(
+        `Build-time trigger registration complete `
+        + `(${newTriggers} new triggers, ${newSubscriptions} new subscriptions)`,
+      )
     }
     catch (error) {
       logger.error('Failed to register build-time triggers', {

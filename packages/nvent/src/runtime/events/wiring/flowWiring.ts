@@ -1,8 +1,8 @@
 import type { EventRecord } from '../../adapters/interfaces/store'
+import type { AwaitRegisteredEvent, AwaitResolvedEvent } from '../types'
 import { getEventBus } from '../eventBus'
 import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, useStreamTopics, useRuntimeConfig } from '#imports'
 import { createStallDetector } from '../utils/stallDetector'
-import { cleanupFlowAwaits } from '../utils/awaitCleanup'
 
 /**
  * Check if all dependencies for a step are met
@@ -584,11 +584,6 @@ export function createFlowWiring() {
           return
         }
 
-        // Skip await events - they're persisted by triggerWiring
-        if (e.type === 'await.registered' || e.type === 'await.resolved') {
-          return
-        }
-
         // v0.4: Get runId and flowName from event
         const runId = e.runId
         if (!runId) {
@@ -741,6 +736,60 @@ export function createFlowWiring() {
             logger.warn('Failed to update completedSteps', {
               flowName,
               runId,
+              error: (err as any)?.message,
+            })
+          }
+        }
+
+        // For await.registered events, update flow index with await status
+        if (e.type === 'await.registered') {
+          const awaitEvent = e as unknown as AwaitRegisteredEvent
+          const { stepName, awaitType, position, config } = awaitEvent
+
+          try {
+            if (store.indexUpdateWithRetry) {
+              await store.indexUpdateWithRetry(indexKey, runId, {
+                [`awaitingSteps.${stepName}.status`]: 'awaiting',
+                [`awaitingSteps.${stepName}.awaitType`]: awaitType,
+                [`awaitingSteps.${stepName}.position`]: position,
+                [`awaitingSteps.${stepName}.config`]: config,
+              })
+
+              logger.info('Await registered in index', { runId, stepName, awaitType, position })
+            }
+          }
+          catch (err) {
+            logger.error('Error updating await status', {
+              runId,
+              stepName,
+              error: (err as any)?.message,
+            })
+          }
+        }
+
+        // For await.resolved events, update status and resume step
+        if (e.type === 'await.resolved') {
+          const awaitEvent = e as unknown as AwaitResolvedEvent
+          const { stepName, triggerData, position } = awaitEvent
+
+          try {
+            if (store.indexUpdateWithRetry) {
+              await store.indexUpdateWithRetry(indexKey, runId, {
+                [`awaitingSteps.${stepName}.status`]: 'resolved',
+                [`awaitingSteps.${stepName}.triggerData`]: triggerData,
+              })
+
+              logger.info('Await resolved in index', { runId, stepName, position })
+            }
+
+            // Resume the step by checking pending steps
+            // The step will be triggered if all its dependencies are now satisfied
+            await checkAndTriggerPendingSteps(flowName, runId, store)
+          }
+          catch (err) {
+            logger.error('Error handling await resolution', {
+              runId,
+              stepName,
               error: (err as any)?.message,
             })
           }
@@ -916,58 +965,12 @@ export function createFlowWiring() {
       }
     }
 
-    // ============================================================================
-    // HANDLER 3: AWAIT CLEANUP - Clean up await patterns when flow reaches terminal state
-    // ============================================================================
-    const handleFlowCompleted = async (e: EventRecord) => {
-      if (!e.id || !e.ts) return // Only process persisted events
-      if (e.type !== 'flow.completed') return
-
-      const { flowName, runId } = e
-      if (!flowName || !runId) return
-
-      logger.debug('Flow completed, cleaning up awaits', { flowName, runId })
-      await cleanupFlowAwaits(flowName, runId, 'completed')
-    }
-
-    const handleFlowFailed = async (e: EventRecord) => {
-      if (!e.id || !e.ts) return // Only process persisted events
-      if (e.type !== 'flow.failed') return
-
-      const { flowName, runId } = e
-      if (!flowName || !runId) return
-
-      logger.debug('Flow failed, cleaning up awaits', { flowName, runId })
-      await cleanupFlowAwaits(flowName, runId, 'failed')
-    }
-
-    const handleFlowCanceled = async (e: EventRecord) => {
-      if (!e.id || !e.ts) return // Only process persisted events
-      if (e.type !== 'flow.cancel') return
-
-      const { flowName, runId } = e
-      if (!flowName || !runId) return
-
-      logger.debug('Flow canceled, cleaning up awaits', { flowName, runId })
-      await cleanupFlowAwaits(flowName, runId, 'canceled')
-    }
-
-    const handleFlowStalled = async (e: EventRecord) => {
-      if (!e.id || !e.ts) return // Only process persisted events
-      if (e.type !== 'flow.stalled') return
-
-      const { flowName, runId } = e
-      if (!flowName || !runId) return
-
-      logger.debug('Flow stalled, cleaning up awaits', { flowName, runId })
-      await cleanupFlowAwaits(flowName, runId, 'stalled')
-    }
-
     // v0.4: Subscribe to event types with BOTH handlers
     // Order matters: Persistence runs first, then orchestration
     const eventTypes = [
       'flow.start', 'flow.completed', 'flow.failed', 'flow.cancel',
       'step.started', 'step.completed', 'step.failed', 'step.retry',
+      'await.registered', 'await.resolved',
       'log', 'emit', 'state',
     ]
 
@@ -981,11 +984,8 @@ export function createFlowWiring() {
       unsubs.push(bus.onType(type, handleOrchestration))
     }
 
-    // Register cleanup handlers for terminal flow states (run after persistence)
-    unsubs.push(bus.onType('flow.completed', handleFlowCompleted))
-    unsubs.push(bus.onType('flow.failed', handleFlowFailed))
-    unsubs.push(bus.onType('flow.cancel', handleFlowCanceled))
-    unsubs.push(bus.onType('flow.stalled', handleFlowStalled))
+    // Note: Await cleanup removed - await state is now stored in flow index metadata
+    // for historical tracking and doesn't need active cleanup
 
     // Initialize and start stall detector
     const config = useRuntimeConfig()

@@ -1,8 +1,9 @@
 import type { EventRecord } from '../../adapters/interfaces/store'
-import type { TriggerFiredEvent, AwaitRegisteredEvent, AwaitResolvedEvent } from '../types'
+import type { TriggerFiredEvent } from '../types'
+import type { TriggerEntry, TriggerSubscription } from '../../../registry/types'
 import { getEventBus } from '../eventBus'
-import { checkAndTriggerPendingSteps } from './flowWiring'
-import { useRunContext, useTrigger, useHookRegistry, useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, useStreamTopics } from '#imports'
+import { useTrigger, useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, useStreamTopics } from '#imports'
+import { getTriggerRuntime } from '../utils/triggerRuntime'
 
 /**
  * Create trigger event wiring
@@ -20,188 +21,290 @@ export function createTriggerWiring() {
     const logger = useNventLogger('trigger-wiring')
     const eventBus = getEventBus()
     const trigger = useTrigger()
+    const store = useStoreAdapter()
+    const { SubjectPatterns } = useStreamTopics()
+    const runtime = getTriggerRuntime(store, logger)
 
     // Initialize trigger runtime
     await trigger.initialize()
 
     logger.info('Setting up trigger event wiring')
 
-    // Listen to trigger.fired events
-    // v0.5.1: Now appends flow start results to trigger stream
-    unsubs.push(eventBus.onType('trigger.fired', async (event: EventRecord) => {
-      try {
-        const triggerName = (event as any).triggerName || (event.data as any)?.triggerName
-        const flowsStarted = await handleTriggerFired(event as unknown as TriggerFiredEvent)
-
-        // Append metadata about flow starts to trigger stream
-        const { SubjectPatterns } = useStreamTopics()
-        const store = useStoreAdapter()
-        const streamName = SubjectPatterns.trigger(triggerName)
-
-        if (flowsStarted.length > 0) {
-          await store.append(streamName, {
-            type: 'trigger.processed',
-            triggerName,
-            data: {
-              flowsStarted,
-              subscribersNotified: flowsStarted.length,
-              processedAt: Date.now(),
-            },
-          })
-        }
-      }
-      catch (error) {
-        const triggerName = (event.data as any)?.triggerName || 'unknown'
-        logger.error('Error handling trigger.fired event', {
-          trigger: triggerName,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }))
-
-    // Listen to trigger.registered events - register triggers via useTrigger
-    unsubs.push(eventBus.onType('trigger.registered', async (event: EventRecord) => {
-      try {
-        const triggerData = event.data as any
-        await trigger.registerTrigger({
-          name: triggerData.name,
-          type: triggerData.type,
-          scope: triggerData.scope,
-          displayName: triggerData.displayName,
-          description: triggerData.description,
-          source: triggerData.source || 'build-time',
-          expectedSubscribers: triggerData.expectedSubscribers,
-          webhook: triggerData.webhook,
-          schedule: triggerData.schedule,
-          config: triggerData.config,
-        })
-        logger.debug(`Registered trigger: ${triggerData.name}`)
-      }
-      catch (error) {
-        logger.error('Failed to register trigger', {
-          trigger: (event.data as any)?.name,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }))
-
-    // Listen to subscription.registered events - subscribe flows to triggers
-    unsubs.push(eventBus.onType('subscription.registered', async (event: EventRecord) => {
-      try {
-        const subData = event.data as any
-        await trigger.subscribeTrigger({
-          trigger: subData.trigger,
-          flow: subData.flow,
-          mode: subData.mode || 'auto',
-        })
-        logger.debug(`Subscribed flow '${subData.flow}' to trigger '${subData.trigger}'`)
-      }
-      catch (error) {
-        logger.error('Failed to subscribe flow to trigger', {
-          data: event.data,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }))
-
     // ============================================================================
-    // HANDLER 1: PERSISTENCE - Store await events to streams
+    // HANDLER 1: PERSISTENCE - Append all trigger events to streams
     // ============================================================================
-    const handleAwaitPersistence = async (e: EventRecord) => {
+    const handlePersistence = async (e: EventRecord) => {
       try {
         // Only process ingress events (not already persisted)
         if (e.id && e.ts) {
           return
         }
 
-        const { runId, stepName } = e
-        if (!runId || !stepName) {
+        const triggerName = (e as any).triggerName || (e.data as any)?.triggerName
+        if (!triggerName) {
           return
         }
 
-        const { SubjectPatterns } = useStreamTopics()
-        const store = useStoreAdapter()
-        const flowStreamName = SubjectPatterns.flowRun(runId)
+        const streamName = SubjectPatterns.trigger(triggerName)
 
-        // Store in flow run stream
-        const persistedEvent = await store.append(flowStreamName, e)
+        // Validate event has required type field
+        if (!e.type) {
+          logger.error('Event missing type field', { event: e })
+          return
+        }
 
-        // Republish to bus so flowWiring can update the index
+        const eventData: any = {
+          type: e.type,
+          triggerName,
+          data: e.data,
+        }
+
+        // Append to stream - returns complete event with id and ts
+        const persistedEvent = await store.append(streamName, eventData)
+
+        // Republish complete event to bus so other wirings can react
         await eventBus.publish(persistedEvent as any)
 
-        logger.debug(`Stored ${e.type} in flow stream`, { runId, stepName })
+        logger.debug('Stored trigger event', {
+          type: e.type,
+          triggerName,
+          id: persistedEvent.id,
+        })
       }
       catch (err) {
-        logger.error(`Error persisting ${e.type} event`, {
+        logger.error('ERROR persisting trigger event', {
+          type: e.type,
+          triggerName: (e as any).triggerName,
           error: (err as any)?.message,
         })
       }
     }
 
     // ============================================================================
-    // HANDLER 2: ORCHESTRATION - Handle await lifecycle (timeouts, resume steps)
+    // HANDLER 2: ORCHESTRATION - Update metadata, analyze stats, trigger flows
     // ============================================================================
-    const handleAwaitOrchestration = async (e: EventRecord) => {
+    const handleOrchestration = async (e: EventRecord) => {
       try {
-        // Only process ingress events
+        // Only process ingress events (not already persisted)
         if (e.id && e.ts) {
           return
         }
 
-        if (e.type === 'await.registered') {
-          await handleAwaitRegisteredOrchestration(e as unknown as AwaitRegisteredEvent)
+        const triggerName = (e as any).triggerName || (e.data as any)?.triggerName
+        if (!triggerName) {
+          logger.debug('Orchestration skipped - no triggerName', { type: e.type })
+          return
         }
-        else if (e.type === 'await.resolved') {
-          await handleAwaitResolvedOrchestration(e as unknown as AwaitResolvedEvent)
+
+        logger.debug('Processing trigger orchestration', { type: e.type, triggerName })
+
+        const indexKey = SubjectPatterns.triggerIndex()
+        const now = new Date().toISOString()
+        const nowTimestamp = Date.now()
+
+        // For trigger.registered, initialize index
+        if (e.type === 'trigger.registered') {
+          const data = e.data as any
+
+          if (store.indexAdd) {
+            await store.indexAdd(indexKey, triggerName, nowTimestamp, {
+              'name': data.name,
+              'type': data.type,
+              'scope': data.scope,
+              'status': 'active',
+              'displayName': data.displayName,
+              'description': data.description,
+              'source': data.source || 'programmatic',
+              'registeredAt': now,
+              'registeredBy': 'runtime',
+              'lastActivityAt': now,
+              'stats.totalFires': 0,
+              'stats.activeSubscribers': 0,
+              'webhook': data.webhook,
+              'schedule': data.schedule,
+              'config': data.config,
+              'version': 1,
+            })
+          }
+
+          // Add to runtime
+          const entry: TriggerEntry = {
+            name: data.name,
+            type: data.type,
+            scope: data.scope,
+            status: 'active',
+            displayName: data.displayName,
+            description: data.description,
+            source: data.source || 'programmatic',
+            registeredAt: now,
+            registeredBy: 'runtime',
+            lastActivityAt: now,
+            subscriptions: {},
+            stats: { totalFires: 0, activeSubscribers: 0 },
+            webhook: data.webhook,
+            schedule: data.schedule,
+            config: data.config,
+            version: 1,
+          }
+          runtime.addTrigger(triggerName, entry)
+
+          logger.info('Registered trigger in index', { triggerName })
+        }
+
+        // For trigger.updated, update index
+        if (e.type === 'trigger.updated') {
+          const data = e.data as any
+
+          if (store.indexUpdateWithRetry) {
+            await store.indexUpdateWithRetry(indexKey, triggerName, {
+              type: data.type,
+              scope: data.scope,
+              displayName: data.displayName,
+              description: data.description,
+              webhook: data.webhook,
+              schedule: data.schedule,
+              config: data.config,
+              lastActivityAt: now,
+            })
+          }
+
+          logger.info('Updated trigger in index', { triggerName })
+        }
+
+        // For subscription.added, update trigger index
+        if (e.type === 'subscription.added') {
+          const data = e.data as any
+          const { flow, mode, isUpdate } = data
+
+          if (store.indexUpdateWithRetry) {
+            await store.indexUpdateWithRetry(indexKey, triggerName, {
+              [`subscriptions.${flow}.mode`]: mode,
+              [`subscriptions.${flow}.subscribedAt`]: now,
+              lastActivityAt: now,
+            })
+
+            // Increment subscriber count if this is a new subscription
+            if (!isUpdate && store.indexIncrement) {
+              await store.indexIncrement(indexKey, triggerName, 'stats.activeSubscribers', 1)
+            }
+          }
+
+          // Add to runtime
+          const subscription: TriggerSubscription = {
+            triggerName,
+            flowName: flow,
+            mode,
+            source: 'programmatic',
+            registeredAt: now,
+          }
+          runtime.addSubscription(triggerName, flow, subscription)
+
+          logger.info('Subscription added', { triggerName, flow, mode })
+        }
+
+        // For subscription.removed, update trigger index
+        if (e.type === 'subscription.removed') {
+          const data = e.data as any
+          const { flow } = data
+
+          if (store.indexUpdateWithRetry) {
+            await store.indexUpdateWithRetry(indexKey, triggerName, {
+              [`subscriptions.${flow}`]: null, // null removes the field
+              lastActivityAt: now,
+            })
+
+            // Decrement subscriber count
+            if (store.indexIncrement) {
+              await store.indexIncrement(indexKey, triggerName, 'stats.activeSubscribers', -1)
+            }
+          }
+
+          // Remove from runtime
+          runtime.removeSubscription(triggerName, flow)
+
+          logger.info('Subscription removed', { triggerName, flow })
+        }
+
+        // For trigger.fired, update stats and start flows
+        if (e.type === 'trigger.fired') {
+          // Update statistics in index
+          if (store.indexUpdateWithRetry) {
+            await store.indexUpdateWithRetry(indexKey, triggerName, {
+              ['stats.lastFiredAt']: now,
+              ['lastActivityAt']: now,
+            })
+          }
+
+          // Increment fire count atomically
+          if (store.indexIncrement) {
+            await store.indexIncrement(indexKey, triggerName, 'stats.totalFires', 1)
+          }
+
+          // Orchestrate flow starts (this is the critical part!)
+          const flowsStarted = await handleTriggerFired(e as unknown as TriggerFiredEvent)
+
+          logger.debug('Trigger fired and processed', { triggerName, flowsStarted: flowsStarted.length })
+        }
+
+        // For trigger.retired, update status
+        if (e.type === 'trigger.retired') {
+          const data = e.data as any
+
+          // Get final stats from index
+          let finalStats = { totalFires: 0, activeSubscribers: 0 }
+          if (store.indexGet) {
+            const entry = await store.indexGet(indexKey, triggerName)
+            if (entry?.metadata) {
+              finalStats = (entry.metadata as any).stats || finalStats
+            }
+          }
+
+          if (store.indexUpdateWithRetry) {
+            await store.indexUpdateWithRetry(indexKey, triggerName, {
+              status: 'retired',
+              retiredAt: now,
+              retiredReason: data.reason,
+              lastActivityAt: now,
+              finalStats,
+            })
+          }
+
+          // Remove from runtime
+          runtime.removeTrigger(triggerName)
+
+          logger.info('Trigger retired', { triggerName, reason: data.reason })
         }
       }
-      catch (error) {
-        logger.error(`Error in await orchestration for ${e.type}`, {
-          error: error instanceof Error ? error.message : String(error),
+      catch (err) {
+        logger.error('ERROR in trigger orchestration', {
+          type: e.type,
+          triggerName: (e as any).triggerName,
+          error: (err as any)?.message,
+          stack: (err as any)?.stack,
         })
       }
     }
 
-    // Listen to await.registered events - persistence first, then orchestration
-    unsubs.push(eventBus.onType('await.registered', handleAwaitPersistence))
-    unsubs.push(eventBus.onType('await.registered', handleAwaitOrchestration))
+    // Subscribe to all trigger event types with BOTH handlers
+    // Order matters: Persistence runs first, then orchestration
+    const eventTypes = [
+      'trigger.registered',
+      'trigger.updated',
+      'trigger.retired',
+      'trigger.fired',
+      'subscription.added',
+      'subscription.removed',
+    ]
 
-    // Listen to await.resolved events - persistence first, then orchestration
-    unsubs.push(eventBus.onType('await.resolved', handleAwaitPersistence))
-    unsubs.push(eventBus.onType('await.resolved', handleAwaitOrchestration))
+    // Register persistence handler first (stores events)
+    for (const type of eventTypes) {
+      unsubs.push(eventBus.onType(type, handlePersistence))
+    }
 
-    // Listen to await.timeout events
-    unsubs.push(eventBus.onType('await.timeout', async (event: EventRecord) => {
-      const { SubjectPatterns } = useStreamTopics()
-      const store = useStoreAdapter()
-      const timeoutData = event.data as any
-
-      logger.warn('Await pattern timed out', {
-        runId: event.runId,
-        stepName: event.stepName,
-        awaitType: timeoutData?.awaitType,
-      })
-
-      // Handle timeout action (continue, fail, retry)
-      if (timeoutData?.action === 'fail') {
-        const streamName = SubjectPatterns.flowRun(event.runId)
-        await store.append(streamName, {
-          type: 'step.failed',
-          flowName: event.flowName,
-          runId: event.runId,
-          stepName: event.stepName || '',
-          stepId: event.stepId || '',
-          attempt: event.attempt || 1,
-          data: {
-            error: 'Await pattern timed out',
-          },
-        })
-      }
-      else if (timeoutData?.action === 'continue') {
-        // Resume step with null data
-        await resumeStepAfterAwait(event.runId, event.stepName || '', null)
-      }
-    }))
+    // Register orchestration handler second (updates metadata, triggers flows)
+    for (const type of eventTypes) {
+      unsubs.push(eventBus.onType(type, handleOrchestration))
+    }
 
     logger.info('Trigger event wiring setup complete')
   }
@@ -249,6 +352,12 @@ export async function handleTriggerFired(event: TriggerFiredEvent): Promise<stri
 
   const flowsStarted: string[] = []
 
+  // Resolve payload reference if needed (converts __payloadRef to actual data)
+  const store = useStoreAdapter()
+  const loggerForRuntime = useNventLogger('trigger-runtime')
+  const runtime = getTriggerRuntime(store, loggerForRuntime)
+  const resolvedData = await runtime.resolvePayload(data)
+
   // Start each subscribed flow
   for (const subscription of subscriptions) {
     try {
@@ -261,8 +370,8 @@ export async function handleTriggerFired(event: TriggerFiredEvent): Promise<stri
         continue
       }
 
-      // Auto mode: start flow automatically
-      await startFlowFromTrigger(subscription.flowName, triggerName, data)
+      // Auto mode: start flow automatically with resolved data
+      await startFlowFromTrigger(subscription.flowName, triggerName, resolvedData)
       flowsStarted.push(subscription.flowName)
     }
     catch (error) {
@@ -364,168 +473,5 @@ export async function startFlowFromTrigger(
       trigger: triggerName,
       error: error instanceof Error ? error.message : String(error),
     })
-  }
-}
-
-/**
- * Handle await.registered orchestration
- * Sets up timeout tracking and updates flow index
- */
-async function handleAwaitRegisteredOrchestration(event: AwaitRegisteredEvent) {
-  const logger = useNventLogger('await-wiring')
-  const store = useStoreAdapter()
-  const { SubjectPatterns } = useStreamTopics()
-
-  const { runId, stepName, awaitType, position, config: awaitConfig, flowName } = event
-
-  logger.info('Flow status set to awaiting', { flowName, runId, stepName, awaitType })
-
-  // Update flow index with await state
-  const indexKey = SubjectPatterns.flowRunIndex(flowName)
-  const registeredAt = Date.now()
-  const timeoutAt = awaitConfig.timeout ? registeredAt + (awaitConfig.timeout * 1000) : undefined
-
-  if (store.indexUpdateWithRetry) {
-    await store.indexUpdateWithRetry(indexKey, runId, {
-      status: 'awaiting',
-      [`awaitingSteps.${stepName}.awaitType`]: awaitType,
-      [`awaitingSteps.${stepName}.registeredAt`]: registeredAt,
-      [`awaitingSteps.${stepName}.position`]: position,
-      [`awaitingSteps.${stepName}.status`]: 'awaiting',
-      [`awaitingSteps.${stepName}.webhookUrl`]: awaitConfig.webhookUrl,
-      [`awaitingSteps.${stepName}.timeoutAt`]: timeoutAt,
-      [`awaitingSteps.${stepName}.timeoutAction`]: awaitConfig.timeoutAction || 'fail',
-    })
-  }
-}
-
-/**
- * Handle await.resolved orchestration
- * Updates flow index and resumes paused steps or triggers blocked dependent steps
- */
-async function handleAwaitResolvedOrchestration(event: AwaitResolvedEvent) {
-  const logger = useNventLogger('await-wiring')
-  const store = useStoreAdapter()
-  const { SubjectPatterns } = useStreamTopics()
-  const { runId, stepName, triggerData: resolvedData } = event
-  const flowName = event.flowName
-
-  logger.info('Flow status set back to running', { flowName, runId, stepName })
-
-  // Update flow index - mark await as resolved and set status back to running
-  // Use atomic dot notation updates
-  const indexKey = SubjectPatterns.flowRunIndex(flowName)
-  if (store.indexUpdateWithRetry) {
-    await store.indexUpdateWithRetry(indexKey, runId, {
-      status: 'running',
-      [`awaitingSteps.${stepName}.resolvedAt`]: Date.now(),
-      [`awaitingSteps.${stepName}.status`]: 'resolved',
-    })
-  }
-
-  // Get await state for position check
-  let awaitState: any = null
-  if (store.indexGet) {
-    const flowEntry = await store.indexGet(indexKey, runId)
-    // Access nested structure (not flattened)
-    const metadata = flowEntry?.metadata as any
-    awaitState = metadata?.awaitingSteps?.[stepName]
-  }
-
-  // Call lifecycle hook
-  const hookRegistry = useHookRegistry()
-  const hooks = hookRegistry.load(flowName, stepName)
-  if (hooks?.onAwaitResolve) {
-    try {
-      await hooks.onAwaitResolve(
-        resolvedData,
-        { runId, stepName },
-        useRunContext({ flowId: runId, flowName, stepName }),
-      )
-    }
-    catch (err) {
-      logger.error('onAwaitResolve hook failed', { error: (err as Error).message })
-      // Continue with await resolution
-    }
-  }
-
-  if (awaitState?.position === 'before') {
-    // AWAIT BEFORE: Re-queue step to execute handler
-    logger.info('Await before resolved, re-queuing step', { runId, stepName })
-    await resumeStepAfterAwait(runId, stepName, resolvedData)
-  }
-  else if (awaitState?.position === 'after' || event.position === 'after') {
-    // AWAIT AFTER: Check and trigger any steps that were blocked
-    logger.info('Await after resolved, checking for blocked steps', { runId, stepName })
-
-    // Always check for pending steps after await resolves
-    // The blocking logic in checkAndTriggerPendingSteps will see that await.resolved exists
-    // and will allow previously blocked steps to trigger
-    await checkAndTriggerPendingSteps(flowName, runId, store)
-  }
-
-  logger.debug('Await pattern resolved', {
-    runId,
-    stepName,
-    position: awaitState?.position,
-  })
-}
-
-/**
- * Resume a step after await pattern is resolved
- */
-async function resumeStepAfterAwait(
-  runId: string,
-  stepName: string,
-  resolvedData: any,
-) {
-  const logger = useNventLogger('await-wiring')
-  const queue = useQueueAdapter()
-  const store = useStoreAdapter()
-  const { SubjectPatterns } = useStreamTopics()
-  const registry = $useQueueRegistry() as any
-
-  // Get flow name from runId
-  const flowName = runId.split('-')[0]
-
-  // Get flow metadata
-  const indexKey = SubjectPatterns.flowRunIndex(flowName)
-  if (!store.indexGet) return
-  const flowEntry = await store.indexGet(indexKey, runId)
-  if (!flowEntry) {
-    logger.error('Flow entry not found', { runId })
-    return
-  }
-
-  // Append await.resolved event to flow stream
-  const streamName = SubjectPatterns.flowRun(runId)
-  await store.append(streamName, {
-    type: 'await.resolved',
-    flowName,
-    runId,
-    stepName,
-    data: {
-      resolvedData,
-    },
-  })
-
-  // Get step metadata
-  const flowRegistry = (registry?.flows || {})[flowName]
-  const stepMeta = flowRegistry?.steps?.[stepName]
-
-  if (stepMeta?.queue) {
-    // Re-queue the step with resolved data
-    await queue.enqueue(stepMeta.queue, {
-      name: stepName,
-      data: {
-        flowName,
-        runId,
-        stepName,
-        awaitResolved: true,
-        awaitData: resolvedData,
-      },
-    })
-
-    logger.info(`Resumed step '${stepName}' after await resolution`, { runId })
   }
 }
