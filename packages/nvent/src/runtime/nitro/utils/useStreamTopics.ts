@@ -107,28 +107,22 @@ const SubjectPatterns = {
   workerHeartbeat: (workerId: string) => `worker:${workerId}`,
 
   // ============================================================
-  // Trigger System (v0.5)
+  // Trigger System (v0.5.1) - Index + Stream Architecture
   // ============================================================
 
   /**
-   * Trigger registry (all registered triggers)
+   * Trigger index (sorted set of all triggers)
+   * Stores trigger metadata, subscriptions, and statistics
    */
-  triggerRegistry: () => `nq:trigger:registry`,
+  triggerIndex: () => `nq:triggers`,
 
   /**
-   * Trigger event stream (when trigger fires)
+   * Trigger event stream (lifecycle and fire events for a specific trigger)
+   * Subject: nq_trigger:{triggerName}
    */
+  trigger: (triggerName: string) => `nq:trigger:${triggerName}`,
+
   triggerFired: (triggerName: string) => `nq:trigger:${triggerName}`,
-
-  /**
-   * Trigger subscriptions collection
-   */
-  triggerSubscriptions: () => `trigger-subscriptions`,
-
-  /**
-   * Triggers collection
-   */
-  triggers: () => `triggers`,
 
   // ============================================================
   // Await Patterns (v0.5) - Run-scoped ephemeral triggers

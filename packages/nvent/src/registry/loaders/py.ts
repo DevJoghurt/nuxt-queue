@@ -66,6 +66,9 @@ export async function loadPyConfig(absPath: string, logger?: NuxtQueueLogger): P
           step: flowCfg.step,
           emits: flowCfg.emits,
           subscribes,
+          triggers: flowCfg.triggers,
+          awaitBefore: flowCfg.awaitBefore,
+          awaitAfter: flowCfg.awaitAfter,
         }
       }
     }

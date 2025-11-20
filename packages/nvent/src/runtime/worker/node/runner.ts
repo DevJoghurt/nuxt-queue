@@ -115,16 +115,17 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
       },
     }
   })()
-  // Flow engine for trigger handling - bind to context for automatic flowId/flowName
+  // Flow engine for trigger handling - bind to context for automatic flowId/flowName/stepName
   const baseFlowEngine = useFlowEngine()
   const flow = {
     ...baseFlowEngine,
     emit: async (trigger: string, payload: any = {}) => {
-      // Auto-inject flowId and flowName from context if not provided
+      // Auto-inject flowId, flowName, and stepName from context if not provided
       const enrichedPayload = {
         ...payload,
         flowId: payload.flowId || partial?.flowId,
         flowName: payload.flowName || partial?.flowName,
+        stepName: payload.stepName || partial?.stepName,
       }
       return baseFlowEngine.emit(trigger, enrichedPayload)
     },
@@ -218,7 +219,15 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
     // v0.5: Load step configuration from registry for await patterns
     const registry = $useQueueRegistry() as any
     const flowRegistry = (registry?.flows || {})[flowName]
-    const stepMeta = flowRegistry?.steps?.[job.name]
+
+    // Check both steps and entry for the step metadata
+    let stepMeta = flowRegistry?.steps?.[job.name]
+
+    // If not found in steps, check if this is the entry step
+    if (!stepMeta && flowRegistry?.entry?.step === job.name) {
+      stepMeta = flowRegistry?.entry
+    }
+
     const awaitBefore = stepMeta?.awaitBefore
     const awaitAfter = stepMeta?.awaitAfter
 
@@ -453,6 +462,7 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
           job.name,
           flowName,
           awaitAfter,
+          'after',
         )
 
         // Call lifecycle hook
@@ -472,22 +482,9 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
           }
         }
 
-        // Publish await.registered event with state data and blocked emits
-        await eventMgr.publishBus({
-          type: 'await.registered' as any,
-          runId: flowId || 'unknown',
-          flowName,
-          stepName: job.name,
-          data: {
-            awaitType: awaitAfter.type,
-            awaitConfig: awaitAfter,
-            position: 'after',
-            webhookUrl: (awaitResult as any).webhookUrl,
-            registeredAt: Date.now(),
-            timeoutAt: awaitAfter.timeout ? Date.now() + awaitAfter.timeout : undefined,
-            blockedEmits: emitEvents.length > 0 ? emitEvents : undefined,
-          },
-        })
+        // Note: await.registered event is published by the await pattern implementation
+        // (e.g., time.ts, webhook.ts, etc.) - no need to publish here
+        // The wiring will handle storing blockedEmits from the emit events in the stream
       }
       catch (err) {
         awaitLogger.error('Failed to register awaitAfter pattern', {

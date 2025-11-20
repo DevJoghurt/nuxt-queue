@@ -1,4 +1,41 @@
-import type { WorkerEntry, TriggerSubscription } from './types'
+import type { WorkerEntry, TriggerSubscription, TriggerEntry } from './types'
+
+/**
+ * Analyze workers to extract trigger definitions
+ * Called during build to extract inline trigger definitions from worker configs
+ */
+export function analyzeTriggerDefinitions(
+  workers: WorkerEntry[],
+): TriggerEntry[] {
+  const triggers: TriggerEntry[] = []
+  const seenTriggers = new Set<string>()
+
+  for (const worker of workers) {
+    const triggerDef = worker.flow?.triggers?.define
+    if (!triggerDef) continue
+
+    // Avoid duplicates if same trigger defined in multiple places
+    if (seenTriggers.has(triggerDef.name)) continue
+    seenTriggers.add(triggerDef.name)
+
+    triggers.push({
+      name: triggerDef.name,
+      type: triggerDef.type,
+      scope: triggerDef.scope || 'flow',
+      displayName: triggerDef.displayName,
+      description: triggerDef.description,
+      source: `function:${worker.name}`,
+      expectedSubscribers: triggerDef.expectedSubscribers,
+      webhook: triggerDef.webhook,
+      schedule: triggerDef.schedule,
+      config: triggerDef.config,
+      registeredAt: new Date().toISOString(),
+      registeredBy: 'code',
+    })
+  }
+
+  return triggers
+}
 
 /**
  * Analyze workers to extract trigger subscriptions

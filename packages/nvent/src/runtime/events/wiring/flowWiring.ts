@@ -42,6 +42,8 @@ export async function checkAndTriggerPendingSteps(
 ): Promise<void> {
   const logger = useNventLogger('flow-wiring')
   try {
+    logger.info('checkAndTriggerPendingSteps called', { flowName, runId })
+
     const analyzedFlows = $useAnalyzedFlows()
     const registry = $useQueueRegistry() as any
     const queue = useQueueAdapter()
@@ -49,27 +51,63 @@ export async function checkAndTriggerPendingSteps(
 
     // Get flow definition
     const flowDef = analyzedFlows.find((f: any) => f.id === flowName) as any
-    if (!flowDef?.steps) return
+    if (!flowDef?.steps) {
+      logger.info('No flow definition or steps found', { flowName })
+      return
+    }
 
     // Get current flow metadata
     const indexKey = SubjectPatterns.flowRunIndex(flowName)
-    if (!store.indexGet) return
+    if (!store.indexGet) {
+      logger.info('No indexGet method on store', { flowName })
+      return
+    }
     const flowEntry = await store.indexGet(indexKey, runId)
-    if (!flowEntry?.metadata) return
+    if (!flowEntry?.metadata) {
+      logger.info('No flow entry or metadata found', { flowName, runId })
+      return
+    }
 
     // Read all events to get completed steps
     const streamName = SubjectPatterns.flowRun(runId)
     const allEvents = await store.read(streamName)
 
     // Check if flow is canceled - if so, don't trigger any new steps
-    const isCanceled = allEvents.some(event => event.type === 'flow.cancel')
+    const isCanceled = allEvents.some((event: any) => event.type === 'flow.cancel')
     if (isCanceled) {
       logger.debug('Flow is canceled, skipping pending step triggers', { flowName, runId })
       return
     }
 
     // Build sets of completed events and steps
-    const emittedEvents = new Set<string>(flowEntry.metadata.emittedEvents || [])
+    // emittedEvents is stored as nested object: { eventName: { subEvent: timestamp } }
+    // We need to flatten to dot notation: 'eventName.subEvent'
+    const emittedEventsObj = flowEntry.metadata.emittedEvents || {}
+
+    const flattenEmittedEvents = (obj: any, prefix = ''): string[] => {
+      const result: string[] = []
+      for (const [key, value] of Object.entries(obj)) {
+        if (key === 'undefined' || key === 'null') continue
+
+        const fullKey = prefix ? `${prefix}.${key}` : key
+
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          // Recursively flatten nested objects
+          result.push(...flattenEmittedEvents(value, fullKey))
+        }
+        else {
+          // Leaf node - add the full dot notation path
+          result.push(fullKey)
+        }
+      }
+      return result
+    }
+
+    const emittedEvents = new Set<string>(
+      typeof emittedEventsObj === 'object' && !Array.isArray(emittedEventsObj)
+        ? flattenEmittedEvents(emittedEventsObj)
+        : Array.isArray(emittedEventsObj) ? emittedEventsObj : [],
+    )
 
     const completedSteps = new Set<string>()
     for (const event of allEvents) {
@@ -78,9 +116,27 @@ export async function checkAndTriggerPendingSteps(
       }
     }
 
+    // Get awaiting steps from flow metadata
+    const awaitingSteps = flowEntry?.metadata?.awaitingSteps || {}
+
     // Check all steps in the flow to see if any can now be triggered
+    logger.info('Checking pending steps', {
+      flowName,
+      runId,
+      totalSteps: Object.keys(flowDef.steps).length,
+      completedSteps: Array.from(completedSteps),
+      awaitingStepsInIndex: Object.keys(awaitingSteps),
+    })
+
     for (const [stepName, stepDef] of Object.entries(flowDef.steps)) {
       const step = stepDef as any
+
+      logger.info('Evaluating step', {
+        stepName,
+        hasSubscribes: !!step.subscribes,
+        isCompleted: completedSteps.has(stepName),
+        subscribes: step.subscribes,
+      })
 
       // Skip if step doesn't have dependencies or already completed
       if (!step.subscribes || completedSteps.has(stepName)) continue
@@ -94,6 +150,128 @@ export async function checkAndTriggerPendingSteps(
           stepName,
           awaitType: awaitState.awaitType,
           position: awaitState.position,
+        })
+        continue
+      }
+
+      // v0.5: Check if any dependency steps are currently awaiting (awaitAfter pattern)
+      // If a step has awaitAfter, its emits should be blocked until await is resolved
+      logger.info('Checking if dependencies are awaiting', {
+        stepName,
+        subscribes: step.subscribes,
+        awaitingStepsKeys: Object.keys(awaitingSteps),
+      })
+
+      const isDependencyAwaiting = step.subscribes.some((sub: string) => {
+        logger.info('Checking subscription', { stepName, sub })
+
+        // Find which step emitted this event by looking through all events
+        const emitEvent = allEvents.find((evt: any) =>
+          evt.type === 'emit' && evt.data?.name === sub,
+        )
+
+        if (!emitEvent) {
+          logger.info('Emit not found yet', { sub, stepName })
+          return false // Emit hasn't happened yet
+        }
+
+        const emitStepName = emitEvent.stepName
+        logger.info('Found emit event', {
+          sub,
+          stepName,
+          emitStepName,
+          hasStepName: !!emitStepName,
+        })
+
+        if (!emitStepName) {
+          logger.info('Emit has no stepName', { sub, stepName })
+          return false
+        }
+
+        logger.info('Checking await blocking', {
+          currentStep: stepName,
+          subscription: sub,
+          emitStepName,
+          hasAwaitState: !!awaitingSteps[emitStepName],
+        })
+
+        // Check if the emitting step is awaiting in flow index metadata
+        const awaitState = awaitingSteps[emitStepName]
+
+        // If the step is awaiting after completion, its emits are blocked
+        // BUT: Only block if status is 'awaiting', not if it's 'resolved'
+        if (awaitState?.position === 'after' && awaitState?.status === 'awaiting') {
+          logger.info('Blocking step - emitting step has awaitAfter in index', {
+            currentStep: stepName,
+            emitStepName,
+            awaitState,
+          })
+          return true
+        }
+
+        // If await is resolved, do NOT block
+        if (awaitState?.status === 'resolved') {
+          logger.info('NOT blocking - await is resolved', {
+            currentStep: stepName,
+            emitStepName,
+            awaitState,
+          })
+          return false
+        }
+
+        // FALLBACK: Check if the emitting step has awaitAfter config
+        // This covers the race condition where await.registered hasn't been processed yet
+        let emittingStepMeta = flowDef.steps[emitStepName]
+
+        // Check entry step if not in steps object
+        if (!emittingStepMeta && emitStepName === (flowDef as any).entry?.step) {
+          emittingStepMeta = (flowDef as any).entry
+        }
+
+        logger.info('Fallback check', {
+          currentStep: stepName,
+          emitStepName,
+          hasAwaitAfter: !!emittingStepMeta?.awaitAfter,
+          emittingStepMeta: emittingStepMeta ? 'found' : 'not found',
+        })
+
+        // If the step has awaitAfter, check if await cycle is complete
+        if (emittingStepMeta?.awaitAfter) {
+          // Check if this step has completed
+          const stepCompleted = allEvents.some((evt: any) =>
+            evt.type === 'step.completed' && evt.stepName === emitStepName,
+          )
+
+          if (stepCompleted) {
+            // Check if await has been resolved
+            const awaitResolved = allEvents.some((evt: any) =>
+              evt.type === 'await.resolved' && evt.stepName === emitStepName,
+            )
+
+            logger.info('Fallback blocking check', {
+              currentStep: stepName,
+              emitStepName,
+              stepCompleted,
+              awaitResolved,
+              willBlock: !awaitResolved,
+            })
+
+            // Block if await hasn't resolved yet
+            if (!awaitResolved) {
+              return true
+            }
+          }
+        }
+
+        return false
+      })
+
+      if (isDependencyAwaiting) {
+        logger.info('BLOCKING step - dependency is awaiting', {
+          flowName,
+          runId,
+          stepName,
+          subscribes: step.subscribes,
         })
         continue
       }
@@ -113,7 +291,7 @@ export async function checkAndTriggerPendingSteps(
 
           for (const sub of subscribes) {
             // Find the emit event for this subscription
-            const emitEvent = allEvents.find(evt =>
+            const emitEvent = allEvents.find((evt: any) =>
               evt.type === 'emit' && (evt.data as any)?.name === sub,
             ) as EventRecord | undefined
 
@@ -172,15 +350,16 @@ export function analyzeFlowCompletion(
   flowSteps: Record<string, any>,
   entryStep: string | undefined,
   events: any[],
+  entryStepDef?: any, // Entry step definition (contains emits, etc.)
 ): {
-  status: 'running' | 'completed' | 'failed' | 'canceled'
+  status: 'running' | 'completed' | 'failed' | 'canceled' | 'awaiting'
   totalSteps: number
   completedSteps: number
   startedAt: number
   completedAt: number
 } {
   // Check if flow is canceled
-  const isCanceled = events.some(event => event.type === 'flow.cancel')
+  const isCanceled = events.some((event: any) => event.type === 'flow.cancel')
 
   // Include entry step in the list of all steps
   const allSteps = entryStep
@@ -252,7 +431,13 @@ export function analyzeFlowCompletion(
 
   if (hasFinalFailures) {
     for (const failedStepName of Array.from(finalFailedSteps)) {
-      const failedStepDef = flowSteps[failedStepName] as any
+      // Get failed step definition - check both flowSteps and entry step
+      let failedStepDef = flowSteps[failedStepName] as any
+
+      // If the failed step is the entry step, use the entry step definition
+      if (!failedStepDef && failedStepName === entryStep && entryStepDef) {
+        failedStepDef = entryStepDef
+      }
 
       // Check if this failed step has emits
       if (failedStepDef?.emits && failedStepDef.emits.length > 0) {
@@ -298,7 +483,8 @@ export function analyzeFlowCompletion(
     }
   }
 
-  // Flow fails if there's a blocking failure
+  // Flow fails ONLY if there's a blocking failure
+  // A blocking failure prevents the flow from completing
   if (hasBlockingFailure) {
     return {
       status: 'failed',
@@ -309,15 +495,18 @@ export function analyzeFlowCompletion(
     }
   }
 
-  // Flow completes when all steps are done (completed or failed)
-  // Failed steps without blocking emits are OK
-  const allCompleted = allSteps.every(step =>
+  // Flow completes when all steps have reached a terminal state
+  // A step is in terminal state if it's: completed OR failed
+  // Non-blocking failures (parallel/optional steps) are OK
+  const allStepsTerminal = allSteps.every(step =>
     completedSteps.has(step) || finalFailedSteps.has(step),
   )
 
-  let status: 'running' | 'completed' | 'failed' | 'canceled' = 'running'
+  let status: 'running' | 'completed' | 'failed' | 'canceled' | 'awaiting' = 'running'
 
-  if (allCompleted) {
+  // Flow is completed if all steps have reached a terminal state
+  // Since we already checked for blocking failures above, any remaining failures are non-blocking
+  if (allStepsTerminal) {
     status = 'completed'
     completedAt = Date.now()
   }
@@ -392,6 +581,11 @@ export function createFlowWiring() {
       try {
         // Only process ingress events (not already persisted)
         if (e.id && e.ts) {
+          return
+        }
+
+        // Skip await events - they're persisted by triggerWiring
+        if (e.type === 'await.registered' || e.type === 'await.resolved') {
           return
         }
 
@@ -496,7 +690,7 @@ export function createFlowWiring() {
             lastActivityAt: timestamp, // Initialize for stall detection
             stepCount: 0,
             completedSteps: 0,
-            emittedEvents: [],
+            emittedEvents: {}, // Object for atomic updates
           })
         }
 
@@ -553,6 +747,7 @@ export function createFlowWiring() {
         }
 
         // For emit events, track emitted events in metadata
+        // Use Set-like structure with dot notation for atomic updates
         if (e.type === 'emit') {
           // Emit events use 'name' field, not 'topic' - extract from data
           const eventName = (e.data as any)?.name || e.data?.topic
@@ -562,28 +757,25 @@ export function createFlowWiring() {
           }
           else {
             try {
-              if (!store.indexGet || !store.indexUpdateWithRetry) {
-                logger.warn('StoreAdapter does not support indexGet or indexUpdateWithRetry')
+              if (!store.indexUpdateWithRetry) {
+                logger.warn('StoreAdapter does not support indexUpdateWithRetry')
                 return
               }
-              const currentEntry = await store.indexGet(indexKey, runId)
-              // Filter out any null/undefined values from corrupted data
-              const emittedEvents = ((currentEntry?.metadata?.emittedEvents || []) as any[])
-                .filter((item: any) => item != null && typeof item === 'string') as string[]
 
-              // Add new event if not already tracked
-              if (!emittedEvents.includes(eventName)) {
-                await store.indexUpdateWithRetry(indexKey, runId, {
-                  emittedEvents: [...emittedEvents, eventName],
-                })
+              // Use dot notation to store emitted events as a set-like structure
+              // emittedEvents.eventName: timestamp
+              // This allows atomic updates without read-modify-write
+              const timestamp = Date.now()
+              await store.indexUpdateWithRetry(indexKey, runId, {
+                [`emittedEvents.${eventName}`]: timestamp,
+              })
 
-                logger.debug('Tracked emit event', {
-                  flowName,
-                  runId,
-                  name: eventName,
-                  allEmitted: [...emittedEvents, eventName],
-                })
-              }
+              logger.debug('Tracked emit event', {
+                flowName,
+                runId,
+                name: eventName,
+                timestamp,
+              })
             }
             catch (err) {
               logger.warn('Failed to track emitted event', {
@@ -616,7 +808,8 @@ export function createFlowWiring() {
 
             if (flowDef?.steps) {
               const entryStepName = (flowDef as any).entry?.step
-              const analysis = analyzeFlowCompletion(flowDef.steps, entryStepName, allEvents)
+              const entryStepDef = (flowDef as any).entry // Pass full entry definition
+              const analysis = analyzeFlowCompletion(flowDef.steps, entryStepName, allEvents, entryStepDef)
 
               // Build update object, only include defined values
               const updateMetadata: Record<string, any> = {
@@ -629,6 +822,32 @@ export function createFlowWiring() {
                 updateMetadata.completedAt = analysis.completedAt
               }
 
+              // IMPORTANT: Check if flow has active awaits before updating status
+              // If there are awaits, preserve 'awaiting' status
+              if (store.indexGet) {
+                const currentEntry = await store.indexGet(indexKey, runId)
+                const currentStatus = currentEntry?.metadata?.status
+
+                // If currently awaiting, check if any awaits are still active
+                if (currentStatus === 'awaiting') {
+                  const awaitingStepsObj = (currentEntry?.metadata as any)?.awaitingSteps || {}
+
+                  let hasActiveAwaits = false
+                  for (const [stepName, awaitState] of Object.entries(awaitingStepsObj)) {
+                    if ((awaitState as any)?.status === 'awaiting') {
+                      hasActiveAwaits = true
+                      logger.debug('Found active await', { stepName, awaitState })
+                      break
+                    }
+                  }
+
+                  // Preserve 'awaiting' status if there are active awaits
+                  if (hasActiveAwaits) {
+                    updateMetadata.status = 'awaiting'
+                  }
+                }
+              }
+
               // Update metadata with current state
               if (store.indexUpdateWithRetry) {
                 await store.indexUpdateWithRetry(indexKey, runId, updateMetadata)
@@ -639,15 +858,23 @@ export function createFlowWiring() {
               if (analysis.status === 'completed' || analysis.status === 'failed') {
                 const eventType = analysis.status === 'completed' ? 'flow.completed' : 'flow.failed'
 
-                // Check if terminal event was already published to avoid duplicates
-                // This can happen when multiple steps complete rapidly at the end
-                const terminalEventExists = allEvents.some(evt =>
+                // Check flow metadata to see if we already published a terminal event
+                // Re-read the index entry after update to get the current status
+                let currentStatus = null
+                if (store.indexGet) {
+                  const currentEntry = await store.indexGet(indexKey, runId)
+                  currentStatus = currentEntry?.metadata?.status
+                }
+
+                // Also check if terminal event already exists in stream
+                const terminalEventExists = allEvents.some((evt: any) =>
                   evt.type === 'flow.completed' || evt.type === 'flow.failed')
 
                 if (terminalEventExists) {
-                  logger.debug('Terminal event already exists, skipping publish', {
+                  logger.debug('Flow terminal event already exists, skipping publish', {
                     flowName,
                     runId,
+                    currentStatus,
                     eventType,
                   })
                 }

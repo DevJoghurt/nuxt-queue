@@ -186,13 +186,14 @@ export class RedisStoreAdapter implements StoreAdapter {
    * - Falls back to string
    */
   private parseHashFields(hash: Record<string, string>): Record<string, any> {
-    const parsed: Record<string, any> = {}
+    const flat: Record<string, any> = {}
 
+    // First parse all values
     for (const [k, v] of Object.entries(hash)) {
-      // Try JSON parse first (for arrays and objects)
-      if (v.startsWith('[') || v.startsWith('{')) {
+      // Try JSON parse first (for arrays)
+      if (v.startsWith('[')) {
         try {
-          parsed[k] = JSON.parse(v)
+          flat[k] = JSON.parse(v)
           continue
         }
         catch {
@@ -203,34 +204,120 @@ export class RedisStoreAdapter implements StoreAdapter {
       // Try number parse (integers and floats)
       const num = Number(v)
       if (!Number.isNaN(num) && v.trim() !== '') {
-        parsed[k] = num
+        flat[k] = num
         continue
       }
 
       // Keep as string
-      parsed[k] = v
+      flat[k] = v
     }
 
-    return parsed
+    // Reconstruct nested structure from dot notation
+    const result: Record<string, any> = {}
+    for (const [key, value] of Object.entries(flat)) {
+      if (key === 'version') {
+        result[key] = value
+        continue
+      }
+
+      if (key.includes('.')) {
+        const keys = key.split('.')
+        let current = result
+
+        for (let i = 0; i < keys.length - 1; i++) {
+          const k = keys[i]
+          if (!current[k]) {
+            current[k] = {}
+          }
+          current = current[k]
+        }
+
+        current[keys[keys.length - 1]] = value
+      }
+      else {
+        result[key] = value
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * Expand dot notation to nested objects before serialization
+   * e.g., { 'stats.totalFires': 5 } -> { stats: { totalFires: 5 } }
+   */
+  private expandDotNotation(obj: Record<string, any>): Record<string, any> {
+    const result: Record<string, any> = {}
+
+    for (const [key, value] of Object.entries(obj)) {
+      if (key === 'version') {
+        result[key] = value
+        continue
+      }
+
+      if (key.includes('.')) {
+        const keys = key.split('.')
+        let current = result
+
+        for (let i = 0; i < keys.length - 1; i++) {
+          const k = keys[i]
+          if (!current[k]) {
+            current[k] = {}
+          }
+          current = current[k]
+        }
+
+        current[keys[keys.length - 1]] = value
+      }
+      else {
+        result[key] = value
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * Flatten nested objects to dot notation for Redis hash storage
+   * e.g., { stats: { totalFires: 5 } } -> { 'stats.totalFires': 5 }
+   */
+  private flattenToHashFields(obj: Record<string, any>, prefix = ''): Record<string, any> {
+    const result: Record<string, any> = {}
+
+    for (const [key, value] of Object.entries(obj)) {
+      const newKey = prefix ? `${prefix}.${key}` : key
+
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        // Recursively flatten nested objects
+        Object.assign(result, this.flattenToHashFields(value, newKey))
+      }
+      else {
+        result[newKey] = value
+      }
+    }
+
+    return result
   }
 
   /**
    * Serialize values for Redis hash storage
-   * - Arrays/objects → JSON
+   * - Nested objects → Flattened with dot notation
+   * - Arrays → JSON
    * - Others → String
    */
   private serializeHashFields(obj: Record<string, any>): Record<string, string> {
+    // First expand any dot notation, then flatten to ensure consistency
+    const expanded = this.expandDotNotation(obj)
+    const flattened = this.flattenToHashFields(expanded)
+
     const serialized: Record<string, string> = {}
 
-    for (const [k, v] of Object.entries(obj)) {
+    for (const [k, v] of Object.entries(flattened)) {
       if (v === undefined) continue
 
       if (Array.isArray(v)) {
         // Filter out null/undefined from arrays and serialize
         serialized[k] = JSON.stringify(v.filter(item => item != null))
-      }
-      else if (typeof v === 'object' && v !== null) {
-        serialized[k] = JSON.stringify(v)
       }
       else {
         serialized[k] = String(v)

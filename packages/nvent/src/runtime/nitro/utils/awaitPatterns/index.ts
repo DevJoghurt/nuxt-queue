@@ -1,4 +1,4 @@
-import type { AwaitConfig } from '../../../registry/types'
+import type { AwaitConfig } from '../../../../registry/types'
 import { useNventLogger } from '#imports'
 
 // Import all await pattern implementations
@@ -16,6 +16,7 @@ export async function registerAwaitPattern(
   stepName: string,
   flowName: string,
   config: AwaitConfig,
+  position: 'before' | 'after' = 'after',
 ) {
   const logger = useNventLogger('await-patterns')
 
@@ -36,7 +37,7 @@ export async function registerAwaitPattern(
       return await registerScheduleAwait(runId, stepName, flowName, config)
 
     case 'time':
-      return await registerTimeAwait(runId, stepName, flowName, config)
+      return await registerTimeAwait(runId, stepName, flowName, config, position)
 
     default:
       throw new Error(`Unknown await pattern type: ${(config as any).type}`)
@@ -50,6 +51,8 @@ export async function resolveAwaitPattern(
   type: 'webhook' | 'event' | 'schedule' | 'time',
   runId: string,
   stepName: string,
+  flowName: string,
+  position: 'before' | 'after',
   data: any,
 ) {
   const logger = useNventLogger('await-patterns')
@@ -71,7 +74,7 @@ export async function resolveAwaitPattern(
       return await resolveScheduleAwait(runId, stepName, data)
 
     case 'time':
-      return await resolveTimeAwait(runId, stepName, data)
+      return await resolveTimeAwait(runId, stepName, flowName, position, data)
 
     default:
       throw new Error(`Unknown await pattern type: ${type}`)

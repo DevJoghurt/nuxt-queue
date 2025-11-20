@@ -42,19 +42,21 @@ export const useFlowEngine = () => {
     // This allows the flows plugin to manage enqueueing and idempotency
     const flowId = payload?.flowId
     const flowName = payload?.flowName || 'unknown'
+    const stepName = payload?.stepName
 
     if (!flowId) {
       logger.warn('emit called without flowId, trigger may not work', { trigger })
     }
 
-    // Extract flowId/flowName from payload and store the rest as the actual emit data
-    const { flowId: _, flowName: __, ...actualPayload } = payload
+    // Extract flowId/flowName/stepName from payload and store the rest as the actual emit data
+    const { flowId: _, flowName: __, stepName: ___, ...actualPayload } = payload
 
     try {
       await eventsManager.publishBus({
         type: 'emit',
         runId: flowId || 'unknown',
         flowName,
+        stepName,
         data: {
           name: trigger,
           payload: actualPayload, // Store actual payload separately

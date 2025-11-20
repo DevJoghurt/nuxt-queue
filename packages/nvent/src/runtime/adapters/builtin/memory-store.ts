@@ -10,6 +10,7 @@
  * All data is lost on restart (ephemeral)
  */
 
+import { defu } from 'defu'
 import type {
   StoreAdapter,
   EventRecord,
@@ -287,10 +288,13 @@ export class MemoryStoreAdapter implements StoreAdapter {
     // Check if entry already exists
     const existingIndex = index.findIndex(entry => entry.id === id)
 
+    // Expand dot notation in metadata to ensure consistent nested structure
+    const expandedMetadata = metadata ? this.expandDotNotation(metadata) : undefined
+
     const entry = {
       id,
       score,
-      metadata: metadata ? { version: 0, ...metadata } : undefined,
+      metadata: expandedMetadata ? { version: 0, ...expandedMetadata } : undefined,
     }
 
     if (existingIndex >= 0) {
@@ -332,16 +336,86 @@ export class MemoryStoreAdapter implements StoreAdapter {
 
     // Check version for optimistic locking
     const currentVersion = entry.metadata.version || 0
-    const expectedVersion = currentVersion
 
-    // In-memory: no race conditions, but simulate optimistic locking behavior
-    entry.metadata = {
-      ...entry.metadata,
-      ...metadata,
-      version: expectedVersion + 1,
+    // Convert dot notation to nested objects
+    const updates = this.expandDotNotation(metadata)
+
+    // Extract delete markers before merge
+    const deleteMarkers = (updates as any).__deleteMarkers
+    delete (updates as any).__deleteMarkers
+
+    // Deep merge updates with existing metadata using defu
+    // defu merges right to left, so we want: defu(updates, existing)
+    entry.metadata = defu(updates, entry.metadata)
+
+    // Handle deletions after merge
+    if (deleteMarkers) {
+      for (const { path } of deleteMarkers) {
+        let current = entry.metadata
+        for (let i = 0; i < path.length - 1; i++) {
+          if (!current[path[i]]) break
+          current = current[path[i]]
+        }
+        if (current) {
+          const lastKey = path[path.length - 1]
+          // Use Reflect.deleteProperty to avoid eslint error
+          Reflect.deleteProperty(current, lastKey)
+        }
+      }
     }
 
+    entry.metadata.version = currentVersion + 1
+
     return true
+  }
+
+  /**
+   * Convert dot notation keys to nested objects
+   * e.g., { 'stats.totalFires': 5 } -> { stats: { totalFires: 5 } }
+   * null values are preserved for deletion
+   */
+  private expandDotNotation(obj: Record<string, any>): Record<string, any> {
+    const result: Record<string, any> = {}
+    const deleteMarkers: Array<{ path: string[], delete: boolean }> = []
+
+    for (const [key, value] of Object.entries(obj)) {
+      if (key === 'version') {
+        // Skip version, it's handled separately
+        continue
+      }
+
+      if (key.includes('.')) {
+        // Split by dot and create nested structure
+        const keys = key.split('.')
+
+        // Track null values for deletion after merge
+        if (value === null || value === undefined) {
+          deleteMarkers.push({ path: keys, delete: true })
+          continue
+        }
+
+        let current = result
+        for (let i = 0; i < keys.length - 1; i++) {
+          const k = keys[i]
+          if (!current[k]) {
+            current[k] = {}
+          }
+          current = current[k]
+        }
+
+        current[keys[keys.length - 1]] = value
+      }
+      else {
+        result[key] = value
+      }
+    }
+
+    // Store delete markers for post-merge processing
+    if (deleteMarkers.length > 0) {
+      (result as any).__deleteMarkers = deleteMarkers
+    }
+
+    return result
   }
 
   async indexUpdateWithRetry(
@@ -372,10 +446,34 @@ export class MemoryStoreAdapter implements StoreAdapter {
       entry.metadata = { version: 0 }
     }
 
-    const currentValue = entry.metadata[field] || 0
-    const newValue = (typeof currentValue === 'number' ? currentValue : 0) + increment
+    // Handle dot notation (e.g., 'stats.totalFires')
+    let currentValue: number
+    let newValue: number
 
-    entry.metadata[field] = newValue
+    if (field.includes('.')) {
+      const keys = field.split('.')
+      let current = entry.metadata
+
+      // Navigate to parent object
+      for (let i = 0; i < keys.length - 1; i++) {
+        const k = keys[i]
+        if (!current[k] || typeof current[k] !== 'object') {
+          current[k] = {}
+        }
+        current = current[k]
+      }
+
+      const lastKey = keys[keys.length - 1]
+      currentValue = current[lastKey] || 0
+      newValue = (typeof currentValue === 'number' ? currentValue : 0) + increment
+      current[lastKey] = newValue
+    }
+    else {
+      currentValue = entry.metadata[field] || 0
+      newValue = (typeof currentValue === 'number' ? currentValue : 0) + increment
+      entry.metadata[field] = newValue
+    }
+
     entry.metadata.version = (entry.metadata.version || 0) + 1
 
     return newValue

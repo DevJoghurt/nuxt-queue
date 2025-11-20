@@ -92,44 +92,124 @@ export function useTrigger() {
   return {
     /**
      * Register a trigger (programmatic)
+     * Uses index + stream architecture (v0.5.1)
      */
     async registerTrigger(opts: RegisterTriggerOptions) {
       const { SubjectPatterns } = useStreamTopics()
+      const triggerName = opts.name
+      const indexKey = SubjectPatterns.triggerIndex()
+      const streamName = SubjectPatterns.trigger(triggerName)
 
       // Check if trigger already exists
       const existing = runtime.triggers.get(opts.name)
-      if (existing) {
+      const isUpdate = !!existing
+
+      if (isUpdate) {
         logger.warn(
           `Trigger '${opts.name}' already registered (${existing.registeredBy}). `
           + `Updating with new configuration.`,
         )
       }
 
+      const now = new Date().toISOString()
+      const nowTimestamp = Date.now()
+
       const entry: TriggerEntry = {
         name: opts.name,
         type: opts.type,
         scope: opts.scope,
+        status: 'active',
         displayName: opts.displayName,
         description: opts.description,
-        source: opts.source,
+        source: opts.source || 'programmatic',
         expectedSubscribers: opts.expectedSubscribers,
         webhook: opts.webhook,
         schedule: opts.schedule,
-        registeredAt: existing?.registeredAt || new Date().toISOString(),
+        registeredAt: existing?.registeredAt || now,
         registeredBy: existing?.registeredBy || 'runtime',
+        lastActivityAt: now,
+        subscriptions: existing?.subscriptions || {},
+        stats: existing?.stats || {
+          totalFires: 0,
+          activeSubscribers: 0,
+        },
+        config: opts.config,
+        version: (existing?.version || 0) + 1,
       }
 
       runtime.triggers.set(opts.name, entry)
 
-      // Persist to store using centralized collection name
-      await store.save(SubjectPatterns.triggers(), opts.name, {
-        ...entry,
-        schema: opts.schema?.toString(), // Serialize schema
-        transform: opts.transform?.toString(), // Serialize transform
-        config: opts.config,
-      })
+      if (isUpdate) {
+        // Update existing trigger in index
+        if (store.indexUpdateWithRetry) {
+          await store.indexUpdateWithRetry(indexKey, triggerName, {
+            type: opts.type,
+            scope: opts.scope,
+            displayName: opts.displayName,
+            description: opts.description,
+            source: opts.source || 'programmatic',
+            webhook: opts.webhook,
+            schedule: opts.schedule,
+            lastActivityAt: now,
+            config: opts.config,
+            version: entry.version,
+          })
+        }
 
-      logger.info(`Registered trigger: ${opts.name} (${opts.type}, ${opts.scope})`)
+        // Append update event to stream
+        await store.append(streamName, {
+          type: 'trigger.updated',
+          triggerName,
+          data: {
+            changes: {
+              type: opts.type,
+              scope: opts.scope,
+              displayName: opts.displayName,
+              description: opts.description,
+              config: opts.config,
+            },
+          },
+        })
+      }
+      else {
+        // Add new trigger to index
+        if (store.indexAdd) {
+          await store.indexAdd(indexKey, triggerName, nowTimestamp, {
+            'name': opts.name,
+            'type': opts.type,
+            'scope': opts.scope,
+            'status': 'active',
+            'displayName': opts.displayName,
+            'description': opts.description,
+            'source': opts.source || 'programmatic',
+            'registeredAt': now,
+            'registeredBy': 'runtime',
+            'lastActivityAt': now,
+            'stats.totalFires': 0,
+            'stats.activeSubscribers': 0,
+            'webhook': opts.webhook,
+            'schedule': opts.schedule,
+            'config': opts.config,
+            'version': 1,
+          })
+        }
+
+        // Append registration event to stream
+        await store.append(streamName, {
+          type: 'trigger.registered',
+          triggerName,
+          data: {
+            type: opts.type,
+            scope: opts.scope,
+            displayName: opts.displayName,
+            description: opts.description,
+            source: opts.source || 'programmatic',
+            config: opts.config,
+          },
+        })
+      }
+
+      logger.info(`${isUpdate ? 'Updated' : 'Registered'} trigger: ${opts.name} (${opts.type}, ${opts.scope})`)
 
       // Validate expected subscribers
       if (opts.expectedSubscribers) {
@@ -150,22 +230,30 @@ export function useTrigger() {
 
     /**
      * Subscribe flow to trigger (programmatic)
+     * Uses index + stream architecture (v0.5.1)
      */
     async subscribeTrigger(opts: SubscribeTriggerOptions) {
       const { SubjectPatterns } = useStreamTopics()
-      const { trigger, flow, mode = 'auto', filter, transform } = opts
+      const { trigger, flow, mode = 'auto', filter: _filter, transform: _transform } = opts
+      const indexKey = SubjectPatterns.triggerIndex()
+      const streamName = SubjectPatterns.trigger(trigger)
+      const now = new Date().toISOString()
 
       // Check if subscription already exists
       const existingSubs = runtime.triggerToFlows.get(trigger)
-      if (existingSubs) {
-        const duplicate = Array.from(existingSubs).find(sub => sub.flowName === flow)
-        if (duplicate) {
-          logger.warn(
-            `Flow '${flow}' is already subscribed to trigger '${trigger}'. `
-            + `Updating subscription mode to '${mode}'.`,
-          )
-          // Remove old subscription
-          existingSubs.delete(duplicate)
+      const isUpdate = existingSubs && Array.from(existingSubs).some(sub => sub.flowName === flow)
+
+      if (isUpdate) {
+        logger.warn(
+          `Flow '${flow}' is already subscribed to trigger '${trigger}'. `
+          + `Updating subscription mode to '${mode}'.`,
+        )
+        // Remove old subscription from runtime
+        for (const sub of existingSubs!) {
+          if (sub.flowName === flow) {
+            existingSubs!.delete(sub)
+            break
+          }
         }
       }
 
@@ -174,7 +262,7 @@ export function useTrigger() {
         flowName: flow,
         mode,
         source: 'programmatic',
-        registeredAt: new Date().toISOString(),
+        registeredAt: now,
       }
 
       // Add to trigger -> flows index
@@ -189,31 +277,51 @@ export function useTrigger() {
       }
       runtime.flowToTriggers.get(flow)!.add(trigger)
 
-      // Persist subscription with filter/transform using centralized collection name
-      await store.save(SubjectPatterns.triggerSubscriptions(), `${trigger}:${flow}`, {
-        trigger,
-        flow,
-        mode,
-        filter: filter?.toString(),
-        transform: transform?.toString(),
-        source: 'programmatic',
-        registeredAt: new Date().toISOString(),
+      // Update trigger index with embedded subscription
+      if (store.indexUpdateWithRetry) {
+        await store.indexUpdateWithRetry(indexKey, trigger, {
+          [`subscriptions.${flow}.mode`]: mode,
+          [`subscriptions.${flow}.subscribedAt`]: now,
+          lastActivityAt: now,
+        })
+
+        // Increment subscriber count if this is a new subscription
+        if (!isUpdate && store.indexIncrement) {
+          await store.indexIncrement(indexKey, trigger, 'stats.activeSubscribers', 1)
+        }
+      }
+
+      // Append subscription event to trigger stream
+      await store.append(streamName, {
+        type: 'subscription.added',
+        triggerName: trigger,
+        data: {
+          flowName: flow,
+          mode,
+          isUpdate,
+        },
       })
 
-      logger.info(`Subscribed flow '${flow}' to trigger '${trigger}' (${mode})`)
+      logger.info(`${isUpdate ? 'Updated' : 'Subscribed'} flow '${flow}' to trigger '${trigger}' (${mode})`)
     },
 
     /**
      * Unsubscribe flow from trigger
+     * Uses index + stream architecture (v0.5.1)
      */
     async unsubscribeTrigger(trigger: string, flow: string) {
       const { SubjectPatterns } = useStreamTopics()
+      const indexKey = SubjectPatterns.triggerIndex()
+      const streamName = SubjectPatterns.trigger(trigger)
+      const now = new Date().toISOString()
 
+      // Remove from runtime indices
       const subs = runtime.triggerToFlows.get(trigger)
       if (subs) {
         for (const sub of subs) {
           if (sub.flowName === flow) {
             subs.delete(sub)
+            break
           }
         }
       }
@@ -223,18 +331,43 @@ export function useTrigger() {
         triggers.delete(trigger)
       }
 
-      // Remove from store using centralized collection name
-      await store.delete(SubjectPatterns.triggerSubscriptions(), `${trigger}:${flow}`)
+      // Update trigger index - remove subscription (atomic operations)
+      if (store.indexUpdateWithRetry) {
+        await store.indexUpdateWithRetry(indexKey, trigger, {
+          [`subscriptions.${flow}`]: null, // null removes the field
+          lastActivityAt: now,
+        })
+
+        // Decrement subscriber count atomically
+        if (store.indexIncrement) {
+          await store.indexIncrement(indexKey, trigger, 'stats.activeSubscribers', -1)
+        }
+      }
+
+      // Append unsubscribe event to trigger stream
+      await store.append(streamName, {
+        type: 'subscription.removed',
+        triggerName: trigger,
+        data: {
+          flowName: flow,
+        },
+      })
 
       logger.info(`Unsubscribed flow '${flow}' from trigger '${trigger}'`)
     },
 
     /**
      * Emit trigger (fire event)
-     * Uses event bus - trigger wiring will handle persistence and flow starts
+     * Uses index + stream architecture (v0.5.1)
+     * Updates statistics and publishes to event bus
      */
     async emitTrigger(name: string, data: any) {
+      const { SubjectPatterns } = useStreamTopics()
       const eventBus = getEventBus()
+      const indexKey = SubjectPatterns.triggerIndex()
+      const streamName = SubjectPatterns.trigger(name)
+      const now = new Date().toISOString()
+      const nowTimestamp = Date.now()
 
       // Warn if trigger is not registered (but still allow emission for flexibility)
       if (!runtime.triggers.has(name)) {
@@ -252,7 +385,30 @@ export function useTrigger() {
         )
       }
 
-      // Publish to event bus - trigger wiring will handle the rest
+      // Update trigger statistics in index (atomic operations)
+      if (store.indexUpdateWithRetry) {
+        await store.indexUpdateWithRetry(indexKey, name, {
+          ['stats.lastFiredAt']: now,
+          ['lastActivityAt']: now,
+        })
+      }
+
+      // Increment fire count atomically
+      if (store.indexIncrement) {
+        await store.indexIncrement(indexKey, name, 'stats.totalFires', 1)
+      }
+
+      // Append fire event to trigger stream (summary only, no full payload)
+      await store.append(streamName, {
+        type: 'trigger.fired',
+        triggerName: name,
+        data: {
+          timestamp: nowTimestamp,
+          subscribersCount: subscribedFlows?.size || 0,
+        },
+      })
+
+      // Publish to event bus - trigger wiring will handle flow starts with full data
       await eventBus.publish({
         type: 'trigger.fired',
         triggerName: name,
@@ -321,41 +477,115 @@ export function useTrigger() {
 
     /**
      * Initialize runtime from store (called on startup)
+     * Uses index + stream architecture (v0.5.1)
      */
     async initialize() {
       if (runtime.initialized) return
 
       const { SubjectPatterns } = useStreamTopics()
+      const indexKey = SubjectPatterns.triggerIndex()
 
-      logger.info('Initializing trigger runtime...')
+      logger.info('Initializing trigger runtime from index...')
 
-      // Load triggers from store using centralized collection names
-      if (store.list) {
-        const triggers = await store.list(SubjectPatterns.triggers())
-        for (const { id, doc } of triggers) {
-          runtime.triggers.set(id, doc as TriggerEntry)
-        }
+      // Load triggers from index
+      if (store.indexRead) {
+        const entries = await store.indexRead(indexKey, { limit: 1000 })
 
-        // Load subscriptions from store
-        const subscriptions = await store.list(SubjectPatterns.triggerSubscriptions())
-        for (const { doc } of subscriptions) {
-          const sub = doc as TriggerSubscription & { filter?: string, transform?: string }
+        let activeCount = 0
+        let totalSubscriptions = 0
 
-          if (!runtime.triggerToFlows.has(sub.triggerName)) {
-            runtime.triggerToFlows.set(sub.triggerName, new Set())
+        for (const entry of entries) {
+          const metadata = entry.metadata as any
+
+          // Only load active triggers into runtime
+          if (metadata.status === 'active') {
+            const triggerEntry: TriggerEntry = {
+              name: metadata.name,
+              type: metadata.type,
+              scope: metadata.scope,
+              status: metadata.status,
+              displayName: metadata.displayName,
+              description: metadata.description,
+              source: metadata.source,
+              registeredAt: metadata.registeredAt,
+              registeredBy: metadata.registeredBy,
+              lastActivityAt: metadata.lastActivityAt,
+              subscriptions: metadata.subscriptions || {},
+              stats: metadata.stats || { totalFires: 0, activeSubscribers: 0 },
+              webhook: metadata.webhook,
+              schedule: metadata.schedule,
+              config: metadata.config,
+              version: metadata.version || 1,
+            }
+
+            runtime.triggers.set(entry.id, triggerEntry)
+            activeCount++
+
+            // Load embedded subscriptions
+            if (metadata.subscriptions) {
+              for (const [flowName, subData] of Object.entries(metadata.subscriptions)) {
+                const subscription: TriggerSubscription = {
+                  triggerName: entry.id,
+                  flowName,
+                  mode: (subData as any).mode || 'auto',
+                  source: 'programmatic',
+                  registeredAt: (subData as any).subscribedAt,
+                }
+
+                // Add to trigger -> flows index
+                if (!runtime.triggerToFlows.has(entry.id)) {
+                  runtime.triggerToFlows.set(entry.id, new Set())
+                }
+                runtime.triggerToFlows.get(entry.id)!.add(subscription)
+
+                // Add to flow -> triggers reverse index
+                if (!runtime.flowToTriggers.has(flowName)) {
+                  runtime.flowToTriggers.set(flowName, new Set())
+                }
+                runtime.flowToTriggers.get(flowName)!.add(entry.id)
+
+                totalSubscriptions++
+              }
+            }
           }
-          runtime.triggerToFlows.get(sub.triggerName)!.add(sub)
-
-          if (!runtime.flowToTriggers.has(sub.flowName)) {
-            runtime.flowToTriggers.set(sub.flowName, new Set())
-          }
-          runtime.flowToTriggers.get(sub.flowName)!.add(sub.triggerName)
         }
 
         logger.info(
-          `Loaded ${triggers.length} triggers and `
-          + `${subscriptions.length} subscriptions from store`,
+          `Loaded ${activeCount} active triggers with ${totalSubscriptions} subscriptions from index`,
         )
+      }
+      else {
+        // Fallback to old doc-based loading for backward compatibility
+        logger.warn('Store does not support indexRead, falling back to doc-based loading')
+
+        if (store.list) {
+          // Use deprecated patterns for backward compatibility
+          const triggers = await store.list('triggers')
+          for (const { id, doc } of triggers) {
+            runtime.triggers.set(id, doc as TriggerEntry)
+          }
+
+          // Load subscriptions from store
+          const subscriptions = await store.list('trigger-subscriptions')
+          for (const { doc } of subscriptions) {
+            const sub = doc as TriggerSubscription & { filter?: string, transform?: string }
+
+            if (!runtime.triggerToFlows.has(sub.triggerName)) {
+              runtime.triggerToFlows.set(sub.triggerName, new Set())
+            }
+            runtime.triggerToFlows.get(sub.triggerName)!.add(sub)
+
+            if (!runtime.flowToTriggers.has(sub.flowName)) {
+              runtime.flowToTriggers.set(sub.flowName, new Set())
+            }
+            runtime.flowToTriggers.get(sub.flowName)!.add(sub.triggerName)
+          }
+
+          logger.info(
+            `Loaded ${triggers.length} triggers and `
+            + `${subscriptions.length} subscriptions from doc store (legacy)`,
+          )
+        }
       }
 
       runtime.initialized = true
@@ -372,6 +602,106 @@ export function useTrigger() {
         flowCount: runtime.flowToTriggers.size,
         initialized: runtime.initialized,
       }
+    },
+
+    /**
+     * Retire a trigger (mark as inactive)
+     * v0.5.1: New lifecycle management method
+     */
+    async retireTrigger(name: string, reason: string = 'Manual retirement') {
+      const { SubjectPatterns } = useStreamTopics()
+      const indexKey = SubjectPatterns.triggerIndex()
+      const streamName = SubjectPatterns.trigger(name)
+      const now = new Date().toISOString()
+      const nowTimestamp = Date.now()
+
+      // Get current trigger metadata
+      const trigger = runtime.triggers.get(name)
+      if (!trigger) {
+        logger.warn(`Cannot retire non-existent trigger: ${name}`)
+        return
+      }
+
+      // Get full metadata from index for final stats
+      let finalStats = trigger.stats
+      if (store.indexGet) {
+        const entry = await store.indexGet(indexKey, name)
+        if (entry?.metadata) {
+          finalStats = (entry.metadata as any).stats || finalStats
+        }
+      }
+
+      // Update index
+      if (store.indexUpdateWithRetry) {
+        await store.indexUpdateWithRetry(indexKey, name, {
+          status: 'retired',
+          retiredAt: now,
+          retiredReason: reason,
+          lastActivityAt: now,
+        })
+      }
+
+      // Append retirement event to stream
+      await store.append(streamName, {
+        type: 'trigger.retired',
+        triggerName: name,
+        data: {
+          reason,
+          finalStats: finalStats || { totalFires: 0, activeSubscribers: 0 },
+          activeFor: nowTimestamp - new Date(trigger.registeredAt).getTime(),
+        },
+      })
+
+      // Remove from runtime (but keep in index for history)
+      runtime.triggers.delete(name)
+      runtime.triggerToFlows.delete(name)
+
+      // Clean up reverse index
+      for (const [flow, triggers] of runtime.flowToTriggers.entries()) {
+        triggers.delete(name)
+        if (triggers.size === 0) {
+          runtime.flowToTriggers.delete(flow)
+        }
+      }
+
+      logger.info(`Retired trigger: ${name} (reason: ${reason})`)
+    },
+
+    /**
+     * Get trigger statistics
+     * v0.5.1: New analytics method
+     */
+    async getTriggerStats(name: string) {
+      const { SubjectPatterns } = useStreamTopics()
+      const indexKey = SubjectPatterns.triggerIndex()
+
+      if (!store.indexGet) {
+        // Fallback to runtime data
+        const trigger = runtime.triggers.get(name)
+        return trigger?.stats
+      }
+
+      const entry = await store.indexGet(indexKey, name)
+      if (!entry?.metadata) return null
+
+      return (entry.metadata as any).stats
+    },
+
+    /**
+     * Get trigger history from stream
+     * v0.5.1: New analytics method
+     */
+    async getTriggerHistory(name: string, opts?: { limit?: number, types?: string[] }) {
+      const { SubjectPatterns } = useStreamTopics()
+      const streamName = SubjectPatterns.trigger(name)
+
+      const events = await store.read(streamName, {
+        limit: opts?.limit || 100,
+        types: opts?.types,
+        order: 'desc',
+      })
+
+      return events
     },
   }
 }

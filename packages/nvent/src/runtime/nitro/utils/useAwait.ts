@@ -1,4 +1,4 @@
-import type { AwaitConfig } from '../../registry/types'
+import type { AwaitConfig } from '../../../registry/types'
 import {
   registerAwaitPattern,
   resolveAwaitPattern,

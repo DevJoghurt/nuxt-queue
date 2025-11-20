@@ -3,6 +3,75 @@
 
 export type FlowRole = 'entry' | 'step'
 
+/**
+ * Trigger definition for inline trigger registration
+ * Can be defined in function config alongside subscription
+ */
+export interface TriggerDefinition {
+  /**
+   * Unique trigger name (e.g., 'manual.approve-order')
+   */
+  name: string
+  /**
+   * Trigger type
+   */
+  type: 'event' | 'webhook' | 'schedule' | 'manual'
+  /**
+   * Trigger scope: 'flow' for entry triggers, 'await' for await patterns
+   */
+  scope?: 'flow' | 'await'
+  /**
+   * Human-readable display name
+   */
+  displayName?: string
+  /**
+   * Description of what this trigger does
+   */
+  description?: string
+  /**
+   * Expected flows that should subscribe to this trigger (for validation)
+   */
+  expectedSubscribers?: string[]
+  /**
+   * Webhook-specific configuration
+   */
+  webhook?: {
+    /**
+     * URL path for webhook (e.g., '/api/webhooks/stripe')
+     */
+    path: string
+    /**
+     * HTTP method
+     */
+    method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+    /**
+     * Authentication configuration
+     */
+    auth?: any
+  }
+  /**
+   * Schedule-specific configuration
+   */
+  schedule?: {
+    /**
+     * Cron expression (e.g., '0 9 * * *' for 9 AM daily)
+     */
+    cron: string
+    /**
+     * Timezone for cron expression
+     */
+    timezone?: string
+    /**
+     * Whether schedule is enabled
+     */
+    enabled?: boolean
+  }
+  /**
+   * Additional configuration options
+   */
+  config?: Record<string, any>
+}
+
 export interface FlowConfig {
   /**
    * One or more flow names this step belongs to.
@@ -28,11 +97,17 @@ export interface FlowConfig {
   subscribes?: string | string[]
   /**
    * Entry trigger configuration (v0.5)
-   * Subscribe to existing triggers to start flow runs
+   * Define and/or subscribe to triggers to start flow runs
    */
   triggers?: {
     /**
+     * Define a new trigger inline (optional)
+     * If provided, this trigger will be registered at build time
+     */
+    define?: TriggerDefinition
+    /**
      * Array of trigger names to subscribe to
+     * Can include the defined trigger or external triggers
      */
     subscribe: string[]
     /**
@@ -255,5 +330,13 @@ export interface QueueWorkerConfig {
 export type DefineFunctionConfig = <T extends QueueWorkerConfig>(cfg: T) => T
 
 export const defineFunctionConfig: DefineFunctionConfig = cfg => cfg
+
+/**
+ * Helper for defining trigger configurations inline
+ * This is just a type helper, actual value is the same as defineFunctionConfig
+ */
+export type DefineTriggerConfig = <T extends TriggerDefinition>(cfg: T) => T
+
+export const defineTriggerConfig: DefineTriggerConfig = cfg => cfg
 
 export default defineFunctionConfig

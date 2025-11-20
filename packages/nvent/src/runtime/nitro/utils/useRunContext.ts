@@ -67,6 +67,7 @@ export function useRunContext(partial?: Partial<RunContext>): RunContext {
         ...payload,
         flowId: payload.flowId || partial?.flowId,
         flowName: payload.flowName || partial?.flowName,
+        stepName: payload.stepName || partial?.stepName,
       }
       return baseFlowEngine.emit(trigger, enrichedPayload)
     },

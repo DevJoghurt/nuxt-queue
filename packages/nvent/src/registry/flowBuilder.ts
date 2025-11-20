@@ -20,13 +20,28 @@ export function buildFlows(flowSources: FlowSource[]) {
         const key = `${flowId}:${f.role}:${mainStep}`
         if (!seenFlowKeys.has(key)) {
           seenFlowKeys.add(key)
-          bucket.entry = { step: mainStep as string, queue, workerId: id }
+          // Include all relevant fields from the flow config (emits, awaits, etc.)
+          bucket.entry = {
+            step: mainStep as string,
+            queue,
+            workerId: id,
+            emits: f.emits,
+            awaitBefore: f.awaitBefore,
+            awaitAfter: f.awaitAfter,
+          }
         }
         for (const s of steps.slice(1)) {
           const skey = `${flowId}:step:${s}`
           if (seenFlowKeys.has(skey)) continue
           seenFlowKeys.add(skey)
-          bucket.steps[s] = { queue, workerId: id, subscribes: f.subscribes }
+          bucket.steps[s] = {
+            queue,
+            workerId: id,
+            subscribes: f.subscribes,
+            emits: f.emits,
+            awaitBefore: f.awaitBefore,
+            awaitAfter: f.awaitAfter,
+          }
         }
       }
       else {
@@ -34,7 +49,14 @@ export function buildFlows(flowSources: FlowSource[]) {
           const skey = `${flowId}:${f.role}:${s}`
           if (seenFlowKeys.has(skey)) continue
           seenFlowKeys.add(skey)
-          bucket.steps[s] = { queue, workerId: id, subscribes: f.subscribes }
+          bucket.steps[s] = {
+            queue,
+            workerId: id,
+            subscribes: f.subscribes,
+            emits: f.emits,
+            awaitBefore: f.awaitBefore,
+            awaitAfter: f.awaitAfter,
+          }
         }
       }
 

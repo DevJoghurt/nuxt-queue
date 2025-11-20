@@ -63,10 +63,8 @@ export default defineNitroPlugin(async (nitroApp) => {
       storeAdapter: config.store.adapter,
     })
 
-    // Notify other plugins that adapters are ready
-    await nitroApp.hooks.callHook('nvent:adapters:ready' as any)
-
-    // 4. Initialize flow wiring (event handlers)
+    // Initialize flow wiring BEFORE notifying other plugins
+    // This ensures wirings are listening when plugins publish events
     const wiring = createWiringRegistry({
       streamWiring: {
         enabled: true, // Enable for WebSocket support
@@ -78,6 +76,9 @@ export default defineNitroPlugin(async (nitroApp) => {
     })
     wiring.start()
     logger.info('Flow wiring started')
+
+    // Notify other plugins that adapters (and wirings) are ready
+    await nitroApp.hooks.callHook('nvent:adapters:ready' as any)
 
     return {
       hooks: {

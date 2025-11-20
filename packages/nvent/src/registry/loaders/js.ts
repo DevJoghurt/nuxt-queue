@@ -28,6 +28,9 @@ export async function loadJsConfig(absPath: string): Promise<ConfigMeta> {
         step: flowCfg.step,
         emits: flowCfg.emits,
         subscribes,
+        triggers: flowCfg.triggers,
+        awaitBefore: flowCfg.awaitBefore,
+        awaitAfter: flowCfg.awaitAfter,
       }
     }
   }

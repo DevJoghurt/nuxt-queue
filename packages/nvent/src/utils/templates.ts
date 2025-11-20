@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { analyzeFlow } from '../registry'
-import { analyzeTriggerSubscriptions, buildTriggerIndex } from '../registry/triggerAnalyzer'
+import { analyzeTriggerDefinitions, analyzeTriggerSubscriptions, buildTriggerIndex } from '../registry/triggerAnalyzer'
 
 /**
  * Generate the queue registry template content
@@ -130,12 +130,13 @@ export default useAnalyzedFlows;
 
 /**
  * Generate the trigger registry template content
- * Analyzes and extracts trigger subscriptions from worker configs
+ * Analyzes and extracts trigger definitions and subscriptions from worker configs
  */
 export function generateTriggerRegistryTemplate(registry: any): string {
   const workers = registry?.workers || []
 
   // Analyze at build time and generate a static snapshot
+  const triggers = analyzeTriggerDefinitions(workers)
   const subscriptions = analyzeTriggerSubscriptions(workers)
   const index = buildTriggerIndex(subscriptions)
 
@@ -151,6 +152,7 @@ export function generateTriggerRegistryTemplate(registry: any): string {
   }
 
   const triggerRegistry = {
+    triggers,
     subscriptions,
     index: {
       triggerToFlows,
