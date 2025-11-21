@@ -68,6 +68,13 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
         if (e.flowName) state.meta = { ...state.meta, flowName: e.flowName }
         if (e.data?.flowName) state.meta = { ...state.meta, flowName: e.data.flowName }
         if (e.data?.input) state.meta = { ...state.meta, input: e.data.input }
+        if (e.data?.trigger) {
+          state.meta = {
+            ...state.meta,
+            triggerName: e.data.trigger.name,
+            triggerType: e.data.trigger.type || 'manual',
+          }
+        }
         break
 
       case 'flow.complete':
@@ -181,6 +188,78 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
         state.steps[stepKey].status = 'timeout'
         state.steps[stepKey].error = `Await timeout after ${e.data?.duration}ms`
         state.steps[stepKey].completedAt = e.ts
+        break
+      }
+
+      case 'await.registered': {
+        if (!stepKey) break
+        // Create entries for both possible positions since we don't know which one applies
+        // The diagram will only show the one that matches the flow configuration
+        const awaitKeyAfter = `${stepKey}:await-after`
+        const awaitKeyBefore = `${stepKey}:await-before`
+
+        // Set both to waiting - only the one that exists in the flow config will be shown
+        if (!state.steps[awaitKeyAfter]) {
+          state.steps[awaitKeyAfter] = { status: 'waiting', attempt: 1 }
+        }
+        state.steps[awaitKeyAfter].status = 'waiting'
+        state.steps[awaitKeyAfter].awaitType = e.data?.awaitType
+        state.steps[awaitKeyAfter].awaitData = e.data
+
+        if (!state.steps[awaitKeyBefore]) {
+          state.steps[awaitKeyBefore] = { status: 'waiting', attempt: 1 }
+        }
+        state.steps[awaitKeyBefore].status = 'waiting'
+        state.steps[awaitKeyBefore].awaitType = e.data?.awaitType
+        state.steps[awaitKeyBefore].awaitData = e.data
+        break
+      }
+
+      case 'await.resolved': {
+        if (!stepKey) break
+        // Update both possible positions
+        const awaitKeyAfter = `${stepKey}:await-after`
+        const awaitKeyBefore = `${stepKey}:await-before`
+
+        if (!state.steps[awaitKeyAfter]) {
+          state.steps[awaitKeyAfter] = { status: 'completed', attempt: 1 }
+        }
+        state.steps[awaitKeyAfter].status = 'completed'
+        state.steps[awaitKeyAfter].completedAt = e.ts
+        state.steps[awaitKeyAfter].awaitType = e.data?.awaitType
+        if (e.data?.triggerData) state.steps[awaitKeyAfter].result = e.data.triggerData
+
+        if (!state.steps[awaitKeyBefore]) {
+          state.steps[awaitKeyBefore] = { status: 'completed', attempt: 1 }
+        }
+        state.steps[awaitKeyBefore].status = 'completed'
+        state.steps[awaitKeyBefore].completedAt = e.ts
+        state.steps[awaitKeyBefore].awaitType = e.data?.awaitType
+        if (e.data?.triggerData) state.steps[awaitKeyBefore].result = e.data.triggerData
+        break
+      }
+
+      case 'await.timeout': {
+        if (!stepKey) break
+        // Update both possible positions
+        const awaitKeyAfter = `${stepKey}:await-after`
+        const awaitKeyBefore = `${stepKey}:await-before`
+
+        if (!state.steps[awaitKeyAfter]) {
+          state.steps[awaitKeyAfter] = { status: 'timeout', attempt: 1 }
+        }
+        state.steps[awaitKeyAfter].status = 'timeout'
+        state.steps[awaitKeyAfter].error = `Await timeout`
+        state.steps[awaitKeyAfter].completedAt = e.ts
+        state.steps[awaitKeyAfter].awaitType = e.data?.awaitType
+
+        if (!state.steps[awaitKeyBefore]) {
+          state.steps[awaitKeyBefore] = { status: 'timeout', attempt: 1 }
+        }
+        state.steps[awaitKeyBefore].status = 'timeout'
+        state.steps[awaitKeyBefore].error = `Await timeout`
+        state.steps[awaitKeyBefore].completedAt = e.ts
+        state.steps[awaitKeyBefore].awaitType = e.data?.awaitType
         break
       }
 

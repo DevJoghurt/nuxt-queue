@@ -8,6 +8,14 @@
             Triggers
           </h1>
         </div>
+        <div>
+          <UButton
+            icon="i-lucide-plus"
+            label="Create Trigger"
+            color="primary"
+            @click="router.push('/triggers/new')"
+          />
+        </div>
       </div>
     </div>
 

@@ -11,7 +11,7 @@
         <div class="flex items-center gap-3">
           <USelectMenu
             v-model="selectedFlow"
-            :items="(flows || []).map(f => f.id)"
+            :items="(flows || []).map((f: any) => f.id)"
             placeholder="Select a flow..."
             class="w-64"
           >
@@ -158,6 +158,7 @@
                     :is-failed="r.status === 'failed'"
                     :is-canceled="r.status === 'canceled'"
                     :is-stalled="r.status === 'stalled'"
+                    :is-awaiting="r.status === 'awaiting'"
                   />
                 </div>
               </div>
@@ -288,6 +289,9 @@
                     :steps="flowState.stepList.value"
                     :flow-name="selectedFlow"
                     :run-id="selectedRunId"
+                    :trigger-name="flowState.state.value.meta?.triggerName"
+                    :trigger-type="flowState.state.value.meta?.triggerType"
+                    :flow-def="selectedFlowDef"
                     @select-step="handleSelectStep"
                     @cancel-flow="handleCancelFlow"
                   />
@@ -446,6 +450,12 @@ watch(selectedRunId, (newRunId, oldRunId) => {
 
 // Get analyzed flows (with HMR support)
 const flows = useAnalyzedFlows()
+
+// Get selected flow definition
+const selectedFlowDef = computed(() => {
+  if (!selectedFlow.value) return null
+  return flows.value.find((f: any) => f.id === selectedFlow.value)
+})
 
 // Fetch runs for selected flow with infinite scroll (persists across HMR)
 const {

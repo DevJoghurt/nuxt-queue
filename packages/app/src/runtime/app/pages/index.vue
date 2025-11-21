@@ -1,17 +1,17 @@
 <template>
-  <QueueNhealthComponentRouter
+  <NventComponentRouter
     v-slot="{ component }"
     :routes="routes"
     base="p"
     mode="query"
   >
-    <QueueNhealthComponentShell
+    <NventComponentShell
       orientation="horizontal"
       :items="navItems"
     >
       <component :is="component" />
-    </QueueNhealthComponentShell>
-  </QueueNhealthComponentRouter>
+    </NventComponentShell>
+  </NventComponentRouter>
 </template>
 
 <script setup lang="ts">
@@ -23,6 +23,8 @@ import QueueJob from './queues/job.vue'
 import QueueFlows from './flows/index.vue'
 import Triggers from './triggers/index.vue'
 import TriggerDetail from './triggers/[name].vue'
+import TriggerNew from './triggers/new.vue'
+import TriggerEdit from './triggers/[name]/edit.vue'
 
 const navItems = [
   [
@@ -40,6 +42,8 @@ const routes = {
   '/queues/:name/jobs/:id': QueueJob,
   '/flows': QueueFlows,
   '/triggers': Triggers,
+  '/triggers/new': TriggerNew,
+  '/triggers/:name/edit': TriggerEdit,
   '/triggers/:name': TriggerDetail,
 }
 

@@ -916,8 +916,8 @@ export function createFlowWiring() {
                   }
                 }
 
-                // If currently awaiting, preserve 'awaiting' status if there are active awaits
-                if (currentStatus === 'awaiting' && hasActiveAwaits) {
+                // If there are active awaits, set status to 'awaiting'
+                if (hasActiveAwaits) {
                   updateMetadata.status = 'awaiting'
                 }
 

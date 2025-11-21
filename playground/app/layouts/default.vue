@@ -6,15 +6,16 @@ const links = [
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex h-16">
-          <div class="flex">
-            <div class="flex-shrink-0 flex items-center">
+  <div class="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+    <!-- Fixed Header -->
+    <nav class="shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <div class="px-4 sm:px-6 lg:px-8">
+        <div class="flex h-16 items-center justify-between">
+          <div class="flex items-center gap-8">
+            <div class="flex-shrink-0">
               <span class="text-xl font-bold">nvent Playground</span>
             </div>
-            <div class="ml-6 flex space-x-8">
+            <div class="flex space-x-8">
               <NuxtLink
                 v-for="link in links"
                 :key="link.to"
@@ -30,6 +31,10 @@ const links = [
         </div>
       </div>
     </nav>
-    <slot />
+    
+    <!-- Scrollable Content Area -->
+    <div class="flex-1 min-h-0 overflow-hidden">
+      <slot />
+    </div>
   </div>
 </template>

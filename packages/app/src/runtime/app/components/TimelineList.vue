@@ -62,6 +62,57 @@
           </div>
         </div>
 
+        <!-- Special rendering for await events -->
+        <div
+          v-else-if="isAwaitEvent(item.eventType)"
+          class="text-sm mt-2"
+        >
+          <div
+            v-if="item.eventData"
+            class="space-y-1"
+          >
+            <div
+              v-if="item.eventData.awaitType"
+              class="flex items-start gap-2"
+            >
+              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Type:</span>
+              <UBadge color="blue" variant="subtle" size="xs" class="capitalize">
+                {{ item.eventData.awaitType }}
+              </UBadge>
+            </div>
+            <div
+              v-if="item.eventData.position"
+              class="flex items-start gap-2"
+            >
+              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Position:</span>
+              <UBadge color="neutral" variant="subtle" size="xs" class="capitalize">
+                {{ item.eventData.position }}
+              </UBadge>
+            </div>
+            <div
+              v-if="item.eventData.triggerName"
+              class="flex items-start gap-2"
+            >
+              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Trigger:</span>
+              <span class="text-xs text-gray-700 dark:text-gray-300 font-mono">{{ item.eventData.triggerName }}</span>
+            </div>
+            <div
+              v-if="item.eventData.triggerData"
+              class="flex items-start gap-2"
+            >
+              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Data:</span>
+              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-y-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1 min-w-0 whitespace-pre-wrap break-words">{{ pretty(item.eventData.triggerData) }}</pre>
+            </div>
+            <div
+              v-if="item.eventData.duration"
+              class="flex items-start gap-2"
+            >
+              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Duration:</span>
+              <span class="text-xs text-gray-700 dark:text-gray-300">{{ item.eventData.duration }}ms</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Special rendering for flow events -->
         <div
           v-else-if="isFlowEvent(item.eventType)"
@@ -173,6 +224,11 @@ function eventIcon(type: string) {
   if (type === 'step.retry') return 'i-lucide-rotate-cw'
   if (type === 'step.timeout') return 'i-lucide-clock'
 
+  // Await events
+  if (type === 'await.registered') return 'i-lucide-timer'
+  if (type === 'await.resolved') return 'i-lucide-check-circle'
+  if (type === 'await.timeout') return 'i-lucide-clock-alert'
+
   // Log events
   if (type === 'log') return 'i-lucide-file-text'
 
@@ -229,6 +285,10 @@ function levelColor(level?: string) {
 
 function isFlowEvent(type: string) {
   return type?.startsWith('flow.') || type?.startsWith('step.')
+}
+
+function isAwaitEvent(type: string) {
+  return type?.startsWith('await.')
 }
 </script>
 

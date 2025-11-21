@@ -47,11 +47,11 @@ export default defineNuxtModule<ModuleOptions>({
     })
     addComponentsDir({
       path: resolve('./runtime/app/components'),
-      prefix: 'Queue',
+      prefix: 'Nvent',
     })
 
     addComponent({
-      name: 'QueueApp',
+      name: 'NventApp',
       filePath: resolve('./runtime/app/pages/index.vue'),
       global: true,
     })

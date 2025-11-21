@@ -448,6 +448,8 @@ export async function startFlowFromTrigger(
   const queue = useQueueAdapter()
   const registry = $useFunctionRegistry() as any
   const analyzedFlows = $useAnalyzedFlows()
+  const store = useStoreAdapter()
+  const triggerRuntime = getTriggerRuntime(store, logger)
 
   // Verify flow exists
   const flowDef = analyzedFlows.find((f: any) => f.id === flowName) as any
@@ -462,6 +464,10 @@ export async function startFlowFromTrigger(
     logger.error(`Flow '${flowName}' has no entry in registry`)
     return
   }
+
+  // Get trigger definition for type information
+  const triggerDef = triggerRuntime.getTrigger(triggerName)
+  const triggerType = triggerDef?.type || 'manual'
 
   // Generate run ID
   const runId = `${flowName}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
@@ -478,6 +484,7 @@ export async function startFlowFromTrigger(
     flowName,
     trigger: {
       name: triggerName,
+      type: triggerType,
       data: triggerData,
     },
     ...triggerData,
@@ -510,6 +517,7 @@ export async function startFlowFromTrigger(
         input: triggerData,
         trigger: {
           name: triggerName,
+          type: triggerType,
           data: triggerData,
         },
       },

@@ -47,6 +47,14 @@
           </div>
         </div>
         <div class="flex items-center gap-3">
+          <UButton
+            icon="i-lucide-pencil"
+            color="neutral"
+            variant="outline"
+            @click="goToEdit"
+          >
+            Edit
+          </UButton>
           <div
             v-if="isConnected"
             class="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400"
@@ -197,11 +205,11 @@
                   <span class="text-gray-900 dark:text-gray-100">{{ formatDate(trigger.registeredAt) }}</span>
                 </div>
                 <div
-                  v-if="trigger.stats.lastFiredAt"
+                  v-if="(trigger.stats as any).lastFiredAt"
                   class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
                 >
                   <span class="text-gray-500 dark:text-gray-400">Last Fired</span>
-                  <span class="text-gray-900 dark:text-gray-100">{{ formatTime(trigger.stats.lastFiredAt) }}</span>
+                  <span class="text-gray-900 dark:text-gray-100">{{ formatTime((trigger.stats as any).lastFiredAt) }}</span>
                 </div>
                 <div
                   v-if="trigger.lastActivityAt"
@@ -553,6 +561,12 @@ const selectEvent = (event: TriggerEvent) => {
 
 const goBack = () => {
   router.push('/triggers')
+}
+
+const goToEdit = () => {
+  if (triggerName.value) {
+    router.push(`/triggers/${encodeURIComponent(triggerName.value)}/edit`)
+  }
 }
 
 const goToFlow = (flowName: string) => {

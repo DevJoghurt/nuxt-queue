@@ -18,6 +18,20 @@
           <!-- Divider -->
           <div class="w-px h-3 bg-gray-300 dark:bg-gray-700" />
 
+          <!-- Entry Trigger -->
+          <div v-if="triggerName" class="flex items-center gap-1.5">
+            <UIcon
+              :name="getTriggerIcon(triggerType)"
+              class="w-3 h-3 text-gray-500"
+            />
+            <span class="text-gray-700 dark:text-gray-300">
+              {{ triggerName }}
+            </span>
+          </div>
+
+          <!-- Divider -->
+          <div class="w-px h-3 bg-gray-300 dark:bg-gray-700" />
+
           <!-- Total Steps -->
           <div class="flex items-center gap-1.5">
             <UIcon
@@ -105,6 +119,9 @@ const props = defineProps<{
   steps: any[]
   flowName?: string
   runId?: string
+  triggerName?: string
+  triggerType?: 'manual' | 'event' | 'webhook' | 'schedule'
+  flowDef?: any
 }>()
 
 const emit = defineEmits<{
@@ -137,6 +154,31 @@ watch(selectedStep, (newStep: string) => {
   emit('select-step', newStep === 'all-steps' ? null : newStep)
 })
 
+// Check if an await step exists in the flow configuration
+const isValidAwaitStep = (stepKey: string): boolean => {
+  if (!stepKey.includes(':await-')) return true
+  if (!props.flowDef) return false
+  
+  const parts = stepKey.split(':await-')
+  const stepName = parts[0]
+  const position = parts[1] // 'before' or 'after'
+  
+  // Check entry step
+  if (props.flowDef.entry?.step === stepName) {
+    if (position === 'after' && props.flowDef.entry?.awaitAfter) return true
+    if (position === 'before' && props.flowDef.entry?.awaitBefore) return true
+  }
+  
+  // Check regular steps
+  const step = stepName ? props.flowDef.steps?.[stepName] : undefined
+  if (step) {
+    if (position === 'after' && step.awaitAfter) return true
+    if (position === 'before' && step.awaitBefore) return true
+  }
+  
+  return false
+}
+
 // Transform steps into radio items with "All Steps" option
 const radioItems = computed(() => {
   const allItem = {
@@ -147,13 +189,49 @@ const radioItems = computed(() => {
       status: null,
       showAllIndicator: true,
     },
+    clickable: true,
   }
 
-  const stepItems = props.steps.map(step => ({
-    value: step.key,
-    label: step.key,
-    step,
-  }))
+  // Filter steps to only include valid await steps
+  const filteredSteps = props.steps.filter(step => isValidAwaitStep(step.key))
+  
+  const stepItems = filteredSteps.map(step => {
+    const isAwait = step.key.includes(':await-')
+    
+    // Get await config from flow definition for await steps
+    let awaitConfig = undefined
+    if (isAwait && props.flowDef) {
+      const parts = step.key.split(':await-')
+      const stepName = parts[0]
+      const position = parts[1] // 'before' or 'after'
+      
+      // Check entry step
+      if (props.flowDef.entry?.step === stepName) {
+        awaitConfig = position === 'after' ? props.flowDef.entry?.awaitAfter : props.flowDef.entry?.awaitBefore
+      }
+      // Check regular steps
+      else {
+        const stepDef = stepName ? props.flowDef.steps?.[stepName] : undefined
+        if (stepDef) {
+          awaitConfig = position === 'after' ? stepDef.awaitAfter : stepDef.awaitBefore
+        }
+      }
+    }
+    
+    const finalStep = {
+      ...step,
+      awaitConfig, // Add await config from flow definition
+      // Extract awaitType from config if available
+      awaitType: awaitConfig?.type || step.awaitType,
+    }
+    
+    return {
+      value: step.key,
+      label: step.key,
+      step: finalStep,
+      clickable: !isAwait, // Await steps are not clickable
+    }
+  })
 
   return [allItem, ...stepItems]
 })
@@ -206,6 +284,17 @@ const getStatusColor = (status?: string) => {
     case 'canceled': return 'bg-orange-500'
     case 'stalled': return 'bg-amber-600'
     default: return 'bg-gray-300'
+  }
+}
+
+// Trigger icon helper
+const getTriggerIcon = (type?: string) => {
+  switch (type) {
+    case 'manual': return 'i-lucide-hand'
+    case 'event': return 'i-lucide-zap'
+    case 'webhook': return 'i-lucide-webhook'
+    case 'schedule': return 'i-lucide-calendar-clock'
+    default: return 'i-lucide-play-circle'
   }
 }
 </script>

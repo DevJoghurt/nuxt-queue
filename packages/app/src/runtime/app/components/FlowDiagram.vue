@@ -52,6 +52,20 @@
             />
           </template>
 
+          <template #node-flow-await="{ data }">
+            <FlowAwaitNode
+              :data="data"
+            />
+            <Handle
+              type="target"
+              :position="Position.Top"
+            />
+            <Handle
+              type="source"
+              :position="Position.Bottom"
+            />
+          </template>
+
           <Background
             v-if="showBackground"
             pattern-color="#888"
@@ -70,6 +84,16 @@ import { computed, ref, watch, nextTick } from '#imports'
 import type { Node as VFNode, Edge as VFEdge } from '@vue-flow/core'
 import { Handle, Position } from '@vue-flow/core'
 import FlowNodeCard from '../components/FlowNodeCard.vue'
+import FlowAwaitNode from '../components/FlowAwaitNode.vue'
+
+interface AwaitConfig {
+  type: 'time' | 'event' | 'webhook'
+  delay?: number
+  event?: string
+  method?: string
+  timeout?: number
+  timeoutAction?: 'fail' | 'continue'
+}
 
 interface FlowEntry {
   step: string
@@ -78,6 +102,7 @@ interface FlowEntry {
   runtime?: 'nodejs' | 'python'
   runtype?: 'inprocess' | 'task'
   emits?: string[]
+  awaitAfter?: AwaitConfig
 }
 interface FlowStep {
   queue: string
@@ -86,6 +111,8 @@ interface FlowStep {
   runtime?: 'nodejs' | 'python'
   runtype?: 'inprocess' | 'task'
   emits?: string[]
+  awaitBefore?: AwaitConfig
+  awaitAfter?: AwaitConfig
 }
 
 interface AnalyzedStep extends FlowStep {
@@ -119,7 +146,7 @@ const props = defineProps<{
   showMiniMap?: boolean
   showBackground?: boolean
   stepStates?: Record<string, StepStatus> // Current execution state
-  flowStatus?: 'running' | 'completed' | 'failed' | 'canceled' // Overall flow status
+  flowStatus?: 'running' | 'completed' | 'failed' | 'canceled' | 'stalled' // Overall flow status
 }>()
 
 const heightClass = computed(() => props.heightClass || 'h-80')
@@ -130,20 +157,29 @@ const emit = defineEmits<{
 const flowId = computed(() => props.flow?.id)
 const vueFlowRef = ref<any>(null)
 
+type StepNodeData = {
+  label: string
+  queue?: string
+  workerId?: string
+  status?: 'idle' | 'running' | 'error' | 'done' | 'canceled'
+  attempt?: number
+  error?: string
+  runtime?: 'nodejs' | 'python'
+  runtype?: 'inprocess' | 'task'
+  emits?: string[]
+}
+
+type AwaitNodeData = {
+  label: string
+  awaitType?: 'time' | 'event' | 'webhook'
+  awaitConfig?: AwaitConfig
+  status?: 'idle' | 'waiting' | 'resolved' | 'timeout'
+}
+
 type FlowNode = {
   id: string
   position: { x: number, y: number }
-  data: {
-    label: string
-    queue?: string
-    workerId?: string
-    status?: 'idle' | 'running' | 'error' | 'done'
-    attempt?: number
-    error?: string
-    runtime?: 'nodejs' | 'python'
-    runtype?: 'inprocess' | 'task'
-    emits?: string[]
-  }
+  data: StepNodeData | AwaitNodeData
   type?: string
   style?: Record<string, any>
 }
@@ -290,7 +326,58 @@ const nodes = computed<FlowNode[]>(() => {
     })
   }
 
-  return out
+  // Insert await nodes between existing nodes
+  const awaitNodes: FlowNode[] = []
+  const awaitGap = 70 // Gap for await nodes
+  
+  // Check entry for awaitAfter
+  if (f.entry?.awaitAfter && f.entry) {
+    const entryNode = out.find(n => n.id === `entry:${f.entry!.step}`)
+    if (entryNode) {
+      const awaitKey = `${f.entry.step}:await-after`
+      const awaitState = states[awaitKey]
+      const awaitStatus = awaitState?.status === 'waiting' ? 'waiting' : awaitState?.status === 'completed' ? 'resolved' : awaitState?.status === 'timeout' ? 'timeout' : 'idle'
+      
+      awaitNodes.push({
+        id: `await:entry-after:${f.entry.step}`,
+        position: { x: -90, y: entryNode.position.y + rowHeight + awaitGap },
+        data: {
+          label: `Await (${f.entry.awaitAfter.type})`,
+          awaitType: f.entry.awaitAfter.type,
+          awaitConfig: f.entry.awaitAfter,
+          status: awaitStatus,
+        },
+        type: 'flow-await',
+        style: { minWidth: '180px' },
+      })
+    }
+  }
+
+  // Check steps for awaitBefore
+  Object.entries(steps).forEach(([stepName, step]) => {
+    if (step.awaitBefore) {
+      const stepNode = out.find(n => n.id === `step:${stepName}`)
+      if (stepNode) {
+        const awaitState = states[`${stepName}:await-before`]
+        const awaitStatus = awaitState?.status === 'waiting' ? 'waiting' : awaitState?.status === 'completed' ? 'resolved' : awaitState?.status === 'timeout' ? 'timeout' : 'idle'
+        
+        awaitNodes.push({
+          id: `await:step-before:${stepName}`,
+          position: { x: stepNode.position.x + 20, y: stepNode.position.y - awaitGap - 50 },
+          data: {
+            label: `Await (${step.awaitBefore.type})`,
+            awaitType: step.awaitBefore.type,
+            awaitConfig: step.awaitBefore,
+            status: awaitStatus,
+          },
+          type: 'flow-await',
+          style: { minWidth: '180px' },
+        })
+      }
+    }
+  })
+
+  return [...out, ...awaitNodes]
 })
 
 // Map step status to node visual status
@@ -316,6 +403,7 @@ const edges = computed<FlowEdge[]>(() => {
   const f = props.flow
   if (!f) return []
   const states = props.stepStates || {}
+  const steps = f.steps || {}
 
   const added = new Set<string>()
   const out: FlowEdge[] = []
@@ -347,18 +435,44 @@ const edges = computed<FlowEdge[]>(() => {
 
     // Add edges based on analyzed dependencies
     for (const [stepName, stepInfo] of Object.entries(analyzedSteps)) {
+      const targetStep = steps[stepName]
       const target = `step:${stepName}`
 
       if (stepInfo.dependsOn.length > 0) {
         // Add edges from dependencies
         for (const depName of stepInfo.dependsOn) {
           const source = depName === f.entry?.step ? `entry:${depName}` : `step:${depName}`
-          addEdge(source, target)
+          
+          // Check if target step has awaitBefore - insert await node
+          if (targetStep?.awaitBefore) {
+            const awaitNodeId = `await:step-before:${stepName}`
+            addEdge(source, awaitNodeId)
+            addEdge(awaitNodeId, target)
+          }
+          else {
+            addEdge(source, target)
+          }
         }
       }
       else if (f.entry) {
         // No dependencies means it depends on entry
-        addEdge(`entry:${f.entry.step}`, target)
+        const entryId = `entry:${f.entry.step}`
+
+        // Check if entry has awaitAfter - insert await node
+        if (f.entry.awaitAfter) {
+          const awaitNodeId = `await:entry-after:${f.entry.step}`
+          addEdge(entryId, awaitNodeId)
+          addEdge(awaitNodeId, target)
+        }
+        // Check if target step has awaitBefore - insert await node
+        else if (targetStep?.awaitBefore) {
+          const awaitNodeId = `await:step-before:${stepName}`
+          addEdge(entryId, awaitNodeId)
+          addEdge(awaitNodeId, target)
+        }
+        else {
+          addEdge(entryId, target)
+        }
       }
     }
   }
@@ -428,17 +542,26 @@ watch(() => props.flow, (f) => {
 }, { immediate: true, deep: false })
 
 // Update node data when stepStates change (for live status updates)
-watch(() => props.stepStates, () => {
+watch([() => props.stepStates, () => props.flowStatus], () => {
   if (!props.flow) return
-  // Update node data without changing positions
-  const builtNodes: VFNode[] = nodes.value.map(n => ({ id: n.id, position: { ...n.position }, data: { ...n.data }, type: n.type, style: n.style }))
-  // Keep existing positions from internalNodes
+  
+  // Get latest computed nodes with updated status
+  const latestNodes = nodes.value
+  
+  // Preserve positions from current internal nodes
   const positionMap = new Map(internalNodes.value.map(n => [n.id, n.position]))
-  builtNodes.forEach((n) => {
-    const existing = positionMap.get(n.id)
-    if (existing) n.position = existing
-  })
-  internalNodes.value = builtNodes
+  
+  // Build completely new nodes array with updated data and preserved positions
+  const updatedNodes: VFNode[] = latestNodes.map(n => ({
+    id: n.id,
+    position: positionMap.get(n.id) || { ...n.position },
+    data: { ...n.data }, // Create new data object reference
+    type: n.type,
+    style: n.style,
+  }))
+  
+  // Replace entire array to trigger Vue Flow reactivity
+  internalNodes.value = updatedNodes
 
   // Update edges for animation
   const builtEdges: VFEdge[] = edges.value.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label, animated: e.animated }))
