@@ -48,6 +48,11 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
         enablePeriodicCheck: true,
       },
     },
+    webhooks: {
+      // baseUrl will be determined at runtime from Nitro context
+      // Users can override via NUXT_PUBLIC_SITE_URL or explicit config
+      baseUrl: process.env.NUXT_PUBLIC_SITE_URL || undefined,
+    },
   }
 
   // Merge user options with defaults
@@ -192,6 +197,7 @@ export function toRuntimeConfig(normalizedOptions: Required<ModuleOptions>): Mod
     store: normalizedOptions.store as Required<typeof normalizedOptions.store>,
     connections: normalizedOptions.connections as Required<typeof normalizedOptions.connections>,
     flows: normalizedOptions.flows as Required<typeof normalizedOptions.flows>,
+    webhooks: normalizedOptions.webhooks as Required<typeof normalizedOptions.webhooks>,
   }
 }
 

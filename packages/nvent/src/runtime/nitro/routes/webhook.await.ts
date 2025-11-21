@@ -1,4 +1,4 @@
-import { defineEventHandler, readBody, getRouterParam, createError, setResponseStatus } from 'h3'
+import { defineEventHandler, readBody, getRouterParams, createError, setResponseStatus } from 'h3'
 import { useStoreAdapter, useStreamTopics, useNventLogger, useAwait } from '#imports'
 
 /**
@@ -6,14 +6,15 @@ import { useStoreAdapter, useStreamTopics, useNventLogger, useAwait } from '#imp
  * Handles webhook calls and resolves awaiting steps
  *
  * Routes:
- * - POST /api/_webhook/await/{path...}
- * - GET /api/_webhook/await/{path...}
+ * - POST /api/_webhook/await/{flowName}/{runId}/{stepName}
+ * - GET /api/_webhook/await/{flowName}/{runId}/{stepName}
  *
  * Architecture:
- * 1. Lookup webhook route in KV (fast lookup, no flow scan needed)
- * 2. Verify flow is still awaiting (not completed/canceled/stalled)
- * 3. Use useAwait().webhook.resolve() which publishes await.resolved event
- * 4. Trigger wiring handles the actual flow resumption
+ * 1. Parse URL params to get flowName, runId, stepName
+ * 2. Look up flow in store index to verify it exists and is awaiting
+ * 3. Verify flow status and await configuration
+ * 4. Use useAwait().webhook.resolve() which publishes await.resolved event
+ * 5. Trigger wiring handles the actual flow resumption
  */
 export default defineEventHandler(async (event) => {
   const logger = useNventLogger('webhook-handler')
@@ -21,79 +22,90 @@ export default defineEventHandler(async (event) => {
   const await$ = useAwait()
   const { SubjectPatterns } = useStreamTopics()
 
-  // Get the full path after /api/_webhook/await/
-  const path = event.path.replace('/api/_webhook/await/', '')
+  // Extract path parameters using H3
+  const params = getRouterParams(event)
+  const flowName = params.flowName
+  const runId = params.runId
+  const stepName = params.stepName
 
-  logger.info(`Webhook received: ${event.method} /${path}`)
-
-  // Look up webhook registration in KV (registered by await pattern)
-  const routeKey = SubjectPatterns.webhookRoute(`/${path}`)
-  const registration = await store.kv?.get<any>(routeKey)
-
-  if (!registration) {
-    logger.warn(`Webhook not found or expired: /${path}`)
-    setResponseStatus(event, 410) // Gone
+  if (!flowName || !runId || !stepName) {
+    logger.warn('Missing required webhook parameters', { params })
     throw createError({
-      statusCode: 410,
-      statusMessage: 'Webhook not found or has expired',
-      message: 'The webhook may have been cleaned up because the flow completed, was canceled, or timed out.',
+      statusCode: 400,
+      statusMessage: 'Invalid webhook path',
+      message: 'Webhook path must include flowName, runId, and stepName',
     })
   }
 
-  const { runId, stepName, flowName, method } = registration
+  logger.info(`Webhook received: ${event.method} for ${flowName}/${runId}/${stepName}`)
 
-  // Verify method matches
-  if (event.method !== method) {
-    logger.warn(`Method mismatch: expected ${method}, got ${event.method}`, { runId, stepName })
+  // Look up flow in store index to verify it exists and is awaiting
+  const indexKey = SubjectPatterns.flowRunIndex(flowName)
+  const flowEntry = await store.indexGet?.(indexKey, runId)
+
+  if (!flowEntry) {
+    logger.warn(`Flow not found`, { flowName, runId, stepName })
+    setResponseStatus(event, 404)
+    throw createError({
+      statusCode: 404,
+      statusMessage: 'Flow not found',
+      message: 'The flow associated with this webhook no longer exists.',
+    })
+  }
+
+  // Check flow status
+  const status = flowEntry.metadata?.status
+  if (status && status !== 'running') {
+    logger.warn(`Flow is not running`, { flowName, runId, stepName, status })
+    setResponseStatus(event, 410)
+    throw createError({
+      statusCode: 410,
+      statusMessage: `Flow is ${status}`,
+      message: `This webhook is no longer valid because the flow is ${status}.`,
+    })
+  }
+
+  // Check if step is actually awaiting
+  const awaitState = flowEntry.metadata?.awaitingSteps?.[stepName]
+  if (!awaitState || awaitState.status !== 'awaiting') {
+    logger.warn(`Step is not awaiting`, { flowName, runId, stepName, awaitState })
+    setResponseStatus(event, 410)
+    throw createError({
+      statusCode: 410,
+      statusMessage: 'Step is not awaiting',
+      message: 'This webhook has already been called or the await has expired.',
+    })
+  }
+
+  // Verify await type is webhook
+  if (awaitState.awaitType !== 'webhook') {
+    logger.warn(`Step is not waiting for webhook`, { flowName, runId, stepName, awaitType: awaitState.awaitType })
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid await type',
+      message: `This step is waiting for ${awaitState.awaitType}, not a webhook.`,
+    })
+  }
+
+  // Verify HTTP method if specified in config
+  const expectedMethod = awaitState.config?.method || 'POST'
+  if (event.method !== expectedMethod) {
+    logger.warn(`Method mismatch: expected ${expectedMethod}, got ${event.method}`, { flowName, runId, stepName })
     throw createError({
       statusCode: 405,
       statusMessage: 'Method Not Allowed',
-      message: `This webhook expects ${method} requests.`,
+      message: `This webhook expects ${expectedMethod} requests.`,
     })
   }
 
-  // Verify flow is still awaiting (double-check before processing)
-  if (store.indexGet) {
-    const indexKey = SubjectPatterns.flowRunIndex(flowName)
-    const flowEntry = await store.indexGet(indexKey, runId)
-
-    if (!flowEntry) {
-      logger.warn(`Flow not found`, { runId, stepName })
-      setResponseStatus(event, 404)
-      throw createError({
-        statusCode: 404,
-        statusMessage: 'Flow not found',
-        message: 'The flow associated with this webhook no longer exists.',
-      })
-    }
-
-    const status = flowEntry.metadata?.status
-    if (status && status !== 'running') {
-      logger.warn(`Flow is not running`, { runId, stepName, status })
-      setResponseStatus(event, 410)
-      throw createError({
-        statusCode: 410,
-        statusMessage: `Flow is ${status}`,
-        message: `This webhook is no longer valid because the flow is ${status}.`,
-      })
-    }
-
-    const awaitState = flowEntry.metadata?.awaitingSteps?.[stepName]
-    if (!awaitState) {
-      logger.warn(`Step is not awaiting`, { runId, stepName })
-      setResponseStatus(event, 410)
-      throw createError({
-        statusCode: 410,
-        statusMessage: 'Step is not awaiting',
-        message: 'This webhook has already been called or the await has expired.',
-      })
-    }
-  }
+  // Get position (before/after)
+  const position = awaitState.position || 'after'
 
   // Get webhook payload
   let webhookData: any
   if (event.method === 'GET') {
-    webhookData = getRouterParam(event, 'query') || {}
+    // For GET requests, use query parameters as payload
+    webhookData = getRouterParams(event, { decode: true })
   }
   else {
     webhookData = await readBody(event).catch(() => ({}))
@@ -120,9 +132,9 @@ export default defineEventHandler(async (event) => {
 
   // Resolve the await using event-driven pattern
   // This publishes await.resolved event, trigger wiring handles the rest
-  await await$.webhook.resolve(runId, stepName, webhookData)
+  await await$.webhook.resolve(runId, stepName, flowName, position, webhookData)
 
-  logger.info(`Webhook await resolved`, { runId, stepName })
+  logger.info(`Webhook await resolved`, { flowName, runId, stepName })
 
   return {
     success: true,

@@ -28,13 +28,13 @@ export async function registerAwaitPattern(
 
   switch (config.type) {
     case 'webhook':
-      return await registerWebhookAwait(runId, stepName, flowName, config)
+      return await registerWebhookAwait(runId, stepName, flowName, config, position)
 
     case 'event':
-      return await registerEventAwait(runId, stepName, flowName, config)
+      return await registerEventAwait(runId, stepName, flowName, config, position)
 
     case 'schedule':
-      return await registerScheduleAwait(runId, stepName, flowName, config)
+      return await registerScheduleAwait(runId, stepName, flowName, config, position)
 
     case 'time':
       return await registerTimeAwait(runId, stepName, flowName, config, position)

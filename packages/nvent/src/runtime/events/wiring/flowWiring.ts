@@ -42,8 +42,6 @@ export async function checkAndTriggerPendingSteps(
 ): Promise<void> {
   const logger = useNventLogger('flow-wiring')
   try {
-    logger.info('checkAndTriggerPendingSteps called', { flowName, runId })
-
     const analyzedFlows = $useAnalyzedFlows()
     const registry = $useQueueRegistry() as any
     const queue = useQueueAdapter()
@@ -120,80 +118,65 @@ export async function checkAndTriggerPendingSteps(
     const awaitingSteps = flowEntry?.metadata?.awaitingSteps || {}
 
     // Check all steps in the flow to see if any can now be triggered
-    logger.info('Checking pending steps', {
-      flowName,
-      runId,
-      totalSteps: Object.keys(flowDef.steps).length,
-      completedSteps: Array.from(completedSteps),
-      awaitingStepsInIndex: Object.keys(awaitingSteps),
-    })
-
     for (const [stepName, stepDef] of Object.entries(flowDef.steps)) {
       const step = stepDef as any
-
-      logger.info('Evaluating step', {
-        stepName,
-        hasSubscribes: !!step.subscribes,
-        isCompleted: completedSteps.has(stepName),
-        subscribes: step.subscribes,
-      })
 
       // Skip if step doesn't have dependencies or already completed
       if (!step.subscribes || completedSteps.has(stepName)) continue
 
-      // v0.5: Check await state - skip if step is currently awaiting
+      // v0.5: Check await state - skip if step is currently awaiting (not resolved)
       const awaitState = flowEntry?.metadata?.awaitingSteps?.[stepName]
-      if (awaitState) {
+      if (awaitState && awaitState.status === 'awaiting') {
         logger.debug('Step is awaiting, skipping trigger', {
           flowName,
           runId,
           stepName,
           awaitType: awaitState.awaitType,
           position: awaitState.position,
+          status: awaitState.status,
         })
         continue
       }
 
+      // Skip if await has timed out - step should not be retried
+      if (awaitState && awaitState.status === 'timeout') {
+        logger.debug('Step await timed out, skipping trigger', {
+          flowName,
+          runId,
+          stepName,
+          awaitType: awaitState.awaitType,
+        })
+        continue
+      }
+
+      // If await is resolved, allow the step to proceed
+      if (awaitState?.status === 'resolved') {
+        logger.debug('Step await is resolved, will proceed', {
+          flowName,
+          runId,
+          stepName,
+          awaitType: awaitState.awaitType,
+          position: awaitState.position,
+        })
+      }
+
       // v0.5: Check if any dependency steps are currently awaiting (awaitAfter pattern)
       // If a step has awaitAfter, its emits should be blocked until await is resolved
-      logger.info('Checking if dependencies are awaiting', {
-        stepName,
-        subscribes: step.subscribes,
-        awaitingStepsKeys: Object.keys(awaitingSteps),
-      })
-
       const isDependencyAwaiting = step.subscribes.some((sub: string) => {
-        logger.info('Checking subscription', { stepName, sub })
-
         // Find which step emitted this event by looking through all events
         const emitEvent = allEvents.find((evt: any) =>
           evt.type === 'emit' && evt.data?.name === sub,
         )
 
         if (!emitEvent) {
-          logger.info('Emit not found yet', { sub, stepName })
           return false // Emit hasn't happened yet
         }
 
         const emitStepName = emitEvent.stepName
-        logger.info('Found emit event', {
-          sub,
-          stepName,
-          emitStepName,
-          hasStepName: !!emitStepName,
-        })
 
         if (!emitStepName) {
-          logger.info('Emit has no stepName', { sub, stepName })
           return false
         }
-
-        logger.info('Checking await blocking', {
-          currentStep: stepName,
-          subscription: sub,
-          emitStepName,
-          hasAwaitState: !!awaitingSteps[emitStepName],
-        })
 
         // Check if the emitting step is awaiting in flow index metadata
         const awaitState = awaitingSteps[emitStepName]
@@ -201,21 +184,11 @@ export async function checkAndTriggerPendingSteps(
         // If the step is awaiting after completion, its emits are blocked
         // BUT: Only block if status is 'awaiting', not if it's 'resolved'
         if (awaitState?.position === 'after' && awaitState?.status === 'awaiting') {
-          logger.info('Blocking step - emitting step has awaitAfter in index', {
-            currentStep: stepName,
-            emitStepName,
-            awaitState,
-          })
           return true
         }
 
         // If await is resolved, do NOT block
         if (awaitState?.status === 'resolved') {
-          logger.info('NOT blocking - await is resolved', {
-            currentStep: stepName,
-            emitStepName,
-            awaitState,
-          })
           return false
         }
 
@@ -227,13 +200,6 @@ export async function checkAndTriggerPendingSteps(
         if (!emittingStepMeta && emitStepName === (flowDef as any).entry?.step) {
           emittingStepMeta = (flowDef as any).entry
         }
-
-        logger.info('Fallback check', {
-          currentStep: stepName,
-          emitStepName,
-          hasAwaitAfter: !!emittingStepMeta?.awaitAfter,
-          emittingStepMeta: emittingStepMeta ? 'found' : 'not found',
-        })
 
         // If the step has awaitAfter, check if await cycle is complete
         if (emittingStepMeta?.awaitAfter) {
@@ -248,14 +214,6 @@ export async function checkAndTriggerPendingSteps(
               evt.type === 'await.resolved' && evt.stepName === emitStepName,
             )
 
-            logger.info('Fallback blocking check', {
-              currentStep: stepName,
-              emitStepName,
-              stepCompleted,
-              awaitResolved,
-              willBlock: !awaitResolved,
-            })
-
             // Block if await hasn't resolved yet
             if (!awaitResolved) {
               return true
@@ -267,12 +225,6 @@ export async function checkAndTriggerPendingSteps(
       })
 
       if (isDependencyAwaiting) {
-        logger.info('BLOCKING step - dependency is awaiting', {
-          flowName,
-          runId,
-          stepName,
-          subscribes: step.subscribes,
-        })
         continue
       }
 
@@ -301,11 +253,18 @@ export async function checkAndTriggerPendingSteps(
           }
 
           // Build payload with emit data for non-entry steps
-          const payload = {
+          const payload: any = {
             flowId: runId,
             flowName,
             input: emitData, // Keyed by event name
           }
+
+          // If step had awaitBefore that's now resolved, include await data and mark as resolved
+          if (awaitState?.status === 'resolved' && awaitState?.position === 'before') {
+            payload.awaitResolved = true
+            payload.awaitData = awaitState.triggerData
+          }
+
           const jobId = `${runId}__${stepName}`
 
           // Get default job options from registry worker config (includes attempts config)
@@ -319,11 +278,10 @@ export async function checkAndTriggerPendingSteps(
           try {
             await queue.enqueue(stepMeta.queue, { name: stepName, data: payload, opts })
 
-            logger.debug('Triggered pending step', {
+            logger.debug('Enqueued pending step', {
               flowName,
               runId,
               step: stepName,
-              subscribes: step.subscribes,
             })
           }
           catch {
@@ -779,7 +737,7 @@ export function createFlowWiring() {
                 [`awaitingSteps.${stepName}.triggerData`]: triggerData,
               })
 
-              logger.info('Await resolved in index', { runId, stepName, position })
+              logger.debug('Await resolved in index', { runId, stepName, position })
             }
 
             // Resume the step by checking pending steps
@@ -788,6 +746,70 @@ export function createFlowWiring() {
           }
           catch (err) {
             logger.error('Error handling await resolution', {
+              runId,
+              stepName,
+              error: (err as any)?.message,
+            })
+          }
+        }
+
+        // For await.timeout events, handle based on timeoutAction
+        if (e.type === 'await.timeout') {
+          const timeoutEvent = e as any
+          const { stepName, timeoutAction, position, awaitType } = timeoutEvent
+          const action = timeoutAction || 'fail'
+
+          logger.warn('Await timeout occurred', {
+            runId,
+            stepName,
+            awaitType,
+            position,
+            action,
+          })
+
+          try {
+            if (action === 'fail') {
+              // Mark await as failed and fail the step/flow
+              if (store.indexUpdateWithRetry) {
+                await store.indexUpdateWithRetry(indexKey, runId, {
+                  [`awaitingSteps.${stepName}.status`]: 'timeout',
+                  [`awaitingSteps.${stepName}.timedOutAt`]: Date.now(),
+                })
+              }
+
+              // Emit step.failed event
+              // The flow completion logic will determine if the flow should fail
+              bus.publish({
+                type: 'step.failed',
+                runId,
+                flowName,
+                stepName,
+                stepId: `${runId}__${stepName}__timeout`,
+                attempt: 1,
+                data: {
+                  error: `Await timeout: ${awaitType} await exceeded timeout`,
+                },
+              })
+            }
+            else if (action === 'continue') {
+              // Mark as resolved with null data and continue
+              if (store.indexUpdateWithRetry) {
+                await store.indexUpdateWithRetry(indexKey, runId, {
+                  [`awaitingSteps.${stepName}.status`]: 'resolved',
+                  [`awaitingSteps.${stepName}.triggerData`]: null,
+                  [`awaitingSteps.${stepName}.timedOutAt`]: Date.now(),
+                })
+              }
+
+              logger.info('Await timeout - continuing with null data', { runId, stepName })
+
+              // Resume the step
+              await checkAndTriggerPendingSteps(flowName, runId, store)
+            }
+            // 'retry' action would need queue re-enqueueing logic - not implemented yet
+          }
+          catch (err) {
+            logger.error('Error handling await timeout', {
               runId,
               stepName,
               error: (err as any)?.message,
@@ -877,22 +899,33 @@ export function createFlowWiring() {
                 const currentEntry = await store.indexGet(indexKey, runId)
                 const currentStatus = currentEntry?.metadata?.status
 
-                // If currently awaiting, check if any awaits are still active
-                if (currentStatus === 'awaiting') {
-                  const awaitingStepsObj = (currentEntry?.metadata as any)?.awaitingSteps || {}
+                // Check for active or timed-out awaits
+                const awaitingStepsObj = (currentEntry?.metadata as any)?.awaitingSteps || {}
 
-                  let hasActiveAwaits = false
-                  for (const [stepName, awaitState] of Object.entries(awaitingStepsObj)) {
-                    if ((awaitState as any)?.status === 'awaiting') {
-                      hasActiveAwaits = true
-                      logger.debug('Found active await', { stepName, awaitState })
-                      break
-                    }
+                let hasActiveAwaits = false
+                let hasTimedOutAwaits = false
+
+                for (const [stepName, awaitState] of Object.entries(awaitingStepsObj)) {
+                  if ((awaitState as any)?.status === 'awaiting') {
+                    hasActiveAwaits = true
+                    logger.debug('Found active await', { stepName, awaitState })
                   }
+                  else if ((awaitState as any)?.status === 'timeout') {
+                    hasTimedOutAwaits = true
+                    logger.debug('Found timed-out await', { stepName, awaitState })
+                  }
+                }
 
-                  // Preserve 'awaiting' status if there are active awaits
-                  if (hasActiveAwaits) {
-                    updateMetadata.status = 'awaiting'
+                // If currently awaiting, preserve 'awaiting' status if there are active awaits
+                if (currentStatus === 'awaiting' && hasActiveAwaits) {
+                  updateMetadata.status = 'awaiting'
+                }
+
+                // If any await timed out, mark flow as failed (timeout is a blocking failure)
+                if (hasTimedOutAwaits) {
+                  updateMetadata.status = 'failed'
+                  if (!updateMetadata.completedAt) {
+                    updateMetadata.completedAt = Date.now()
                   }
                 }
               }
@@ -960,7 +993,6 @@ export function createFlowWiring() {
           runId: e.runId,
           flowName: e.flowName,
           error: (err as any)?.message,
-          stack: (err as any)?.stack,
         })
       }
     }
@@ -970,7 +1002,7 @@ export function createFlowWiring() {
     const eventTypes = [
       'flow.start', 'flow.completed', 'flow.failed', 'flow.cancel',
       'step.started', 'step.completed', 'step.failed', 'step.retry',
-      'await.registered', 'await.resolved',
+      'await.registered', 'await.resolved', 'await.timeout',
       'log', 'emit', 'state',
     ]
 

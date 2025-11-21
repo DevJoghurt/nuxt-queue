@@ -43,7 +43,7 @@ export default defineNitroPlugin(async (nitroApp) => {
 
         // Extract lifecycle hooks if present (v0.5 await integration)
         if (module && w?.flow) {
-          const hooks: LifecycleHooks = {}
+          const hooks: any = {}
           if (typeof module.onAwaitRegister === 'function') {
             hooks.onAwaitRegister = module.onAwaitRegister
           }
@@ -54,7 +54,12 @@ export default defineNitroPlugin(async (nitroApp) => {
           // Register hooks if any exist
           if (Object.keys(hooks).length > 0) {
             const hookRegistry = useHookRegistry()
-            const flowNames = Array.isArray(w.flow.names) ? w.flow.names : [w.flow.names]
+
+            // Handle both singular 'name' and plural 'names' (normalized by registry)
+            const flowNames = w.flow.names
+              ? (Array.isArray(w.flow.names) ? w.flow.names : [w.flow.names])
+              : (w.flow.name ? (Array.isArray(w.flow.name) ? w.flow.name : [w.flow.name]) : [])
+
             for (const flowName of flowNames) {
               if (flowName) {
                 hookRegistry.register(flowName, jobName, hooks)

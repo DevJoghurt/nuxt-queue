@@ -3,8 +3,18 @@ import { ref, watch, useToast } from '#imports'
 
 const toast = useToast()
 
+interface FlowExample {
+  id: string
+  name: string
+  description: string
+  trigger: string
+  testData: Record<string, any>
+  awaitType: string
+  instructions: string
+}
+
 // Flow examples with descriptions
-const flowExamples = [
+const flowExamples: FlowExample[] = [
   {
     id: 'webhook-approval',
     name: 'Webhook Approval Flow',
@@ -44,7 +54,7 @@ const flowExamples = [
   },
 ]
 
-const selectedFlow = ref(flowExamples[0])
+const selectedFlow = ref<FlowExample>(flowExamples[0]!)
 const testDataJson = ref(JSON.stringify(selectedFlow.value.testData, null, 2))
 const isStarting = ref(false)
 const lastFlowId = ref<string | null>(null)
@@ -86,21 +96,25 @@ async function startFlow() {
       },
     })
 
-    lastFlowId.value = (response as any).flowId || null
+    const result = response as any
+
+    // Generate a pseudo flowId for webhook/event testing
+    // In reality, the flow system generates UUIDs, but we'll use timestamp for simplicity
+    lastFlowId.value = `flow-${Date.now()}`
 
     toast.add({
-      title: 'Flow Started',
-      description: `Flow ID: ${lastFlowId.value}`,
-      color: 'green',
+      title: 'Trigger Fired',
+      description: `${result.subscribedFlows?.length || 0} flow(s) will start. Check console for details.`,
+      color: 'success',
     })
 
-    console.log('Flow started:', response)
+    console.log('Trigger fired:', result)
   }
   catch (error: any) {
     toast.add({
       title: 'Error',
-      description: error.message || 'Failed to start flow',
-      color: 'red',
+      description: error.message || 'Failed to fire trigger',
+      color: 'error',
     })
   }
   finally {
@@ -113,10 +127,9 @@ async function callWebhook() {
     isCallingWebhook.value = true
 
     let url = webhookUrl.value
-    if (lastFlowId.value && url.includes('{runId}')) {
-      url = url.replace('{runId}', lastFlowId.value).replace('{stepName}', 'process-approval')
-    }
-
+    
+    // Note: The actual runId and stepName should be copied from console logs
+    // where they are displayed when the await is registered
     const payload = JSON.parse(webhookPayload.value)
 
     const response = await $fetch(url, {
@@ -126,8 +139,8 @@ async function callWebhook() {
 
     toast.add({
       title: 'Webhook Called',
-      description: 'Approval webhook executed successfully',
-      color: 'green',
+      description: 'Approval webhook executed successfully. Flow should continue.',
+      color: 'success',
     })
 
     console.log('Webhook response:', response)
@@ -136,7 +149,7 @@ async function callWebhook() {
     toast.add({
       title: 'Webhook Error',
       description: error.data?.message || error.message || 'Failed to call webhook',
-      color: 'red',
+      color: 'error',
     })
   }
   finally {
@@ -161,7 +174,7 @@ async function emitEvent() {
     toast.add({
       title: 'Event Emitted',
       description: `Event ${eventName.value} published`,
-      color: 'green',
+      color: 'success',
     })
 
     console.log('Event response:', response)
@@ -170,7 +183,7 @@ async function emitEvent() {
     toast.add({
       title: 'Event Error',
       description: error.message || 'Failed to emit event',
-      color: 'red',
+      color: 'error',
     })
   }
   finally {
@@ -200,17 +213,16 @@ async function emitEvent() {
         <USelectMenu
           v-model="selectedFlow"
           :items="flowExamples"
-          option-attribute="name"
-          value-attribute="id"
-          class="mb-4 w-2/3"
+          label-key="name"
+          class="mb-4"
         >
-          <template #label>
-            <div>
+          <template #default="{ modelValue }">
+            <div v-if="modelValue">
               <div class="font-medium">
-                {{ selectedFlow.name }}
+                {{ modelValue.name }}
               </div>
               <div class="text-sm text-gray-500">
-                {{ selectedFlow.description }}
+                {{ modelValue.description }}
               </div>
             </div>
           </template>
@@ -218,7 +230,7 @@ async function emitEvent() {
 
         <UAlert
           :title="selectedFlow.instructions"
-          color="blue"
+          color="info"
           variant="soft"
           class="mb-4"
         />
@@ -230,7 +242,7 @@ async function emitEvent() {
               v-model="testDataJson"
               :rows="6"
               placeholder="Enter test data as JSON"
-              class="font-mono text-sm w-2/3"
+              class="font-mono text-sm"
             />
           </div>
 
@@ -244,7 +256,8 @@ async function emitEvent() {
           </UButton>
 
           <div v-if="lastFlowId" class="text-sm text-gray-600 dark:text-gray-400">
-            Last Flow ID: <code class="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{{ lastFlowId }}</code>
+            Last triggered: <code class="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{{ new Date().toLocaleTimeString() }}</code>
+            <p class="mt-1 text-xs">Check server console for actual flowId and webhook URLs</p>
           </div>
         </div>
       </UCard>
@@ -263,7 +276,6 @@ async function emitEvent() {
             <UInput
               v-model="webhookUrl"
               placeholder="/api/_webhook/await/..."
-              class="w-2/3"
             />
             <p class="text-xs text-gray-500 mt-1">
               {runId} and {stepName} will be replaced automatically if a flow is running
@@ -276,21 +288,20 @@ async function emitEvent() {
               v-model="webhookPayload"
               :rows="6"
               placeholder="Enter webhook payload as JSON"
-              class="font-mono text-sm w-2/3"
+              class="font-mono text-sm"
             />
           </div>
 
           <UButton
-            color="green"
+            color="success"
             :loading="isCallingWebhook"
-            :disabled="!lastFlowId"
             @click="callWebhook"
           >
             Call Webhook
           </UButton>
 
-          <p v-if="!lastFlowId" class="text-sm text-orange-600">
-            Start a flow first to enable webhook testing
+          <p class="text-sm text-orange-600">
+            <strong>Important:</strong> Copy the actual webhook URL from server console logs after starting the flow
           </p>
         </div>
       </UCard>
@@ -323,7 +334,7 @@ async function emitEvent() {
           </div>
 
           <UButton
-            color="green"
+            color="success"
             :loading="isEmittingEvent"
             @click="emitEvent"
           >

@@ -254,11 +254,13 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
           job.name,
           flowName,
           awaitBefore,
+          'before', // Position: awaitBefore means wait before execution
         )
 
         // Call lifecycle hook if exists
         const hookRegistry = useHookRegistry()
         const hooks = hookRegistry.load(flowName, job.name)
+
         if (hooks?.onAwaitRegister) {
           try {
             await hooks.onAwaitRegister(
@@ -273,21 +275,8 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
           }
         }
 
-        // Publish await.registered event with state data
-        await eventMgr.publishBus({
-          type: 'await.registered' as any,
-          runId: flowId || 'unknown',
-          flowName,
-          stepName: job.name,
-          data: {
-            awaitType: awaitBefore.type,
-            awaitConfig: awaitBefore,
-            position: 'before',
-            webhookUrl: (awaitResult as any).webhookUrl,
-            registeredAt: Date.now(),
-            timeoutAt: awaitBefore.timeout ? Date.now() + awaitBefore.timeout : undefined,
-          },
-        })
+        // await.registered event is published by the pattern implementation
+        // No need to publish again here
 
         // Return early - handler will execute after await resolves
         return {

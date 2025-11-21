@@ -179,7 +179,7 @@ export class FileQueueAdapter implements QueueAdapter {
     const workerInfo = this.workers.get(queueName)
     if (workerInfo && !workerInfo.paused) {
       // Don't catch errors here - let them propagate to dispatcher for retry handling
-      workerInfo.queue.push({ jobId, jobName: job.name, data: job.data }).catch(() => {
+      workerInfo.queue.push({ jobId, jobName: job.name, data: internalJob.data }).catch(() => {
         // Errors are handled by dispatcher's retry logic
       })
     }
@@ -485,6 +485,14 @@ export class FileQueueAdapter implements QueueAdapter {
         // Call the handler - it's a NodeHandler wrapped by createBullMQProcessor
         // which expects a job object and will build the full RunContext
         const result = await handler(jobLike as any, {} as any)
+
+        // Check if job is awaiting (awaitBefore pattern)
+        // If so, remove from jobs map so it can be re-enqueued with resolved data
+        if (result && typeof result === 'object' && (result as any).awaiting === true) {
+          this.jobs.delete(task.jobId)
+          await this.deleteJobFile(queueName, task.jobId)
+          return result
+        }
 
         // Update job state to completed
         await this.updateJobState(queueName, task.jobId, 'completed', {

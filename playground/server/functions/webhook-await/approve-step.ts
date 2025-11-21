@@ -17,9 +17,8 @@ export const config = defineFunctionConfig({
     emits: ['approval.processed'],
     awaitBefore: {
       type: 'webhook',
-      path: '/approve/{runId}/{stepName}',
       method: 'POST',
-      timeout: 300000, // 5 minutes for testing
+      timeout: 10000, // 10 seconds for testing
       timeoutAction: 'fail',
     },
   },

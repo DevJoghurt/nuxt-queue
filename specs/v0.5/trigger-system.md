@@ -571,8 +571,9 @@ export const config = defineFunctionConfig({
     // AWAIT BEFORE: Wait for trigger before step executes
     awaitBefore: {
       type: 'webhook',
-      path: '/approval/{runId}',  // {runId} auto-replaced
+      // Path is auto-generated: /{flowName}/{runId}/{stepName}
       timeout: 86400000,  // 24 hours
+      method: 'POST',
       schema: z.object({
         approved: z.boolean(),
         comments: z.string().optional()

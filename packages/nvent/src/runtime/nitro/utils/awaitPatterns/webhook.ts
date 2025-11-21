@@ -1,6 +1,9 @@
 import type { AwaitConfig } from '../../../../registry/types'
-import { useNventLogger, useStoreAdapter, useStreamTopics } from '#imports'
+import { useNventLogger, useRuntimeConfig } from '#imports'
 import { getEventBus } from '../../../events/eventBus'
+
+// Track active timeouts for webhook awaits
+const activeTimeouts = new Map<string, NodeJS.Timeout>()
 
 /**
  * Await Pattern: Webhook
@@ -13,58 +16,115 @@ export async function registerWebhookAwait(
   stepName: string,
   flowName: string,
   config: AwaitConfig,
+  position: 'before' | 'after' = 'after',
 ) {
   const logger = useNventLogger('await-webhook')
-  const store = useStoreAdapter()
   const eventBus = getEventBus()
-  const { SubjectPatterns } = useStreamTopics()
+  const runtimeConfig = useRuntimeConfig()
 
-  // Replace variables in path
-  const path = config.path
-    ?.replace('{runId}', runId)
-    ?.replace('{stepName}', stepName)
-    ?.replace('{flowName}', flowName)
+  // Auto-generate webhook path from flow context
+  const path = `/${flowName}/${runId}/${stepName}`
 
-  if (!path) {
-    throw new Error('Webhook await requires path configuration')
+  // Get base URL from config or Nitro context
+  let baseUrl = (runtimeConfig.nvent as any)?.webhooks?.baseUrl
+
+  // If not explicitly configured, try to get from Nitro's runtime config
+  if (!baseUrl) {
+    // In development, Nitro exposes the dev server URL
+    const nitroApp = (runtimeConfig as any).nitro?.app
+    if (nitroApp?.baseURL) {
+      // Construct from Nitro's URL (protocol + host)
+      baseUrl = `${nitroApp.baseURL}`
+    }
+    // Fallback: try common environment variables
+    if (!baseUrl) {
+      baseUrl = process.env.NITRO_URL
+        || process.env.URL
+        || (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : undefined)
+    }
   }
 
-  logger.info(`Registering webhook await: ${path}`, { runId, stepName })
-
-  // Store webhook route mapping in KV for fast lookup
-  if (store.kv?.set) {
-    const routeKey = SubjectPatterns.webhookRoute(path)
-    await store.kv.set(
-      routeKey,
-      {
-        runId,
-        stepName,
-        flowName,
-        method: config.method || 'POST',
-        registeredAt: Date.now(),
-      },
-      config.timeout ? Math.floor(config.timeout / 1000) : undefined,
-    )
+  if (!baseUrl) {
+    logger.warn('No baseUrl configured for webhooks. Set NUXT_PUBLIC_SITE_URL or nvent.webhooks.baseUrl')
+    baseUrl = 'http://localhost:3000' // Ultimate fallback
   }
 
-  // Emit await.registered event
+  const webhookPath = `/api/_webhook/await${path}`
+  const fullWebhookUrl = `${baseUrl.replace(/\/$/, '')}${webhookPath}`
+
+  logger.info(`Registering webhook await: ${fullWebhookUrl}`, { runId, stepName })
+
+  // Emit await.registered event (wiring will handle flow state updates)
   eventBus.publish({
     type: 'await.registered',
     flowName,
     runId,
     stepName,
+    awaitType: 'webhook',
+    position,
+    config,
     data: {
-      awaitType: 'webhook',
       path,
       method: config.method || 'POST',
       timeout: config.timeout,
+      registeredAt: Date.now(),
+      webhookUrl: fullWebhookUrl,
     },
-  } as any)
+  })
 
-  logger.debug(`Webhook await registered: ${path}`, { runId, stepName })
+  // Schedule timeout if configured
+  if (config.timeout && config.timeout > 0) {
+    const timeoutKey = `${runId}:${stepName}`
+
+    // Clear any existing timeout for this await
+    const existingTimeout = activeTimeouts.get(timeoutKey)
+    if (existingTimeout) {
+      clearTimeout(existingTimeout)
+    }
+
+    const timeoutId = setTimeout(() => {
+      logger.warn('Webhook await timeout', {
+        runId,
+        stepName,
+        flowName,
+        timeout: config.timeout,
+        timeoutAction: config.timeoutAction || 'fail',
+      })
+
+      // Remove from active timeouts
+      activeTimeouts.delete(timeoutKey)
+
+      // Emit timeout event
+      eventBus.publish({
+        type: 'await.timeout',
+        flowName,
+        runId,
+        stepName,
+        position,
+        awaitType: 'webhook',
+        timeoutAction: config.timeoutAction || 'fail',
+        data: {
+          timeout: config.timeout,
+          registeredAt: Date.now() - (config.timeout || 0),
+          timedOutAt: Date.now(),
+        },
+      } as any)
+    }, config.timeout)
+
+    activeTimeouts.set(timeoutKey, timeoutId)
+
+    logger.debug(`Webhook timeout scheduled`, {
+      runId,
+      stepName,
+      timeout: config.timeout,
+      timeoutAction: config.timeoutAction,
+    })
+  }
+
+  logger.debug(`Webhook await registered: ${fullWebhookUrl}`, { runId, stepName })
 
   return {
-    webhookUrl: path,
+    webhookUrl: fullWebhookUrl,
     timeout: config.timeout,
   }
 }
@@ -75,35 +135,36 @@ export async function registerWebhookAwait(
 export async function resolveWebhookAwait(
   runId: string,
   stepName: string,
+  flowName: string,
+  position: 'before' | 'after',
   webhookData: any,
 ) {
   const logger = useNventLogger('await-webhook')
   const eventBus = getEventBus()
-  const store = useStoreAdapter()
-  const { SubjectPatterns } = useStreamTopics()
 
   logger.info(`Resolving webhook await`, { runId, stepName })
 
-  // Get flow name from index
-  const flowName = runId.split('-')[0]
+  // Clear timeout if exists
+  const timeoutKey = `${runId}:${stepName}`
+  const existingTimeout = activeTimeouts.get(timeoutKey)
+  if (existingTimeout) {
+    clearTimeout(existingTimeout)
+    activeTimeouts.delete(timeoutKey)
+    logger.debug('Cleared webhook timeout', { runId, stepName })
+  }
 
-  // Emit await.resolved event
+  // Emit await.resolved event (wiring will handle flow state updates and processing)
   eventBus.publish({
     type: 'await.resolved',
     flowName,
     runId,
     stepName,
+    position,
+    triggerData: webhookData,
     data: {
-      triggerData: webhookData,
       resolvedAt: Date.now(),
     },
   } as any)
-
-  // Clean up KV entries
-  if (store.kv?.delete) {
-    const statusKey = SubjectPatterns.awaitStatus(runId, stepName)
-    await store.kv.delete(statusKey)
-  }
 
   logger.debug(`Webhook await resolved`, { runId, stepName })
 }

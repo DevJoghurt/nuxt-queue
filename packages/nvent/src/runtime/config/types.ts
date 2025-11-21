@@ -215,6 +215,19 @@ export interface StreamConfig {
 }
 
 /**
+ * Webhooks configuration
+ */
+export interface WebhooksConfig {
+  /**
+   * Base URL for webhook endpoints
+   * Auto-detected from Nitro context in development
+   * Set explicitly for production or to override auto-detection
+   * @default Auto-detected from NUXT_PUBLIC_SITE_URL, NITRO_URL, or dev server (http://localhost:3000 fallback)
+   */
+  baseUrl?: string
+}
+
+/**
  * Flow configuration
  */
 export interface FlowConfig {
@@ -396,6 +409,12 @@ export interface ModuleOptions {
   flows?: FlowConfig
 
   /**
+   * Webhooks configuration
+   * @since v0.5.0
+   */
+  webhooks?: WebhooksConfig
+
+  /**
    * Shared connection configurations
    * Used as fallback if adapters don't specify their own connections
    * @since v0.4.1
@@ -412,6 +431,7 @@ export interface ModuleConfig {
   stream: Required<StreamConfig>
   store: Required<StoreConfig>
   flows: Required<FlowConfig>
+  webhooks: Required<WebhooksConfig>
   connections: Required<ConnectionsConfig>
   rootDir?: string
 }

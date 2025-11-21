@@ -155,7 +155,7 @@ export default defineNuxtModule<ModuleOptions>().with({
 
     // add webhook handler
     addServerHandler({
-      route: '/api/_webhook/await/**',
+      route: '/api/_webhook/await/:flowName/:runId/:stepName',
       handler: resolve('./runtime/nitro/routes/webhook.await'),
     })
     addServerHandler({

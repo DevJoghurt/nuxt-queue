@@ -64,7 +64,6 @@ export type TriggerDefinition = {
  */
 export type AwaitConfig = {
   type: 'webhook' | 'event' | 'schedule' | 'time'
-  path?: string
   method?: string
   event?: string
   filterKey?: string

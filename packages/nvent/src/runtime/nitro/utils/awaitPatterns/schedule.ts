@@ -1,5 +1,5 @@
 import type { AwaitConfig } from '../../../../registry/types'
-import { useNventLogger, useStoreAdapter, useStreamTopics } from '#imports'
+import { useNventLogger } from '#imports'
 import { getEventBus } from '../../../events/eventBus'
 
 /**
@@ -13,11 +13,10 @@ export async function registerScheduleAwait(
   stepName: string,
   flowName: string,
   config: AwaitConfig,
+  position: 'before' | 'after' = 'after',
 ) {
   const logger = useNventLogger('await-schedule')
-  const store = useStoreAdapter()
   const eventBus = getEventBus()
-  const { SubjectPatterns } = useStreamTopics()
 
   if (!config.cron) {
     throw new Error('Schedule await requires cron expression configuration')
@@ -34,42 +33,27 @@ export async function registerScheduleAwait(
 
   const timeUntilNext = nextOccurrence - Date.now()
 
-  // Store await registration
-  if (store.kv?.set) {
-    const statusKey = SubjectPatterns.awaitStatus(runId, stepName)
-    await store.kv.set(
-      statusKey,
-      {
-        runId,
-        stepName,
-        flowName,
-        awaitType: 'schedule',
-        cron: config.cron,
-        nextOccurrence,
-        registeredAt: Date.now(),
-      },
-      config.timeout ? Math.floor(config.timeout / 1000) : Math.floor(timeUntilNext / 1000) + 60,
-    )
-  }
-
   // Schedule the resolution
   // Note: In production, this should be handled by a dedicated scheduler service
   // For now, we'll use a simple setTimeout
   setTimeout(async () => {
-    await resolveScheduleAwait(runId, stepName, { scheduledAt: nextOccurrence })
+    await resolveScheduleAwait(runId, stepName, flowName, position, { scheduledAt: nextOccurrence })
   }, timeUntilNext)
 
-  // Emit await.registered event
+  // Emit await.registered event (wiring will handle storage)
   eventBus.publish({
     type: 'await.registered',
     flowName,
     runId,
     stepName,
+    awaitType: 'schedule',
+    position,
+    config,
     data: {
-      awaitType: 'schedule',
       cron: config.cron,
       nextOccurrence,
       timeUntilNext,
+      registeredAt: Date.now(),
     },
   } as any)
 
@@ -108,35 +92,27 @@ function calculateNextCronOccurrence(
 export async function resolveScheduleAwait(
   runId: string,
   stepName: string,
+  flowName: string,
+  position: 'before' | 'after',
   scheduleData: any,
 ) {
   const logger = useNventLogger('await-schedule')
   const eventBus = getEventBus()
-  const store = useStoreAdapter()
-  const { SubjectPatterns } = useStreamTopics()
 
   logger.info(`Resolving schedule await`, { runId, stepName })
 
-  // Get flow name from runId
-  const flowName = runId.split('-')[0]
-
-  // Emit await.resolved event
+  // Emit await.resolved event (wiring will handle cleanup and processing)
   eventBus.publish({
     type: 'await.resolved',
     flowName,
     runId,
     stepName,
+    position,
+    triggerData: scheduleData,
     data: {
-      triggerData: scheduleData,
       resolvedAt: Date.now(),
     },
   } as any)
-
-  // Clean up KV entries
-  if (store.kv?.delete) {
-    const statusKey = SubjectPatterns.awaitStatus(runId, stepName)
-    await store.kv.delete(statusKey)
-  }
 
   logger.debug(`Schedule await resolved`, { runId, stepName })
 }

@@ -1,5 +1,5 @@
 import type { AwaitConfig } from '../../../../registry/types'
-import { useNventLogger, useStoreAdapter, useStreamTopics } from '#imports'
+import { useNventLogger } from '#imports'
 import { getEventBus } from '../../../events/eventBus'
 
 /**
@@ -13,35 +13,16 @@ export async function registerEventAwait(
   stepName: string,
   flowName: string,
   config: AwaitConfig,
+  position: 'before' | 'after' = 'after',
 ) {
   const logger = useNventLogger('await-event')
-  const store = useStoreAdapter()
   const eventBus = getEventBus()
-  const { SubjectPatterns } = useStreamTopics()
 
   if (!config.event) {
     throw new Error('Event await requires event name configuration')
   }
 
   logger.info(`Registering event await: ${config.event}`, { runId, stepName })
-
-  // Store await registration
-  if (store.kv?.set) {
-    const statusKey = SubjectPatterns.awaitStatus(runId, stepName)
-    await store.kv.set(
-      statusKey,
-      {
-        runId,
-        stepName,
-        flowName,
-        awaitType: 'event',
-        eventName: config.event,
-        filterKey: config.filterKey,
-        registeredAt: Date.now(),
-      },
-      config.timeout ? Math.floor(config.timeout / 1000) : undefined,
-    )
-  }
 
   // Subscribe to the target event
   const unsubscribe = eventBus.onType(config.event, async (event: any) => {
@@ -56,21 +37,24 @@ export async function registerEventAwait(
     }
 
     // Event matches - resolve the await
-    await resolveEventAwait(runId, stepName, event.data)
+    await resolveEventAwait(runId, stepName, flowName, position, event.data)
     unsubscribe() // Clean up subscription
   })
 
-  // Emit await.registered event
+  // Emit await.registered event (wiring will handle storage)
   eventBus.publish({
     type: 'await.registered',
     flowName,
     runId,
     stepName,
+    awaitType: 'event',
+    position,
+    config,
     data: {
-      awaitType: 'event',
       eventName: config.event,
       filterKey: config.filterKey,
       timeout: config.timeout,
+      registeredAt: Date.now(),
     },
   } as any)
 
@@ -88,35 +72,27 @@ export async function registerEventAwait(
 export async function resolveEventAwait(
   runId: string,
   stepName: string,
+  flowName: string,
+  position: 'before' | 'after',
   eventData: any,
 ) {
   const logger = useNventLogger('await-event')
   const eventBus = getEventBus()
-  const store = useStoreAdapter()
-  const { SubjectPatterns } = useStreamTopics()
 
   logger.info(`Resolving event await`, { runId, stepName })
 
-  // Get flow name from runId
-  const flowName = runId.split('-')[0]
-
-  // Emit await.resolved event
+  // Emit await.resolved event (wiring will handle cleanup and processing)
   eventBus.publish({
     type: 'await.resolved',
     flowName,
     runId,
     stepName,
+    position,
+    triggerData: eventData,
     data: {
-      triggerData: eventData,
       resolvedAt: Date.now(),
     },
   } as any)
-
-  // Clean up KV entries
-  if (store.kv?.delete) {
-    const statusKey = SubjectPatterns.awaitStatus(runId, stepName)
-    await store.kv.delete(statusKey)
-  }
 
   logger.debug(`Event await resolved`, { runId, stepName })
 }
