@@ -103,7 +103,7 @@ export default defineNuxtModule<ModuleOptions>().with({
     let lastCompiledRegistry = compiledSnapshot
 
     // Template filenames for reference
-    const REGISTRY_TEMPLATE = 'queue-registry.mjs'
+    const REGISTRY_TEMPLATE = 'function-registry.mjs'
     const HANDLERS_TEMPLATE = 'worker-handlers.mjs'
     const ANALYZED_FLOWS_TEMPLATE = 'analyzed-flows.mjs'
     const TRIGGER_REGISTRY_TEMPLATE = 'trigger-registry.mjs'

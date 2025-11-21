@@ -1,4 +1,4 @@
-import { defineEventHandler, getRouterParam, createError, useQueueAdapter, $useQueueRegistry } from '#imports'
+import { defineEventHandler, getRouterParam, createError, useQueueAdapter, $useFunctionRegistry } from '#imports'
 
 export default defineEventHandler(async (event) => {
   const flowName = getRouterParam(event, 'name')
@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Get flow info from registry
-  const registry = $useQueueRegistry() as any
+  const registry = $useFunctionRegistry() as any
   const flow = registry?.flows?.[flowName]
   if (!flow || !flow.entry) {
     throw createError({ statusCode: 404, statusMessage: `Flow '${flowName}' not found` })

@@ -1,4 +1,4 @@
-import { $useQueueRegistry, useFlowEngine, useQueueAdapter } from '#imports'
+import { $useFunctionRegistry, useFlowEngine, useQueueAdapter } from '#imports'
 import type { RunContext, NodeHandler } from '../worker/node/runner'
 
 export type ExtendedRunContext = RunContext & {
@@ -16,7 +16,7 @@ export const defineFunction: DefineFunction = (handler) => {
     const provider = useQueueAdapter()
     // Use ctx.flow if already provided (it has context-aware wrapper), otherwise create new
     const flow = ctx.flow || useFlowEngine()
-    const registry = $useQueueRegistry() as any
+    const registry = $useFunctionRegistry() as any
     const extended: ExtendedRunContext = {
       ...ctx,
       provider,

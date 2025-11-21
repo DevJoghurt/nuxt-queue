@@ -4,7 +4,7 @@ import {
   useFlowEngine,
   useEventManager,
   useNventLogger,
-  $useQueueRegistry,
+  $useFunctionRegistry,
   useAwait,
   useHookRegistry,
   useStreamTopics,
@@ -217,7 +217,7 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
     const flowName = (job.data as any)?.flowName || 'unknown'
 
     // v0.5: Load step configuration from registry for await patterns
-    const registry = $useQueueRegistry() as any
+    const registry = $useFunctionRegistry() as any
     const flowRegistry = (registry?.flows || {})[flowName]
 
     // Check both steps and entry for the step metadata

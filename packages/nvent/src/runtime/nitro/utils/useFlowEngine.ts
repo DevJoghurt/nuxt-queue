@@ -1,11 +1,11 @@
-import { $useQueueRegistry, useQueueAdapter, useEventManager, useNventLogger, useStoreAdapter, useStreamTopics } from '#imports'
+import { $useFunctionRegistry, useQueueAdapter, useEventManager, useNventLogger, useStoreAdapter, useStreamTopics } from '#imports'
 import { randomUUID } from 'node:crypto'
 
 /**
  * Flow Engine for starting and emitting flow events
  */
 export const useFlowEngine = () => {
-  const registry = $useQueueRegistry()
+  const registry = $useFunctionRegistry()
   const queueAdapter = useQueueAdapter()
   const eventsManager = useEventManager()
   const logger = useNventLogger('flow-engine')

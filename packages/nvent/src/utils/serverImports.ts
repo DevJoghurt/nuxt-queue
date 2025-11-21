@@ -6,9 +6,9 @@ export function getServerImports(resolverFn: (path: string) => string, buildDir:
   return [
     // Generated templates
     {
-      name: 'useQueueRegistry',
-      as: '$useQueueRegistry',
-      from: resolverFn(buildDir + '/queue-registry'),
+      name: 'useFunctionRegistry',
+      as: '$useFunctionRegistry',
+      from: resolverFn(buildDir + '/function-registry'),
     },
     {
       name: 'useWorkerHandlers',

@@ -1,7 +1,7 @@
 import type { EventRecord } from '../../adapters/interfaces/store'
 import type { AwaitRegisteredEvent, AwaitResolvedEvent } from '../types'
 import { getEventBus } from '../eventBus'
-import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, useStreamTopics, useRuntimeConfig } from '#imports'
+import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useFunctionRegistry, useStreamTopics, useRuntimeConfig } from '#imports'
 import { createStallDetector } from '../utils/stallDetector'
 
 /**
@@ -43,7 +43,7 @@ export async function checkAndTriggerPendingSteps(
   const logger = useNventLogger('flow-wiring')
   try {
     const analyzedFlows = $useAnalyzedFlows()
-    const registry = $useQueueRegistry() as any
+    const registry = $useFunctionRegistry() as any
     const queue = useQueueAdapter()
     const { SubjectPatterns } = useStreamTopics()
 

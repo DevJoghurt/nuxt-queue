@@ -2,7 +2,7 @@ import type { EventRecord } from '../../adapters/interfaces/store'
 import type { TriggerFiredEvent } from '../types'
 import type { TriggerEntry, TriggerSubscription } from '../../../registry/types'
 import { getEventBus } from '../eventBus'
-import { useTrigger, useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useQueueRegistry, useStreamTopics } from '#imports'
+import { useTrigger, useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useFunctionRegistry, useStreamTopics } from '#imports'
 import { getTriggerRuntime } from '../utils/triggerRuntime'
 
 /**
@@ -398,7 +398,7 @@ export async function startFlowFromTrigger(
   const logger = useNventLogger('trigger-wiring')
   const eventBus = getEventBus()
   const queue = useQueueAdapter()
-  const registry = $useQueueRegistry() as any
+  const registry = $useFunctionRegistry() as any
   const analyzedFlows = $useAnalyzedFlows()
 
   // Verify flow exists

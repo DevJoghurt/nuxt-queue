@@ -1,10 +1,10 @@
-import { defineEventHandler, useRuntimeConfig, $useQueueRegistry, useQueueAdapter, useNventLogger } from '#imports'
+import { defineEventHandler, useRuntimeConfig, $useFunctionRegistry, useQueueAdapter, useNventLogger } from '#imports'
 
 const logger = useNventLogger('api-queues-index')
 
 export default defineEventHandler(async () => {
   const rc: any = useRuntimeConfig()
-  const registry = $useQueueRegistry() as any
+  const registry = $useFunctionRegistry() as any
 
   // Check if adapters are initialized
   let queue: any

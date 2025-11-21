@@ -1,4 +1,4 @@
-import { defineNitroPlugin, $useWorkerHandlers, $useQueueRegistry, useQueueAdapter, useHookRegistry } from '#imports'
+import { defineNitroPlugin, $useWorkerHandlers, $useFunctionRegistry, useQueueAdapter, useHookRegistry } from '#imports'
 import type { NodeHandler } from '../../worker/node/runner'
 import { createJobProcessor } from '../../worker/node/runner'
 
@@ -19,7 +19,7 @@ export default defineNitroPlugin(async (nitroApp) => {
     try {
       // @ts-ignore - generated at build time
       const handlers = $useWorkerHandlers() as ReadonlyArray<HandlerEntry>
-      const registry = ($useQueueRegistry() as any) || { workers: [] }
+      const registry = ($useFunctionRegistry() as any) || { workers: [] }
 
       // Track which queues have handlers registered
       const registeredQueues = new Set<string>()
