@@ -16,6 +16,7 @@
 
 <script setup lang="ts">
 import type { NavigationMenuItem } from '@nuxt/ui'
+import Dashboard from './dashboard.vue'
 import Queue from './queues/index.vue'
 import QueueJobs from './queues/jobs.vue'
 import QueueJob from './queues/job.vue'
@@ -25,14 +26,16 @@ import TriggerDetail from './triggers/[name].vue'
 
 const navItems = [
   [
-    { label: 'Queues', icon: 'i-lucide-app-window', path: '/' },
+    { label: 'Dashboard', icon: 'i-lucide-layout-dashboard', path: '/' },
+    { label: 'Queues', icon: 'i-lucide-app-window', path: '/queues' },
     { label: 'Flows', icon: 'i-lucide-git-branch', path: '/flows' },
     { label: 'Triggers', icon: 'i-lucide-zap', path: '/triggers' },
   ],
 ] as (NavigationMenuItem & { path?: string })[][]
 
 const routes = {
-  '/': Queue,
+  '/': Dashboard,
+  '/queues': Queue,
   '/queues/:name/jobs': QueueJobs,
   '/queues/:name/jobs/:id': QueueJob,
   '/flows': QueueFlows,
