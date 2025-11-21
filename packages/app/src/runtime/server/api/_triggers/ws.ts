@@ -10,7 +10,7 @@ import {
 import type { SubscriptionHandle } from '#nvent/adapters'
 
 interface PeerContext {
-  subscriptions: Map<string, SubscriptionHandle> // streamName -> subscription handle
+  subscriptions: Map<string, SubscriptionHandle> // triggerName -> subscription handle
 }
 
 const peerContexts = new WeakMap<any, PeerContext>()
@@ -32,20 +32,18 @@ function safeSend(peer: any, data: any): boolean {
 }
 
 /**
- * WebSocket endpoint for flow run events
- * Supports subscribing to specific flow runs and receiving real-time updates
+ * WebSocket endpoint for trigger events
+ * Supports subscribing to specific triggers and receiving real-time updates
  *
  * Message format (client -> server):
  * {
  *   "type": "subscribe",
- *   "flowName": "example",
- *   "runId": "abc123"
+ *   "triggerName": "user.created"
  * }
  *
  * {
  *   "type": "unsubscribe",
- *   "flowName": "example",
- *   "runId": "abc123"
+ *   "triggerName": "user.created"
  * }
  *
  * {
@@ -55,28 +53,24 @@ function safeSend(peer: any, data: any): boolean {
  * Message format (server -> client):
  * {
  *   "type": "event",
- *   "flowName": "example",
- *   "runId": "abc123",
- *   "event": { v: 1, eventType: "...", record: {...} }
+ *   "triggerName": "user.created",
+ *   "event": { type: "...", data: {...}, timestamp: ... }
  * }
  *
  * {
  *   "type": "history",
- *   "flowName": "example",
- *   "runId": "abc123",
+ *   "triggerName": "user.created",
  *   "events": [ ...historicalEvents ]
  * }
  *
  * {
  *   "type": "subscribed",
- *   "flowName": "example",
- *   "runId": "abc123"
+ *   "triggerName": "user.created"
  * }
  *
  * {
  *   "type": "unsubscribed",
- *   "flowName": "example",
- *   "runId": "abc123"
+ *   "triggerName": "user.created"
  * }
  *
  * {
@@ -91,7 +85,7 @@ function safeSend(peer: any, data: any): boolean {
  */
 export default defineWebSocketHandler({
   async open(peer) {
-    const logger = useNventLogger('api-flows-ws')
+    const logger = useNventLogger('api-triggers-ws')
     logger.info('[ws] client connected:', { peerId: peer.id })
 
     const { registerWsPeer } = usePeerManager()
@@ -112,7 +106,7 @@ export default defineWebSocketHandler({
   },
 
   async message(peer, message) {
-    const logger = useNventLogger('api-flows-ws')
+    const logger = useNventLogger('api-triggers-ws')
     const context = peerContexts.get(peer)
     if (!context) {
       logger.error('[ws] no context for peer:', { peerId: peer.id })
@@ -125,7 +119,6 @@ export default defineWebSocketHandler({
     }
     catch {
       // Silently ignore parse errors during connection close
-      // This can happen if we receive a partial message during shutdown
       safeSend(peer, {
         type: 'error',
         message: 'Invalid JSON',
@@ -133,13 +126,13 @@ export default defineWebSocketHandler({
       return
     }
 
-    const { type, flowName, runId } = data
+    const { type, triggerName } = data
 
     if (type === 'subscribe') {
-      if (!flowName || !runId) {
+      if (!triggerName) {
         safeSend(peer, {
           type: 'error',
-          message: 'Missing flowName or runId',
+          message: 'Missing triggerName',
         })
         return
       }
@@ -159,10 +152,9 @@ export default defineWebSocketHandler({
         })
         return
       }
-      const subscriptionKey = `${flowName}:${runId}`
 
       // Unsubscribe from any existing subscription with same key
-      const existingHandle = context.subscriptions.get(subscriptionKey)
+      const existingHandle = context.subscriptions.get(triggerName)
       if (existingHandle) {
         try {
           await existingHandle.unsubscribe()
@@ -172,18 +164,14 @@ export default defineWebSocketHandler({
         }
       }
 
-      // Subscribe to StreamAdapter client-messages channel
-      // Topic published by StreamCoordinator when client messages are enabled
+      // Subscribe to trigger stream pub/sub topic
+      const { SubjectPatterns, getTriggerEventTopic } = useStreamTopics()
+      const streamTopic = getTriggerEventTopic(triggerName)
+      const storeSubject = SubjectPatterns.trigger(triggerName)
 
-      const { SubjectPatterns, getClientFlowTopic } = useStreamTopics()
-
-      // Calculate the subject for store operations (subject pattern: nq:flow:{runId})
-      const subject = SubjectPatterns.flowRun(runId)
-
-      // Subscribe to client:flow:{runId} channel for real-time updates
-      const topic = getClientFlowTopic(runId)
-      const handle = await stream.subscribe(topic, async (message: any) => {
-        // message.data.event contains the flow event
+      // Subscribe to trigger stream for real-time updates
+      const handle = await stream.subscribe(streamTopic, async (message: any) => {
+        // message.data.event contains the trigger event
         const event = message.data?.event
         if (!event) {
           logger.warn('[ws] Received message without event data:', message)
@@ -192,34 +180,24 @@ export default defineWebSocketHandler({
 
         safeSend(peer, {
           type: 'event',
-          flowName,
-          runId,
-          event: {
-            v: 1,
-            eventType: event.type,
-            record: event,
-          },
+          triggerName,
+          event,
         })
       })
 
-      context.subscriptions.set(subscriptionKey, handle)
+      context.subscriptions.set(triggerName, handle)
 
       // Send historical events (backfill) from StoreAdapter
       try {
-        const historicalEvents = await store.read(subject, {
+        const historicalEvents = await store.read(storeSubject, {
           limit: 100,
-          order: 'asc', // forward order
+          order: 'desc', // Most recent first
         })
 
         safeSend(peer, {
           type: 'history',
-          flowName,
-          runId,
-          events: historicalEvents.map(e => ({
-            v: 1,
-            eventType: (e as any).kind || e.type,
-            record: e,
-          })),
+          triggerName,
+          events: historicalEvents || [],
         })
       }
       catch (err) {
@@ -233,31 +211,28 @@ export default defineWebSocketHandler({
       // Confirm subscription
       safeSend(peer, {
         type: 'subscribed',
-        flowName,
-        runId,
+        triggerName,
       })
     }
     else if (type === 'unsubscribe') {
-      if (!flowName || !runId) {
+      if (!triggerName) {
         safeSend(peer, {
           type: 'error',
-          message: 'Missing flowName or runId',
+          message: 'Missing triggerName',
         })
         return
       }
 
-      const subscriptionKey = `${flowName}:${runId}`
-      const handle = context.subscriptions.get(subscriptionKey)
+      const handle = context.subscriptions.get(triggerName)
 
       if (handle) {
         try {
           await handle.unsubscribe()
-          context.subscriptions.delete(subscriptionKey)
+          context.subscriptions.delete(triggerName)
 
           safeSend(peer, {
             type: 'unsubscribed',
-            flowName,
-            runId,
+            triggerName,
           })
         }
         catch (err) {
@@ -284,7 +259,7 @@ export default defineWebSocketHandler({
   },
 
   async close(peer, event) {
-    const logger = useNventLogger('api-flows-ws')
+    const logger = useNventLogger('api-triggers-ws')
     const isNormalClosure = event?.code === 1000 || event?.code === 1001
     if (!isNormalClosure) {
       logger.info('[ws] client disconnected:', { peerId: peer.id, code: event?.code, reason: event?.reason })
@@ -314,7 +289,7 @@ export default defineWebSocketHandler({
   },
 
   async error(peer, error) {
-    const logger = useNventLogger('api-flows-ws')
+    const logger = useNventLogger('api-triggers-ws')
     logger.error('[ws] error for peer:', { peerId: peer.id, error })
 
     const { unregisterWsPeer } = usePeerManager()

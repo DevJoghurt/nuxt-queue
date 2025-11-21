@@ -2,7 +2,7 @@ import type { EventRecord } from '../../adapters/interfaces/store'
 import type { TriggerFiredEvent } from '../types'
 import type { TriggerEntry, TriggerSubscription } from '../../../registry/types'
 import { getEventBus } from '../eventBus'
-import { useTrigger, useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useFunctionRegistry, useStreamTopics } from '#imports'
+import { useTrigger, useNventLogger, useStoreAdapter, useStreamAdapter, useQueueAdapter, $useAnalyzedFlows, $useFunctionRegistry, useStreamTopics } from '#imports'
 import { getTriggerRuntime } from '../utils/triggerRuntime'
 
 /**
@@ -22,7 +22,8 @@ export function createTriggerWiring() {
     const eventBus = getEventBus()
     const trigger = useTrigger()
     const store = useStoreAdapter()
-    const { SubjectPatterns } = useStreamTopics()
+    const stream = useStreamAdapter()
+    const { SubjectPatterns, getTriggerEventTopic } = useStreamTopics()
     const runtime = getTriggerRuntime(store, logger)
 
     // Initialize trigger runtime
@@ -285,8 +286,50 @@ export function createTriggerWiring() {
       }
     }
 
-    // Subscribe to all trigger event types with BOTH handlers
-    // Order matters: Persistence runs first, then orchestration
+    // ============================================================================
+    // HANDLER 3: STREAMING - Publish persisted events to WebSocket clients
+    // ============================================================================
+    const handleClientMessage = async (e: EventRecord) => {
+      // Only publish persisted events (with id/ts from store)
+      if (!e.id || !e.ts) return
+
+      const triggerName = (e as any).triggerName
+      if (!triggerName) return
+
+      try {
+        const topic = getTriggerEventTopic(triggerName)
+
+        await stream.publish(topic, {
+          type: 'trigger.event',
+          data: {
+            event: {
+              id: e.id,
+              ts: e.ts,
+              type: e.type,
+              triggerName,
+              data: e.data,
+            },
+          },
+          timestamp: Date.now(),
+        })
+
+        logger.debug('Published trigger event to stream', {
+          triggerName,
+          type: e.type,
+          id: e.id,
+        })
+      }
+      catch (err) {
+        logger.error('ERROR publishing trigger event to stream', {
+          triggerName,
+          type: e.type,
+          error: (err as any)?.message,
+        })
+      }
+    }
+
+    // Subscribe to all trigger event types with ALL handlers
+    // Order matters: Persistence runs first, then orchestration, then streaming
     const eventTypes = [
       'trigger.registered',
       'trigger.updated',
@@ -304,6 +347,11 @@ export function createTriggerWiring() {
     // Register orchestration handler second (updates metadata, triggers flows)
     for (const type of eventTypes) {
       unsubs.push(eventBus.onType(type, handleOrchestration))
+    }
+
+    // Register streaming handler third (publishes to WebSocket clients)
+    for (const type of eventTypes) {
+      unsubs.push(eventBus.onType(type, handleClientMessage))
     }
 
     logger.info('Trigger event wiring setup complete')
