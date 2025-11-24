@@ -62,8 +62,49 @@ export class TriggerRuntime {
     return this.state.triggers.get(name)
   }
 
-  getAllTriggers(): TriggerEntry[] {
-    return Array.from(this.state.triggers.values())
+  getAllTriggers(options?: {
+    sortBy?: 'registeredAt' | 'lastActivityAt' | 'name'
+    order?: 'asc' | 'desc'
+    limit?: number
+    offset?: number
+  }): TriggerEntry[] {
+    let triggers = Array.from(this.state.triggers.values())
+
+    // Apply sorting
+    if (options?.sortBy) {
+      triggers.sort((a, b) => {
+        const aValue = a[options.sortBy!]
+        const bValue = b[options.sortBy!]
+
+        // Handle undefined values
+        if (aValue === undefined && bValue === undefined) return 0
+        if (aValue === undefined) return 1
+        if (bValue === undefined) return -1
+
+        // Compare values
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return options.order === 'desc'
+            ? bValue.localeCompare(aValue)
+            : aValue.localeCompare(bValue)
+        }
+
+        // Numeric comparison (timestamps)
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return options.order === 'desc' ? bValue - aValue : aValue - bValue
+        }
+
+        return 0
+      })
+    }
+
+    // Apply pagination
+    if (options?.offset !== undefined || options?.limit !== undefined) {
+      const offset = options.offset || 0
+      const limit = options.limit || triggers.length
+      triggers = triggers.slice(offset, offset + limit)
+    }
+
+    return triggers
   }
 
   getSubscribedFlows(trigger: string): string[] {

@@ -35,22 +35,22 @@
             variant="gray"
           />
           <StatCard
-            icon="i-lucide-radio"
-            :count="stats.entryTriggers"
-            label="Entry Triggers"
-            variant="blue"
+            icon="i-lucide-check-circle"
+            :count="stats.active"
+            label="Active"
+            variant="emerald"
           />
           <StatCard
-            icon="i-lucide-hand"
-            :count="stats.awaitTriggers"
-            label="Await Triggers"
-            variant="purple"
+            icon="i-lucide-users"
+            :count="stats.totalSubscriptions"
+            label="Subscriptions"
+            variant="blue"
           />
           <StatCard
             icon="i-lucide-activity"
             :count="stats.totalFires"
-            label="Fires (24h)"
-            variant="emerald"
+            label="Total Fires"
+            variant="purple"
           />
         </div>
 

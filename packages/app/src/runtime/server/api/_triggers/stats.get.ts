@@ -40,15 +40,18 @@ export default defineEventHandler(async () => {
 
   return {
     total: triggers.length,
+    active: byStatus.active || 0,
+    inactive: byStatus.inactive || 0,
+    retired: byStatus.retired || 0,
     byType,
     byScope,
     byStatus,
     totalSubscriptions: subscriptions.length,
     totalFires,
-    totalSuccesses: 0, // Not tracked in current stats structure
-    totalFailures: 0, // Not tracked in current stats structure
-    successRate: '100', // Default to 100% since we don't track failures yet
-    entryTriggers: byScope.flow || 0,
-    awaitTriggers: byScope.run || 0,
+    // Count triggers with active subscriptions
+    withSubscribers: triggers.filter((t: any) => {
+      const triggerSubs = subscriptions.filter((s: any) => s.triggerName === t.name)
+      return triggerSubs.length > 0
+    }).length,
   }
 })

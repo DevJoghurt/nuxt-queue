@@ -15,167 +15,146 @@
     <div class="flex-1 min-h-0 overflow-y-auto">
       <div class="max-w-7xl mx-auto p-6">
         <!-- Stats Overview -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
-            <div class="flex items-center gap-3">
-              <div class="p-2 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                <UIcon
-                  name="i-lucide-git-branch"
-                  class="w-5 h-5 text-blue-600 dark:text-blue-400"
-                />
-              </div>
-              <div>
-                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                  {{ flows?.length || 0 }}
-                </div>
-                <div class="text-sm text-gray-500">
-                  Total Flows
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
-            <div class="flex items-center gap-3">
-              <div class="p-2 bg-green-50 dark:bg-green-950 rounded-lg">
-                <UIcon
-                  name="i-lucide-layers"
-                  class="w-5 h-5 text-green-600 dark:text-green-400"
-                />
-              </div>
-              <div>
-                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                  {{ totalSteps }}
-                </div>
-                <div class="text-sm text-gray-500">
-                  Total Steps
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
-            <div class="flex items-center gap-3">
-              <div class="p-2 bg-purple-50 dark:bg-purple-950 rounded-lg">
-                <UIcon
-                  name="i-lucide-pause"
-                  class="w-5 h-5 text-purple-600 dark:text-purple-400"
-                />
-              </div>
-              <div>
-                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                  {{ flowsWithAwait }}
-                </div>
-                <div class="text-sm text-gray-500">
-                  With Await
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
-            <div class="flex items-center gap-3">
-              <div class="p-2 bg-orange-50 dark:bg-orange-950 rounded-lg">
-                <UIcon
-                  name="i-lucide-bar-chart-3"
-                  class="w-5 h-5 text-orange-600 dark:text-orange-400"
-                />
-              </div>
-              <div>
-                <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                  {{ maxLevels }}
-                </div>
-                <div class="text-sm text-gray-500">
-                  Max Levels
-                </div>
-              </div>
-            </div>
-          </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <StatCard
+            icon="i-lucide-git-branch"
+            :count="flows?.length || 0"
+            label="Total Flows"
+            variant="gray"
+          />
+          <StatCard
+            icon="i-lucide-layers"
+            :count="totalSteps"
+            label="Total Steps"
+            variant="blue"
+          />
+          <StatCard
+            icon="i-lucide-pause"
+            :count="flowsWithAwait"
+            label="With Await"
+            variant="purple"
+          />
+          <StatCard
+            icon="i-lucide-bar-chart-3"
+            :count="maxLevels"
+            label="Max Levels"
+            variant="emerald"
+          />
         </div>
 
         <!-- Filters -->
-        <div class="flex items-center gap-3 mb-4">
+        <div class="mb-4 flex items-center gap-3">
           <div class="flex-1">
             <UInput
               v-model="searchQuery"
               icon="i-lucide-search"
               placeholder="Search flows..."
-              class="w-full"
+              size="sm"
             />
           </div>
           <USelectMenu
-            v-model="selectedRuntime"
-            :items="runtimeOptions"
-            placeholder="All Runtimes"
-            class="w-48"
+            v-model="awaitFilter"
+            :items="awaitFilterOptions"
+            value-key="value"
+            placeholder="All Flows"
+            size="sm"
+            class="w-40"
           >
-            <template #leading>
-              <UIcon
-                v-if="selectedRuntime"
-                name="i-lucide-filter"
-                class="w-4 h-4"
-              />
+            <template #label>
+              <span v-if="awaitFilter === 'all'">All Flows</span>
+              <div
+                v-else
+                class="flex items-center gap-2"
+              >
+                <UIcon
+                  :name="awaitFilter === 'with-await' ? 'i-lucide-pause' : 'i-lucide-play'"
+                  class="w-4 h-4"
+                />
+                <span>{{ awaitFilter === 'with-await' ? 'With Await' : 'No Await' }}</span>
+              </div>
             </template>
           </USelectMenu>
         </div>
 
         <!-- Flows List -->
-        <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-          <div class="divide-y divide-gray-200 dark:divide-gray-800">
-            <div
-              v-if="!filteredFlows || filteredFlows.length === 0"
-              class="p-8 text-center text-gray-500"
+        <div
+          v-if="!filteredFlows || filteredFlows.length === 0"
+          class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-8 text-center text-gray-500"
+        >
+          <div v-if="searchQuery || awaitFilter !== 'all'">
+            <UIcon
+              name="i-lucide-search-x"
+              class="w-12 h-12 animate-spin mx-auto mb-3 opacity-50"
+            />
+            <p>No flows match your filters</p>
+            <UButton
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              class="mt-2"
+              @click="clearFilters"
             >
-              <UIcon
-                name="i-lucide-git-branch"
-                class="w-12 h-12 mx-auto mb-3 opacity-50"
-              />
-              <div>No flows found</div>
-            </div>
+              Clear Filters
+            </UButton>
+          </div>
+          <div v-else>
+            <UIcon
+              name="i-lucide-git-branch"
+              class="w-12 h-12 mx-auto mb-3 opacity-50"
+            />
+            <p>No flows found</p>
+          </div>
+        </div>
+        <div
+          v-else
+          class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden"
+        >
+          <div class="divide-y divide-gray-100 dark:divide-gray-800">
             <div
               v-for="flow in filteredFlows"
               :key="flow.id"
-              class="p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
+              class="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer"
               @click="openFlow(flow.id)"
             >
               <div class="flex items-start justify-between gap-4">
+                <!-- Left: Flow Info -->
                 <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2 mb-1">
-                    <h3 class="font-medium text-gray-900 dark:text-gray-100 truncate">
+                  <div class="flex items-center gap-2 mb-2">
+                    <UIcon
+                      name="i-lucide-git-branch"
+                      class="w-4 h-4 shrink-0 text-blue-500"
+                    />
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
                       {{ flow.id }}
                     </h3>
-                    <span
-                      class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                      :class="{
-                        'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300': flow.runtime === 'nodejs',
-                        'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300': flow.runtime === 'python',
-                      }"
-                    >
-                      {{ flow.runtime }}
-                    </span>
-                    <span
+                    <UBadge
                       v-if="flow.hasAwait"
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
+                      label="await"
+                      color="purple"
+                      variant="subtle"
+                      size="xs"
                     >
-                      <UIcon
-                        name="i-lucide-pause"
-                        class="w-3 h-3"
-                      />
-                      await
-                    </span>
+                      <template #leading>
+                        <UIcon
+                          name="i-lucide-pause"
+                          class="w-3 h-3"
+                        />
+                      </template>
+                    </UBadge>
                   </div>
-                  <div class="flex items-center gap-4 text-sm text-gray-500">
+                  
+                  <div class="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
                     <div class="flex items-center gap-1">
                       <UIcon
                         name="i-lucide-layers"
-                        class="w-3.5 h-3.5"
+                        class="w-3 h-3"
                       />
                       <span>{{ flow.steps.length }} step{{ flow.steps.length === 1 ? '' : 's' }}</span>
                     </div>
                     <div class="flex items-center gap-1">
                       <UIcon
                         name="i-lucide-bar-chart-3"
-                        class="w-3.5 h-3.5"
+                        class="w-3 h-3"
                       />
                       <span>{{ flow.levels }} level{{ flow.levels === 1 ? '' : 's' }}</span>
                     </div>
@@ -185,19 +164,43 @@
                     >
                       <UIcon
                         name="i-lucide-clock"
-                        class="w-3.5 h-3.5"
+                        class="w-3 h-3"
                       />
                       <span>{{ formatTimeout(flow.timeout) }} timeout</span>
                     </div>
+                    <!-- Runtime Badges -->
+                    <div
+                      v-if="getRuntimes(flow).length > 0"
+                      class="flex items-center gap-1"
+                    >
+                      <UIcon
+                        name="i-lucide-cpu"
+                        class="w-3 h-3"
+                      />
+                      <span>{{ getRuntimes(flow).join(', ') }}</span>
+                    </div>
                   </div>
                 </div>
-                <UIcon
-                  name="i-lucide-chevron-right"
-                  class="w-5 h-5 text-gray-400 shrink-0 mt-1"
+
+                <!-- Right: Action -->
+                <UButton
+                  icon="i-lucide-arrow-right"
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  square
                 />
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Footer Info -->
+        <div
+          v-if="filteredFlows && filteredFlows.length > 0"
+          class="mt-4 text-center text-sm text-gray-500 dark:text-gray-400"
+        >
+          Showing {{ filteredFlows.length }} flow{{ filteredFlows.length === 1 ? '' : 's' }}
         </div>
       </div>
     </div>
@@ -205,17 +208,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, useAnalyzedFlows, useComponentRouter } from '#imports'
+import { ref, computed } from '#imports'
+import { UButton, UIcon, UBadge, UInput, USelectMenu } from '#components'
+import { useAnalyzedFlows } from '../../composables/useAnalyzedFlows'
+import { useComponentRouter } from '../../composables/useComponentRouter'
+import StatCard from '../../components/StatCard.vue'
+
 const flows = useAnalyzedFlows()
 const router = useComponentRouter()
 
+// Filters
 const searchQuery = ref('')
-const selectedRuntime = ref<string | null>(null)
+const awaitFilter = ref('all')
 
-const runtimeOptions = [
-  { label: 'All Runtimes', value: null },
-  { label: 'Node.js', value: 'nodejs' },
-  { label: 'Python', value: 'python' },
+const awaitFilterOptions = [
+  { label: 'All Flows', value: 'all' },
+  { label: 'With Await', value: 'with-await', icon: 'i-lucide-pause' },
+  { label: 'No Await', value: 'no-await', icon: 'i-lucide-play' },
 ]
 
 const filteredFlows = computed(() => {
@@ -232,11 +241,12 @@ const filteredFlows = computed(() => {
     )
   }
 
-  // Filter by runtime
-  if (selectedRuntime.value) {
-    filtered = filtered.filter(flow =>
-      flow.runtime === selectedRuntime.value,
-    )
+  // Filter by await
+  if (awaitFilter.value === 'with-await') {
+    filtered = filtered.filter(flow => flow.hasAwait)
+  }
+  else if (awaitFilter.value === 'no-await') {
+    filtered = filtered.filter(flow => !flow.hasAwait)
   }
 
   return filtered
@@ -259,6 +269,24 @@ const maxLevels = computed(() => {
     return 0
   return Math.max(...flows.value.map(flow => flow.levels))
 })
+
+const clearFilters = () => {
+  searchQuery.value = ''
+  awaitFilter.value = 'all'
+}
+
+const getRuntimes = (flow: any) => {
+  const runtimes = new Set<string>()
+  if (!flow.steps || !Array.isArray(flow.steps)) {
+    return []
+  }
+  for (const step of flow.steps) {
+    if (step.runtime) {
+      runtimes.add(step.runtime)
+    }
+  }
+  return Array.from(runtimes)
+}
 
 function formatTimeout(ms: number) {
   if (ms < 1000)

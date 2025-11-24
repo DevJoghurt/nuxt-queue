@@ -7,7 +7,11 @@ import { defineEventHandler, useTrigger } from '#imports'
 export default defineEventHandler(async () => {
   const { getAllTriggers, getSubscribedFlows, getTriggerStats } = useTrigger()
 
-  const triggers = getAllTriggers()
+  // Get all triggers sorted by registeredAt (newest first)
+  const triggers = getAllTriggers({
+    sortBy: 'registeredAt',
+    order: 'desc',
+  })
 
   // Enhance each trigger with subscriptions and stats
   const enhancedTriggers = await Promise.all(

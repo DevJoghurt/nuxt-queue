@@ -41,16 +41,15 @@ export interface TriggerInfo {
 
 export interface TriggerStatsOverview {
   total: number
+  active: number
+  inactive: number
+  retired: number
   byType: Record<string, number>
   byScope: Record<string, number>
   byStatus: Record<string, number>
   totalSubscriptions: number
   totalFires: number
-  totalSuccesses: number
-  totalFailures: number
-  successRate: string
-  entryTriggers: number
-  awaitTriggers: number
+  withSubscribers: number
 }
 
 /**

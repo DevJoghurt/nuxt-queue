@@ -229,9 +229,15 @@ export function useTrigger() {
 
     /**
      * Get all registered triggers
+     * @param options - Sorting and pagination options
      */
-    getAllTriggers(): TriggerEntry[] {
-      return runtime.getAllTriggers()
+    getAllTriggers(options?: {
+      sortBy?: 'registeredAt' | 'lastActivityAt' | 'name'
+      order?: 'asc' | 'desc'
+      limit?: number
+      offset?: number
+    }): TriggerEntry[] {
+      return runtime.getAllTriggers(options)
     },
 
     /**

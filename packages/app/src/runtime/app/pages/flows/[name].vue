@@ -3,26 +3,53 @@
     <!-- Header -->
     <div class="border-b border-gray-200 dark:border-gray-800 px-6 py-3 shrink-0">
       <div class="flex items-center justify-between">
-        <div class="flex items-center gap-4">
-          <h1 class="text-lg font-semibold">
-            Flows
-          </h1>
+        <div class="flex items-center gap-3">
+          <UButton
+            icon="i-lucide-arrow-left"
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            square
+            @click="goBack"
+          />
+          <div>
+            <h1 class="text-lg font-semibold flex items-center gap-2">
+              <UIcon
+                name="i-lucide-git-branch"
+                class="w-5 h-5 text-blue-500"
+              />
+              <span>{{ selectedFlow }}</span>
+            </h1>
+            <div
+              v-if="selectedFlowMeta"
+              class="flex items-center gap-2 mt-1"
+            >
+              <UBadge
+                v-if="selectedFlowMeta.hasAwait"
+                label="await"
+                color="secondary"
+                variant="subtle"
+                size="xs"
+              />
+              <UBadge
+                v-if="selectedFlowMeta.stepCount"
+                :label="`${selectedFlowMeta.stepCount} steps`"
+                color="primary"
+                variant="subtle"
+                size="xs"
+              />
+              <UBadge
+                v-if="selectedFlowMeta.levelCount"
+                :label="`${selectedFlowMeta.levelCount} levels`"
+                color="neutral"
+                variant="subtle"
+                size="xs"
+              />
+            </div>
+          </div>
         </div>
         <div class="flex items-center gap-3">
-          <USelectMenu
-            v-model="selectedFlow"
-            :items="(flows || []).map((f: any) => f.id)"
-            placeholder="Select a flow..."
-            class="w-64"
-          >
-            <template #leading>
-              <UIcon
-                v-if="selectedFlow"
-                name="i-lucide-git-branch"
-                class="w-4 h-4 text-gray-500"
-              />
-            </template>
-          </USelectMenu>
+          <!-- Flow actions can go here -->
         </div>
       </div>
     </div>
@@ -202,7 +229,7 @@
                 <FlowSchedulesList
                   v-if="selectedFlow"
                   ref="schedulesListRef"
-                  :flow-name="selectedFlow"
+                  :flow-name="selectedFlow || ''"
                   class="px-4 py-3"
                   @updated="handleSchedulesUpdated"
                 />
@@ -287,8 +314,8 @@
                     :started-at="runSnapshot.startedAt"
                     :completed-at="runSnapshot.completedAt"
                     :steps="flowState.stepList.value"
-                    :flow-name="selectedFlow"
-                    :run-id="selectedRunId"
+                    :flow-name="selectedFlow || undefined"
+                    :run-id="selectedRunId || undefined"
                     :trigger-name="flowState.state.value.meta?.triggerName"
                     :trigger-type="flowState.state.value.meta?.triggerType"
                     :flow-def="selectedFlowDef"
@@ -404,7 +431,6 @@ import FlowSchedulesList from '../../components/flow/SchedulesList.vue'
 import FlowScheduleDialog from '../../components/flow/ScheduleDialog.vue'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import {
-  USelectMenu,
   UIcon,
   UButton,
   UModal,
@@ -412,17 +438,45 @@ import {
   UTabs,
   UDropdownMenu,
   UAccordion,
+  UBadge,
 } from '#components'
+import { useRoute, useRouter } from '#app'
 
 // Composables
 import { useAnalyzedFlows } from '../../composables/useAnalyzedFlows'
-import { useFlowsNavigation } from '../../composables/useFlowsNavigation'
 import { useFlowRunsInfinite } from '../../composables/useFlowRunsInfinite'
 import { useFlowRunTimeline } from '../../composables/useFlowRunTimeline'
 import { useFlowRunsPolling } from '../../composables/useFlowRunsPolling'
+import { useComponentRouter } from '../../composables/useComponentRouter'
 
-// Navigation state (synced with URL)
-const { selectedFlow, selectedRunId } = useFlowsNavigation()
+const componentRouter = useComponentRouter()
+const router = useRouter()
+const route = useRoute()
+
+// Extract flow name from route parameter [name] (like triggers page does)
+const selectedFlow = computed(() => {
+  const path = componentRouter.route.value?.path || ''
+  const match = path.match(/\/flows\/([^/]+)/)
+  return match && match[1] ? decodeURIComponent(match[1]) : null
+})
+
+// Get run ID from URL query parameter
+const selectedRunId = computed({
+  get: () => (route.query.run as string) || '',
+  set: (value: string) => {
+    router.push({
+      query: {
+        ...route.query,
+        run: value || undefined,
+      },
+    })
+  },
+})
+
+// Back navigation
+const goBack = () => {
+  componentRouter.push('/flows')
+}
 
 // Main tab state (Diagram or Timeline)
 const mainTab = ref<'diagram' | 'timeline'>('diagram')
@@ -457,6 +511,10 @@ const selectedFlowDef = computed(() => {
   return flows.value.find((f: any) => f.id === selectedFlow.value)
 })
 
+// Convert computed to ref for composables (with default empty string)
+const selectedFlowRef = computed(() => selectedFlow.value || '')
+const selectedRunIdRef = computed(() => selectedRunId.value || '')
+
 // Fetch runs for selected flow with infinite scroll (persists across HMR)
 const {
   items: runs,
@@ -466,10 +524,10 @@ const {
   loadMore: loadMoreRuns,
   refresh: refreshRuns,
   checkForNewRuns,
-} = useFlowRunsInfinite(selectedFlow)
+} = useFlowRunsInfinite(selectedFlowRef)
 
 // Manage timeline/SSE for selected run
-const { flowState, isConnected, isReconnecting } = useFlowRunTimeline(selectedFlow, selectedRunId)
+const { flowState, isConnected, isReconnecting } = useFlowRunTimeline(selectedFlowRef, selectedRunIdRef)
 
 // Auto-poll runs list to keep it fresh (always poll when a flow is selected)
 // Use checkForNewRuns instead of refresh to avoid scroll reset
