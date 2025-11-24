@@ -83,8 +83,8 @@
 import { computed, ref, watch, nextTick } from '#imports'
 import type { Node as VFNode, Edge as VFEdge } from '@vue-flow/core'
 import { Handle, Position } from '@vue-flow/core'
-import FlowNodeCard from '../components/FlowNodeCard.vue'
-import FlowAwaitNode from '../components/FlowAwaitNode.vue'
+import FlowNodeCard from './NodeCard.vue'
+import FlowAwaitNode from './AwaitNode.vue'
 
 interface AwaitConfig {
   type: 'time' | 'event' | 'webhook'

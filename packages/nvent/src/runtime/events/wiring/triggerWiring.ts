@@ -152,7 +152,7 @@ export function createTriggerWiring() {
           logger.info('Registered trigger in index', { triggerName })
         }
 
-        // For trigger.updated, update index
+        // For trigger.updated, update index AND runtime
         if (e.type === 'trigger.updated') {
           const data = e.data as any
 
@@ -160,6 +160,7 @@ export function createTriggerWiring() {
             await store.indexUpdateWithRetry(indexKey, triggerName, {
               type: data.type,
               scope: data.scope,
+              status: data.status,
               displayName: data.displayName,
               description: data.description,
               webhook: data.webhook,
@@ -169,7 +170,23 @@ export function createTriggerWiring() {
             })
           }
 
-          logger.info('Updated trigger in index', { triggerName })
+          // Update runtime state with new config
+          const existing = runtime.getTrigger(triggerName)
+          if (existing) {
+            const updated: TriggerEntry = {
+              ...existing,
+              status: data.status !== undefined ? data.status : existing.status,
+              displayName: data.displayName !== undefined ? data.displayName : existing.displayName,
+              description: data.description !== undefined ? data.description : existing.description,
+              webhook: data.webhook !== undefined ? data.webhook : existing.webhook,
+              schedule: data.schedule !== undefined ? data.schedule : existing.schedule,
+              config: data.config !== undefined ? data.config : existing.config,
+              lastActivityAt: now,
+            }
+            runtime.addTrigger(triggerName, updated)
+          }
+
+          logger.info('Updated trigger in index and runtime', { triggerName, status: data.status })
         }
 
         // For subscription.added, update trigger index
@@ -177,30 +194,33 @@ export function createTriggerWiring() {
           const data = e.data as any
           const { flow, mode, isUpdate } = data
 
+          // Check if subscription already exists to prevent duplicates
+          const existingSub = runtime.getSubscription(triggerName, flow)
+
           if (store.indexUpdateWithRetry) {
             await store.indexUpdateWithRetry(indexKey, triggerName, {
               [`subscriptions.${flow}.mode`]: mode,
-              [`subscriptions.${flow}.subscribedAt`]: now,
+              [`subscriptions.${flow}.subscribedAt`]: existingSub ? (existingSub.registeredAt || now) : now,
               lastActivityAt: now,
             })
 
-            // Increment subscriber count if this is a new subscription
-            if (!isUpdate && store.indexIncrement) {
+            // Increment subscriber count only if this is a truly new subscription
+            if (!existingSub && store.indexIncrement) {
               await store.indexIncrement(indexKey, triggerName, 'stats.activeSubscribers', 1)
             }
           }
 
-          // Add to runtime
+          // Add/update in runtime
           const subscription: TriggerSubscription = {
             triggerName,
             flowName: flow,
             mode,
             source: 'programmatic',
-            registeredAt: now,
+            registeredAt: existingSub?.registeredAt || now,
           }
           runtime.addSubscription(triggerName, flow, subscription)
 
-          logger.info('Subscription added', { triggerName, flow, mode })
+          logger.info(`Subscription ${existingSub ? 'updated' : 'added'}`, { triggerName, flow, mode })
         }
 
         // For subscription.removed, update trigger index
@@ -247,33 +267,23 @@ export function createTriggerWiring() {
           logger.debug('Trigger fired and processed', { triggerName, flowsStarted: flowsStarted.length })
         }
 
-        // For trigger.retired, update status
-        if (e.type === 'trigger.retired') {
-          const data = e.data as any
-
-          // Get final stats from index
-          let finalStats = { totalFires: 0, activeSubscribers: 0 }
-          if (store.indexGet) {
-            const entry = await store.indexGet(indexKey, triggerName)
-            if (entry?.metadata) {
-              finalStats = (entry.metadata as any).stats || finalStats
-            }
+        // For trigger.deleted, remove all data
+        if (e.type === 'trigger.deleted') {
+          // Remove from index
+          if (store.indexDelete) {
+            await store.indexDelete(indexKey, triggerName)
           }
 
-          if (store.indexUpdateWithRetry) {
-            await store.indexUpdateWithRetry(indexKey, triggerName, {
-              status: 'retired',
-              retiredAt: now,
-              retiredReason: data.reason,
-              lastActivityAt: now,
-              finalStats,
-            })
+          // Remove trigger stream (contains event history)
+          const triggerStreamKey = SubjectPatterns.trigger(triggerName)
+          if (store.delete) {
+            await store.delete(triggerStreamKey)
           }
 
           // Remove from runtime
           runtime.removeTrigger(triggerName)
 
-          logger.info('Trigger retired', { triggerName, reason: data.reason })
+          logger.info('Trigger deleted completely', { triggerName })
         }
       }
       catch (err) {
@@ -333,7 +343,7 @@ export function createTriggerWiring() {
     const eventTypes = [
       'trigger.registered',
       'trigger.updated',
-      'trigger.retired',
+      'trigger.deleted',
       'trigger.fired',
       'subscription.added',
       'subscription.removed',

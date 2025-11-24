@@ -35,7 +35,12 @@
         />
 
         <!-- Step Content -->
-        <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm">
+        <UForm
+          ref="form"
+          :schema="currentStepSchema"
+          :state="formState"
+          class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm"
+        >
           <!-- Step 1: Type Selection -->
           <div v-show="currentStep === 1">
             <div class="p-6 border-b border-gray-200 dark:border-gray-800">
@@ -52,22 +57,22 @@
                   v-for="type in triggerTypes"
                   :key="type.value"
                   class="group relative p-6 rounded-lg border-2 transition-all text-left"
-                  :class="formData.type === type.value 
-                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/30' 
+                  :class="formState.type === type.value
+                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/30'
                     : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700'"
                   @click="selectType(type.value)"
                 >
                   <div class="flex items-start gap-4">
                     <div
                       class="w-12 h-12 rounded-lg flex items-center justify-center shrink-0 transition-colors"
-                      :class="formData.type === type.value 
-                        ? 'bg-primary-100 dark:bg-primary-900/40' 
+                      :class="formState.type === type.value
+                        ? 'bg-primary-100 dark:bg-primary-900/40'
                         : 'bg-gray-100 dark:bg-gray-800 group-hover:bg-gray-200 dark:group-hover:bg-gray-700'"
                     >
                       <UIcon
                         :name="type.icon"
                         class="w-6 h-6"
-                        :class="formData.type === type.value ? 'text-primary-600 dark:text-primary-400' : 'text-gray-600 dark:text-gray-400'"
+                        :class="formState.type === type.value ? 'text-primary-600 dark:text-primary-400' : 'text-gray-600 dark:text-gray-400'"
                       />
                     </div>
                     <div class="flex-1 min-w-0">
@@ -91,7 +96,7 @@
                       </div>
                     </div>
                     <div
-                      v-if="formData.type === type.value"
+                      v-if="formState.type === type.value"
                       class="absolute top-4 right-4"
                     >
                       <div class="w-6 h-6 rounded-full bg-primary-500 flex items-center justify-center">
@@ -117,54 +122,11 @@
                 Provide details about your trigger
               </p>
             </div>
-            <div class="p-6 space-y-6">
-              <div>
-                <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                  Trigger Name *
-                </label>
-                <UInput
-                  v-model="formData.name"
-                  placeholder="e.g., user-signup-trigger"
-                  size="lg"
-                />
-                <p
-                  v-if="errors.name"
-                  class="text-xs text-red-500 dark:text-red-400 mt-1.5"
-                >
-                  {{ errors.name }}
-                </p>
-                <p
-                  v-else
-                  class="text-xs text-gray-500 dark:text-gray-400 mt-1.5"
-                >
-                  A unique identifier for this trigger. Use lowercase with hyphens.
-                </p>
-              </div>
-
-              <div>
-                <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                  Display Name
-                </label>
-                <UInput
-                  v-model="formData.displayName"
-                  placeholder="e.g., User Signup Trigger"
-                  size="lg"
-                />
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
-                  A human-readable name for display purposes.
-                </p>
-              </div>
-
-              <div>
-                <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                  Description
-                </label>
-                <UTextarea
-                  v-model="formData.description"
-                  placeholder="Describe what this trigger does..."
-                  :rows="3"
-                />
-              </div>
+            <div class="p-6">
+              <BasicInfoCard
+                v-model="formState"
+                no-card
+              />
             </div>
           </div>
 
@@ -174,17 +136,17 @@
               <div class="flex items-center gap-3 mb-2">
                 <div
                   class="w-10 h-10 rounded-lg flex items-center justify-center"
-                  :class="getTriggerTypeBgClass(formData.type)"
+                  :class="getTriggerTypeBgClass(formState.type)"
                 >
                   <UIcon
-                    :name="getTriggerTypeIcon(formData.type)"
+                    :name="getTriggerTypeIcon(formState.type)"
                     class="w-5 h-5"
-                    :class="getTriggerTypeIconClass(formData.type)"
+                    :class="getTriggerTypeIconClass(formState.type)"
                   />
                 </div>
                 <div>
                   <h2 class="text-xl font-semibold">
-                    {{ getTriggerTypeLabel(formData.type) }} Configuration
+                    {{ getTriggerTypeLabel(formState.type) }} Configuration
                   </h2>
                   <p class="text-sm text-gray-500 dark:text-gray-400">
                     Configure the specific settings for this trigger type
@@ -192,235 +154,59 @@
                 </div>
               </div>
             </div>
-            <div class="p-6 space-y-6">
-              <!-- Event Trigger Config -->
-              <template v-if="formData.type === 'event'">
-              <div>
-                <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                  Event Name *
-                </label>
-                <UInput
-                  v-model="formData.config.event"
-                  placeholder="e.g., user.created"
-                  size="lg"
-                  icon="i-lucide-radio"
-                />
-                <p
-                  v-if="errors.event"
-                  class="text-xs text-red-500 dark:text-red-400 mt-1.5"
-                >
-                  {{ errors.event }}
-                </p>
-                <p
-                  v-else
-                  class="text-xs text-gray-500 dark:text-gray-400 mt-1.5"
-                >
-                  The event name to listen for. Use dot notation for namespacing.
-                </p>
-              </div>                <div>
-                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                    Event Filter (Optional)
-                    <UBadge
-                      label="Advanced"
-                      size="xs"
-                      color="neutral"
-                      variant="subtle"
-                    />
-                  </label>
-                  <UTextarea
-                    v-model="formData.config.filter"
-                    placeholder='e.g., { "type": "premium" }'
-                    :rows="3"
+            <div class="p-6">
+              <!-- Event Config -->
+              <EventConfig
+                v-if="formState.type === 'event'"
+                v-model="formState.config"
+                no-card
+                name="config"
+              />
+
+              <!-- Webhook Config -->
+              <WebhookConfig
+                v-if="formState.type === 'webhook'"
+                v-model="formState.webhook"
+                no-card
+                name="webhook"
+              />
+
+              <!-- Schedule Config -->
+              <ScheduleConfig
+                v-if="formState.type === 'schedule'"
+                v-model="formState.schedule"
+                no-card
+                name="schedule"
+              />
+
+              <!-- Manual Trigger Info -->
+              <div
+                v-if="formState.type === 'manual'"
+                class="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800"
+              >
+                <div class="flex items-start gap-3">
+                  <UIcon
+                    name="i-lucide-info"
+                    class="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0"
                   />
-                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
-                    JSON filter to match specific event payloads.
-                  </p>
-                </div>
-              </template>
-
-              <!-- Webhook Trigger Config -->
-              <template v-if="formData.type === 'webhook'">
-                <div>
-                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                    HTTP Method *
-                  </label>
-                  <USelectMenu
-                    v-model="formData.config.method"
-                    :items="['POST', 'GET', 'PUT', 'PATCH', 'DELETE']"
-                    size="lg"
-                  />
-                </div>
-
-                <div>
-                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                    Webhook Path *
-                  </label>
-                  <div class="flex items-center gap-2">
-                    <div class="text-sm text-gray-500 dark:text-gray-400 font-mono bg-gray-100 dark:bg-gray-800 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700">
-                      /api/_trigger/
-                    </div>
-                    <UInput
-                      v-model="formData.config.path"
-                      placeholder="webhook-name"
-                      size="lg"
-                      class="flex-1"
-                      :error="errors.path"
-                    />
-                  </div>
-                  <p
-                    v-if="errors.path"
-                    class="text-xs text-red-500 dark:text-red-400 mt-1.5"
-                  >
-                    {{ errors.path }}
-                  </p>
-                  <p
-                    v-else
-                    class="text-xs text-gray-500 dark:text-gray-400 mt-1.5"
-                  >
-                    The URL path where the webhook will be accessible.
-                  </p>
-                </div>
-
-                <ClientOnly>
                   <div>
-                    <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                      <UCheckbox v-model="formData.config.requireAuth" />
-                      Require Authentication
-                    </label>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
-                      When enabled, requests must include a valid API key in the Authorization header.
+                    <p class="text-sm text-amber-800 dark:text-amber-200 font-medium mb-1">
+                      Manual triggers require no additional configuration
                     </p>
-                  </div>
-                </ClientOnly>
-
-                <div v-if="formData.config.requireAuth">
-                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                    API Key Header Name
-                  </label>
-                  <UInput
-                    v-model="formData.config.authHeader"
-                    placeholder="X-API-Key"
-                    size="lg"
-                  />
-                </div>
-              </template>
-
-              <!-- Schedule Trigger Config -->
-              <template v-if="formData.type === 'schedule'">
-                <div>
-                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                    Schedule Type *
-                  </label>
-                  <USelectMenu
-                    v-model="formData.config.scheduleType"
-                    :items="['cron', 'interval']"
-                    size="lg"
-                  />
-                </div>
-
-                <!-- Cron Expression -->
-                <div v-if="formData.config.scheduleType === 'cron'">
-                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                    Cron Expression *
-                  </label>
-                  <UInput
-                    v-model="formData.config.cron"
-                    placeholder="0 0 * * *"
-                    size="lg"
-                    icon="i-lucide-clock"
-                  />
-                  <p
-                    v-if="errors.cron"
-                    class="text-xs text-red-500 dark:text-red-400 mt-1.5"
-                  >
-                    {{ errors.cron }}
-                  </p>
-                  <p
-                    v-else
-                    class="text-xs text-gray-500 dark:text-gray-400 mt-1.5"
-                  >
-                    Standard cron format: minute hour day month weekday
-                  </p>
-                  <div class="mt-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                    <p class="text-xs text-blue-700 dark:text-blue-300">
-                      Examples: "0 0 * * *" (daily at midnight), "*/5 * * * *" (every 5 minutes)
+                    <p class="text-xs text-amber-700 dark:text-amber-300">
+                      Manual triggers can only be invoked via API calls or the UI. They are useful for on-demand flow execution.
                     </p>
                   </div>
                 </div>
-
-                <!-- Interval -->
-                <div v-if="formData.config.scheduleType === 'interval'">
-                  <div class="grid grid-cols-2 gap-4">
-                    <div>
-                      <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                        Interval Value *
-                      </label>
-                      <UInput
-                        v-model.number="formData.config.intervalValue"
-                        type="number"
-                        min="1"
-                        size="lg"
-                      />
-                      <p
-                        v-if="errors.intervalValue"
-                        class="text-xs text-red-500 dark:text-red-400 mt-1.5"
-                      >
-                        {{ errors.intervalValue }}
-                      </p>
-                    </div>
-                    <div>
-                      <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                        Interval Unit *
-                      </label>
-                      <USelectMenu
-                        v-model="formData.config.intervalUnit"
-                        :items="['seconds', 'minutes', 'hours', 'days']"
-                        size="lg"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <ClientOnly>
-                  <div>
-                    <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                      <UCheckbox v-model="formData.config.runImmediately" />
-                      Run Immediately on Registration
-                    </label>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
-                      Execute the trigger once as soon as it's registered, then follow the schedule.
-                    </p>
-                  </div>
-                </ClientOnly>
-              </template>
-
-              <!-- Manual Trigger Config -->
-              <template v-if="formData.type === 'manual'">
-                <div class="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <div class="flex items-start gap-3">
-                    <UIcon
-                      name="i-lucide-info"
-                      class="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0"
-                    />
-                    <div>
-                      <p class="text-sm text-amber-800 dark:text-amber-200 font-medium mb-1">
-                        Manual triggers require no additional configuration
-                      </p>
-                      <p class="text-xs text-amber-700 dark:text-amber-300">
-                        Manual triggers can only be invoked via API calls or the UI. They are useful for on-demand flow execution.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </template>
+              </div>
             </div>
           </div>
 
           <!-- Step 4: Flow Subscriptions -->
           <div v-show="currentStep === 4">
             <div class="p-6">
-              <NventTriggerFlowSubscriptions
-                :subscriptions="formData.subscriptions"
+              <FlowSubscriptions
+                :subscriptions="formState.subscriptions"
                 :flows="availableFlows"
                 @toggle="toggleFlow"
               />
@@ -443,32 +229,32 @@
                 <div class="flex items-start gap-4">
                   <div
                     class="w-12 h-12 rounded-lg flex items-center justify-center shrink-0"
-                    :class="getTriggerTypeBgClass(formData.type)"
+                    :class="getTriggerTypeBgClass(formState.type)"
                   >
                     <UIcon
-                      :name="getTriggerTypeIcon(formData.type)"
+                      :name="getTriggerTypeIcon(formState.type)"
                       class="w-6 h-6"
-                      :class="getTriggerTypeIconClass(formData.type)"
+                      :class="getTriggerTypeIconClass(formState.type)"
                     />
                   </div>
                   <div class="flex-1 min-w-0">
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                      {{ formData.displayName || formData.name }}
+                      {{ formState.displayName || formState.name }}
                     </h3>
                     <p
-                      v-if="formData.description"
+                      v-if="formState.description"
                       class="text-sm text-gray-600 dark:text-gray-400"
                     >
-                      {{ formData.description }}
+                      {{ formState.description }}
                     </p>
                     <div class="flex items-center gap-2 mt-2">
                       <UBadge
-                        :label="getTriggerTypeLabel(formData.type)"
-                        :color="getTriggerTypeColor(formData.type)"
+                        :label="getTriggerTypeLabel(formState.type)"
+                        :color="getTriggerTypeColor(formState.type)"
                         variant="subtle"
                       />
                       <UBadge
-                        :label="getTriggerScope(formData.type)"
+                        :label="getTriggerScope(formState.type)"
                         color="neutral"
                         variant="subtle"
                       />
@@ -482,7 +268,7 @@
                       Trigger Name
                     </p>
                     <p class="text-sm font-medium font-mono text-gray-900 dark:text-gray-100">
-                      {{ formData.name }}
+                      {{ formState.name }}
                     </p>
                   </div>
                   <div>
@@ -490,7 +276,7 @@
                       Subscriptions
                     </p>
                     <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {{ formData.subscriptions.length }} flow{{ formData.subscriptions.length === 1 ? '' : 's' }}
+                      {{ formState.subscriptions.length }} flow{{ formState.subscriptions.length === 1 ? '' : 's' }}
                     </p>
                   </div>
                 </div>
@@ -507,13 +293,13 @@
               </div>
 
               <!-- Subscribed Flows -->
-              <div v-if="formData.subscriptions.length > 0">
+              <div v-if="formState.subscriptions.length > 0">
                 <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  Subscribed Flows ({{ formData.subscriptions.length }})
+                  Subscribed Flows ({{ formState.subscriptions.length }})
                 </h4>
                 <div class="space-y-2">
                   <div
-                    v-for="flowId in formData.subscriptions"
+                    v-for="flowId in formState.subscriptions"
                     :key="flowId"
                     class="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
                   >
@@ -561,7 +347,7 @@
               />
             </div>
           </div>
-        </div>
+        </UForm>
       </div>
     </div>
   </div>
@@ -569,9 +355,14 @@
 
 <script setup lang="ts">
 import { ref, computed } from '#imports'
-import { UButton, UIcon, UBadge, UInput, UTextarea, USelectMenu, UCheckbox, UStepper } from '#components'
 import { useComponentRouter } from '../../composables/useComponentRouter'
 import { useAnalyzedFlows } from '../../composables/useAnalyzedFlows'
+import { z } from 'zod'
+import BasicInfoCard from '../../components/trigger/BasicInfoCard.vue'
+import WebhookConfig from '../../components/trigger/WebhookConfig.vue'
+import ScheduleConfig from '../../components/trigger/ScheduleConfig.vue'
+import EventConfig from '../../components/trigger/EventConfig.vue'
+import FlowSubscriptions from '../../components/trigger/FlowSubscriptions.vue'
 
 const router = useComponentRouter()
 const flows = useAnalyzedFlows()
@@ -586,40 +377,37 @@ const steps = [
   { key: 5, label: 'Review', icon: 'i-lucide-check-circle' },
 ]
 
-// Form data
-const formData = ref({
+// Parent form doesn't need a schema - nested forms handle their own validation
+const currentStepSchema = computed(() => z.object({}))
+
+// Form state
+const formState = ref({
   type: 'event' as 'event' | 'webhook' | 'schedule' | 'manual',
+  scope: 'flow' as 'flow' | 'run',
+  status: 'active' as 'active' | 'inactive' | 'retired',
   name: '',
   displayName: '',
   description: '',
-  config: {
-    // Event
-    event: '',
-    filter: '',
-    // Webhook
-    method: 'POST',
+  webhook: {
     path: '',
+    method: 'POST' as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     requireAuth: false,
     authHeader: 'X-API-Key',
-    // Schedule
-    scheduleType: 'cron',
+  },
+  schedule: {
     cron: '',
-    intervalValue: 5,
-    intervalUnit: 'minutes',
-    runImmediately: false,
+    interval: undefined as number | undefined,
+    timezone: 'UTC',
+    enabled: true,
+  },
+  config: {
+    event: '',
+    filter: '',
   },
   subscriptions: [] as string[],
 })
 
-// Errors
-const errors = ref({
-  name: '',
-  event: '',
-  path: '',
-  cron: '',
-  intervalValue: '',
-})
-
+const form = ref()
 const creating = ref(false)
 
 // Trigger types
@@ -663,11 +451,23 @@ const availableFlows = computed(() => flows.value || [])
 
 // Methods
 const selectType = (type: string) => {
-  formData.value.type = type as any
+  formState.value.type = type as any
+  formState.value.scope = (getTriggerScope(type) || 'flow') as 'flow' | 'run'
 }
 
-const nextStep = () => {
-  if (validateStep(currentStep.value)) {
+const nextStep = async () => {
+  // Validate steps that require validation
+  if ((currentStep.value === 2 || currentStep.value === 3) && form.value) {
+    try {
+      await form.value.validate()
+      currentStep.value++
+    }
+    catch {
+      // Validation failed, errors are already displayed by UForm
+      console.log(`Validation failed at step ${currentStep.value}`)
+    }
+  }
+  else {
     currentStep.value++
   }
 }
@@ -676,90 +476,47 @@ const previousStep = () => {
   currentStep.value--
 }
 
-const validateStep = (step: number): boolean => {
-  errors.value = {
-    name: '',
-    event: '',
-    path: '',
-    cron: '',
-    intervalValue: '',
-  }
-
-  if (step === 2) {
-    if (!formData.value.name) {
-      errors.value.name = 'Trigger name is required'
-      return false
-    }
-    if (!/^[a-z0-9-]+$/.test(formData.value.name)) {
-      errors.value.name = 'Use lowercase letters, numbers, and hyphens only'
-      return false
-    }
-  }
-
-  if (step === 3) {
-    if (formData.value.type === 'event' && !formData.value.config.event) {
-      errors.value.event = 'Event name is required'
-      return false
-    }
-    if (formData.value.type === 'webhook' && !formData.value.config.path) {
-      errors.value.path = 'Webhook path is required'
-      return false
-    }
-    if (formData.value.type === 'schedule') {
-      if (formData.value.config.scheduleType === 'cron' && !formData.value.config.cron) {
-        errors.value.cron = 'Cron expression is required'
-        return false
-      }
-      if (formData.value.config.scheduleType === 'interval' && !formData.value.config.intervalValue) {
-        errors.value.intervalValue = 'Interval value is required'
-        return false
-      }
-    }
-  }
-
-  return true
-}
-
 const toggleFlow = (flowId: string) => {
-  const index = formData.value.subscriptions.indexOf(flowId)
+  const index = formState.value.subscriptions.indexOf(flowId)
   if (index >= 0) {
-    formData.value.subscriptions.splice(index, 1)
+    formState.value.subscriptions.splice(index, 1)
   }
   else {
-    formData.value.subscriptions.push(flowId)
+    formState.value.subscriptions.push(flowId)
   }
 }
 
 const getReviewConfig = () => {
   const config: any = {}
   
-  if (formData.value.type === 'event') {
-    config.event = formData.value.config.event
-    if (formData.value.config.filter) {
+  if (formState.value.type === 'event') {
+    config.event = formState.value.config.event
+    if (formState.value.config.filter) {
       try {
-        config.filter = JSON.parse(formData.value.config.filter)
+        config.filter = JSON.parse(formState.value.config.filter)
       }
       catch {
-        config.filter = formData.value.config.filter
+        config.filter = formState.value.config.filter
       }
     }
   }
-  else if (formData.value.type === 'webhook') {
-    config.method = formData.value.config.method
-    config.path = formData.value.config.path
-    if (formData.value.config.requireAuth) {
+  else if (formState.value.type === 'webhook') {
+    config.path = formState.value.webhook.path
+    config.method = formState.value.webhook.method
+    if (formState.value.webhook.requireAuth) {
       config.requireAuth = true
-      config.authHeader = formData.value.config.authHeader
+      config.authHeader = formState.value.webhook.authHeader
     }
   }
-  else if (formData.value.type === 'schedule') {
-    if (formData.value.config.scheduleType === 'cron') {
-      config.cron = formData.value.config.cron
+  else if (formState.value.type === 'schedule') {
+    if (formState.value.schedule.cron) {
+      config.cron = formState.value.schedule.cron
     }
-    else {
-      config.interval = `${formData.value.config.intervalValue} ${formData.value.config.intervalUnit}`
+    if (formState.value.schedule.interval) {
+      config.interval = formState.value.schedule.interval
     }
-    config.runImmediately = formData.value.config.runImmediately
+    config.timezone = formState.value.schedule.timezone
+    config.enabled = formState.value.schedule.enabled
   }
 
   return config
@@ -770,13 +527,14 @@ const createTrigger = async () => {
     creating.value = true
 
     const payload = {
-      name: formData.value.name,
-      displayName: formData.value.displayName || formData.value.name,
-      description: formData.value.description,
-      type: formData.value.type,
-      scope: getTriggerScope(formData.value.type),
+      name: formState.value.name,
+      displayName: formState.value.displayName || formState.value.name,
+      description: formState.value.description,
+      type: formState.value.type,
+      scope: formState.value.scope,
+      status: formState.value.status,
       config: getReviewConfig(),
-      subscriptions: formData.value.subscriptions,
+      subscriptions: formState.value.subscriptions,
     }
 
     await $fetch('/api/_triggers', {

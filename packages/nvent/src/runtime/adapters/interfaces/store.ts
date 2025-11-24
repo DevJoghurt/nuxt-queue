@@ -2,8 +2,8 @@
  * Store Adapter Interface
  *
  * Three-tier storage system:
- * 1. Event Stream - Append-only event log (replaces EventStore)
- * 2. Document Store - Generic document storage (for flow wiring, triggers, metadata)
+ * 1. Event Stream - Append-only event log
+ * 2. Sorted Index - Time-ordered metadata storage
  * 3. Key-Value Store - Fast lookups (for state, caching)
  */
 
@@ -41,40 +41,12 @@ export interface StoreAdapter {
    */
   subscribe?(subject: string, onEvent: (event: EventRecord) => void): Promise<EventSubscription>
 
-  // ============================================================
-  // Document Store (generic document storage)
-  // ============================================================
-
   /**
-   * Save a document to a collection
-   * @param collection - Collection name (e.g., 'flow-wiring', 'triggers', 'flow-metadata')
-   * @param id - Document ID
-   * @param doc - Document data
+   * Delete an entire event stream
+   * @param subject - Event stream identifier
+   * @returns True if stream was deleted, false if not found
    */
-  save(collection: string, id: string, doc: Record<string, any>): Promise<void>
-
-  /**
-   * Get a document from a collection
-   * @param collection - Collection name
-   * @param id - Document ID
-   * @returns Document or null if not found
-   */
-  get(collection: string, id: string): Promise<Record<string, any> | null>
-
-  /**
-   * List documents in a collection (optional, not all adapters may support complex queries)
-   * @param collection - Collection name
-   * @param opts - Query options (filtering, pagination, sorting)
-   * @returns Array of documents with their IDs
-   */
-  list?(collection: string, opts?: ListOptions): Promise<Array<{ id: string, doc: any }>>
-
-  /**
-   * Delete a document from a collection
-   * @param collection - Collection name
-   * @param id - Document ID
-   */
-  delete(collection: string, id: string): Promise<void>
+  delete?(subject: string): Promise<boolean>
 
   // ============================================================
   // Key-Value Store (fast lookups)
@@ -170,6 +142,14 @@ export interface StoreAdapter {
    * @returns New value after increment
    */
   indexIncrement?(key: string, id: string, field: string, increment?: number): Promise<number>
+
+  /**
+   * Delete an entry from a sorted index
+   * @param key - Index key
+   * @param id - Entry ID
+   * @returns True if entry was deleted, false if not found
+   */
+  indexDelete?(key: string, id: string): Promise<boolean>
 }
 
 // ============================================================

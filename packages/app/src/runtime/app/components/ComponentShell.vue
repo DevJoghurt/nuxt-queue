@@ -3,8 +3,8 @@
     <!-- Layout container switches between column (horizontal nav top) and row (vertical nav left) -->
     <div
       :class="
-        orientation === 'vertical' ? 'flex h-full' : 'flex h-screen flex-col'
-      "
+        orientation === 'vertical' ? 'flex h-full' : 'flex flex-col'"
+      style="height: calc(100vh - 4rem)"
     >
       <!-- Navigation area -->
       <div

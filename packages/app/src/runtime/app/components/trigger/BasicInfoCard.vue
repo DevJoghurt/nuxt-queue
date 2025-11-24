@@ -1,6 +1,9 @@
 <template>
-  <UCard>
-    <template #header>
+  <component :is="noCard ? 'div' : UCard">
+    <template
+      v-if="!noCard"
+      #header
+    >
       <div class="flex items-center gap-2">
         <UIcon
           name="i-lucide-info"
@@ -13,28 +16,30 @@
     </template>
 
     <UForm
-      :state="formState"
-      class="space-y-4"
+      nested
+      :schema="schema"
+      :class="noCard ? 'space-y-6' : 'space-y-4'"
     >
       <UFormField
-        label="Trigger Name"
         name="name"
+        label="Trigger Name"
         required
       >
         <template #hint>
-          <span class="text-xs text-gray-500">Cannot be changed after creation</span>
+          <span class="text-xs text-gray-500">{{ isEdit ? 'Cannot be changed after creation' : 'Use lowercase letters, numbers, and hyphens only' }}</span>
         </template>
         <UInput
-          :model-value="formState.name"
-          placeholder="my-trigger"
-          disabled
+          v-model="formState.name"
+          :placeholder="formState.name ? 'my-trigger' : 'e.g., user-signup-trigger'"
+          :disabled="isEdit"
           icon="i-lucide-tag"
+          class="w-full"
         />
       </UFormField>
 
       <UFormField
-        label="Display Name"
         name="displayName"
+        label="Display Name"
         required
       >
         <template #hint>
@@ -42,14 +47,15 @@
         </template>
         <UInput
           v-model="formState.displayName"
-          placeholder="My Trigger"
+          :placeholder="formState.displayName || 'e.g., User Signup Trigger'"
           icon="i-lucide-type"
+          class="w-full"
         />
       </UFormField>
 
       <UFormField
-        label="Description"
         name="description"
+        label="Description"
       >
         <template #hint>
           <span class="text-xs text-gray-500">Optional description of what this trigger does</span>
@@ -58,6 +64,7 @@
           v-model="formState.description"
           placeholder="Describe what this trigger does..."
           :rows="3"
+          class="w-full"
         />
       </UFormField>
 
@@ -98,19 +105,25 @@
         />
       </UFormField>
     </UForm>
-  </UCard>
+  </component>
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
-  formState: {
-    name: string
-    displayName: string
-    description: string
-    type: 'event' | 'webhook' | 'schedule' | 'manual'
-    scope: 'flow' | 'run'
-  }
+import { UCard } from '#components'
+import { z } from 'zod'
+
+const { noCard = false, isEdit = false } = defineProps<{
+  noCard?: boolean
+  isEdit?: boolean
 }>()
+
+const formState = defineModel<{
+  name: string
+  displayName: string
+  description: string
+  type: 'event' | 'webhook' | 'schedule' | 'manual'
+  scope: 'flow' | 'run'
+}>({ required: true })
 
 const getTriggerIcon = (type: string) => {
   switch (type) {
@@ -141,4 +154,12 @@ const getTriggerTypeColor = (type: string): 'primary' | 'success' | 'warning' | 
     default: return 'neutral'
   }
 }
+
+const schema = z.object({
+  name: z.string().min(1, 'Name is required').regex(/^[a-z0-9-]+$/, 'Use lowercase letters, numbers, and hyphens only'),
+  displayName: z.string().min(1, 'Display name is required'),
+  description: z.string(),
+  type: z.enum(['event', 'webhook', 'schedule', 'manual']),
+  scope: z.enum(['flow', 'run']),
+})
 </script>

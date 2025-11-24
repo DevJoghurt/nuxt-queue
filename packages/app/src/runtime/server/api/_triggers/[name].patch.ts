@@ -50,6 +50,7 @@ export default defineEventHandler(async (event) => {
       name,
       type: existing.type,
       scope: existing.scope,
+      status: body.status !== undefined ? body.status : existing.status,
       displayName: body.displayName !== undefined ? body.displayName : existing.displayName,
       description: body.description !== undefined ? body.description : existing.description,
       source: existing.source,
@@ -98,29 +99,44 @@ export default defineEventHandler(async (event) => {
       updateOpts.config = existing.config
     }
 
-    // Update the trigger (this will trigger trigger.updated event)
+    // Update the trigger (this will trigger trigger.updated event with status included)
     await trigger.registerTrigger(updateOpts)
 
     // Handle subscription changes
     if (body.subscriptions !== undefined) {
-      const currentSubs = existing.subscriptions ? Object.keys(existing.subscriptions) : []
-      const newSubs = body.subscriptions as string[]
+      // Use getSubscribedFlows() to get current runtime state, not the potentially stale existing.subscriptions
+      const currentSubs = trigger.getSubscribedFlows(name)
+      // Deduplicate the incoming subscriptions array
+      const newSubs = Array.from(new Set(body.subscriptions as string[]))
+
+      logger.info('Processing subscription changes', {
+        trigger: name,
+        currentSubs,
+        newSubs,
+        toRemove: currentSubs.filter(f => !newSubs.includes(f)),
+        toAdd: newSubs.filter(f => !currentSubs.includes(f)),
+      })
 
       // Remove subscriptions that are no longer in the list
       for (const flowName of currentSubs) {
         if (!newSubs.includes(flowName)) {
+          logger.info(`Removing subscription: ${flowName} from ${name}`)
           await trigger.unsubscribeTrigger(name, flowName)
         }
       }
 
-      // Add new subscriptions
+      // Add ONLY new subscriptions (not existing ones)
       for (const flowName of newSubs) {
         if (!currentSubs.includes(flowName)) {
+          logger.info(`Adding new subscription: ${flowName} to ${name}`)
           await trigger.subscribeTrigger({
             trigger: name,
             flow: flowName,
             mode: 'auto',
           })
+        }
+        else {
+          logger.info(`Subscription already exists: ${flowName}, skipping`)
         }
       }
     }

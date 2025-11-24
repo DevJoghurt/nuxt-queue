@@ -110,7 +110,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from '#imports'
 import { UIcon, UButton } from '#components'
-import FlowStepSelector from './FlowStepSelector.vue'
+import FlowStepSelector from './StepSelector.vue'
 
 const props = defineProps<{
   runStatus?: string

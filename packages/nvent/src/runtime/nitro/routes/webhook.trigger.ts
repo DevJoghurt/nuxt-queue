@@ -6,8 +6,8 @@ import { useNventLogger, useTrigger } from '#imports'
  * Receives webhook calls and fires triggers to start flows
  *
  * Routes:
- * - POST /api/nvent/trigger/{triggerName}
- * - GET /api/nvent/trigger/{triggerName}
+ * - POST /api/_webhook/trigger/{triggerName}
+ * - GET /api/_webhook/trigger/{triggerName}
  *
  * Different from await webhooks:
  * - Entry triggers are flow-scoped (start new flow runs)
@@ -17,8 +17,16 @@ export default defineEventHandler(async (event) => {
   const logger = useNventLogger('webhook-trigger')
   const trigger = useTrigger()
 
-  // Get trigger name from path
-  const triggerName = event.path.replace('/api/nvent/trigger/', '')
+  // Get trigger name from route parameter
+  const triggerName = event.context.params?.triggerName
+
+  if (!triggerName) {
+    logger.warn('No trigger name provided in request')
+    return {
+      error: 'Missing trigger name',
+      message: 'Trigger name is required',
+    }
+  }
 
   logger.info(`Webhook trigger received: ${event.method} ${triggerName}`)
 

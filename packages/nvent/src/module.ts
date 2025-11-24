@@ -160,7 +160,7 @@ export default defineNuxtModule<ModuleOptions>().with({
     })
     addServerHandler({
       route: '/api/_webhook/trigger/:triggerName',
-      handler: resolve('./runtime/nitro/routes/webhook.start'),
+      handler: resolve('./runtime/nitro/routes/webhook.trigger'),
     })
 
     // Add server auto-imports

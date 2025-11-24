@@ -68,7 +68,8 @@ export class TriggerRuntime {
 
   getSubscribedFlows(trigger: string): string[] {
     const subs = this.state.triggerToFlows.get(trigger) || new Set()
-    return Array.from(subs).map(s => s.flowName)
+    // Deduplicate flow names in case of inconsistency
+    return Array.from(new Set(Array.from(subs).map(s => s.flowName)))
   }
 
   getFlowTriggers(flow: string): string[] {
@@ -129,7 +130,17 @@ export class TriggerRuntime {
     if (!this.state.triggerToFlows.has(triggerName)) {
       this.state.triggerToFlows.set(triggerName, new Set())
     }
-    this.state.triggerToFlows.get(triggerName)!.add(subscription)
+
+    const triggerSubs = this.state.triggerToFlows.get(triggerName)!
+
+    // Remove existing subscription for this flow to prevent duplicates
+    const existingSub = Array.from(triggerSubs).find(s => s.flowName === flowName)
+    if (existingSub) {
+      triggerSubs.delete(existingSub)
+    }
+
+    // Add the new/updated subscription
+    triggerSubs.add(subscription)
 
     // Add to flow -> triggers reverse index
     if (!this.state.flowToTriggers.has(flowName)) {

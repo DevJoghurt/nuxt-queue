@@ -1,6 +1,6 @@
 <template>
-  <UCard>
-    <template #header>
+  <component :is="noCard ? 'div' : UCard">
+    <template v-if="!noCard" #header>
       <div class="flex items-center gap-2">
         <UIcon
           name="i-lucide-webhook"
@@ -13,8 +13,10 @@
     </template>
 
     <UForm
-      :state="config"
-      class="space-y-4"
+      nested
+      :name="name"
+      :schema="schema"
+      :class="noCard ? 'space-y-6' : 'space-y-4'"
     >
       <UFormField
         label="Webhook Path"
@@ -25,8 +27,7 @@
           <span class="text-xs text-gray-500">The URL path where this webhook will listen</span>
         </template>
         <UInput
-          :model-value="config.path"
-          @update:model-value="$emit('update:path', $event)"
+          v-model="config.path"
           placeholder="/webhooks/my-trigger"
           icon="i-lucide-link"
         />
@@ -40,8 +41,7 @@
           <span class="text-xs text-gray-500">The HTTP method to accept</span>
         </template>
         <USelectMenu
-          :model-value="config.method"
-          @update:model-value="$emit('update:method', $event)"
+          v-model="config.method"
           :items="['GET', 'POST', 'PUT', 'PATCH', 'DELETE']"
           placeholder="Select method"
         />
@@ -49,12 +49,11 @@
 
       <UFormField
         label="Authentication"
-        name="auth"
+        name="requireAuth"
       >
         <ClientOnly>
           <UCheckbox
-            :model-value="config.requireAuth"
-            @update:model-value="$emit('update:requireAuth', $event)"
+            v-model="config.requireAuth"
             label="Require authentication"
           />
         </ClientOnly>
@@ -69,30 +68,35 @@
           <span class="text-xs text-gray-500">The header name to check for authentication</span>
         </template>
         <UInput
-          :model-value="config.authHeader"
-          @update:model-value="$emit('update:authHeader', $event)"
+          v-model="config.authHeader"
           placeholder="X-API-Key"
           icon="i-lucide-key"
         />
       </UFormField>
     </UForm>
-  </UCard>
+  </component>
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  config: {
-    path: string
-    method: string
-    requireAuth: boolean
-    authHeader: string
-  }
+import { UCard } from '#components'
+import { z } from 'zod'
+
+const { noCard = false, name = 'webhook' } = defineProps<{
+  noCard?: boolean
+  name?: string
 }>()
 
-defineEmits<{
-  'update:path': [value: string]
-  'update:method': [value: string]
-  'update:requireAuth': [value: boolean]
-  'update:authHeader': [value: string]
-}>()
+const config = defineModel<{
+  path: string
+  method: string
+  requireAuth: boolean
+  authHeader: string
+}>({ required: true })
+
+const schema = z.object({
+  path: z.string().min(1, 'Webhook path is required'),
+  method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
+  requireAuth: z.boolean(),
+  authHeader: z.string().optional(),
+})
 </script>

@@ -6,9 +6,10 @@ const links = [
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+  <UApp>
+  <div class="bg-gray-50 dark:bg-gray-900">
     <!-- Fixed Header -->
-    <nav class="shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
       <div class="px-4 sm:px-6 lg:px-8">
         <div class="flex h-16 items-center justify-between">
           <div class="flex items-center gap-8">
@@ -32,9 +33,10 @@ const links = [
       </div>
     </nav>
     
-    <!-- Scrollable Content Area -->
-    <div class="flex-1 min-h-0 overflow-hidden">
+    <!-- Content Area - positioned below fixed header -->
+    <div class="pt-16">
       <slot />
     </div>
   </div>
+  </UApp>
 </template>

@@ -7,18 +7,17 @@
  * - Survives restarts
  * - Single instance only
  *
- * Storage format (matches existing file adapter):
- * - {dataDir}/{subject}.ndjson - Event streams (append-only NDJSON)
+ * Storage format:
+ * - {dataDir}/streams/{subject}.ndjson - Event streams (append-only NDJSON)
  * - {dataDir}/indices/{key}.json - Sorted indices (JSON arrays)
- * - {dataDir}/docs/{collection}/{id}.json - Documents (individual JSON files)
  * - {dataDir}/kv/{key}.json - KV store (individual JSON files)
  */
 
 import { promises as fs } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { MemoryStoreAdapter, type MemoryStoreAdapterOptions } from './memory-store'
+import { MemoryStoreAdapter } from './memory-store'
 
-export interface FileStoreAdapterOptions extends MemoryStoreAdapterOptions {
+export interface FileStoreAdapterOptions {
   dataDir: string
 }
 
@@ -46,7 +45,7 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
   private parentKvIncrement: (key: string, by?: number) => Promise<number>
 
   constructor(options: FileStoreAdapterOptions) {
-    super(options) // Pass streamAdapter to parent
+    super()
     this.options = options
 
     // CRITICAL: Save references to parent methods BEFORE overriding kv
@@ -132,10 +131,6 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
     return join(this.options.dataDir, 'indices', sanitize(key) + '.json')
   }
 
-  private docPath(collection: string, id: string) {
-    return join(this.options.dataDir, 'docs', collection, `${id}.json`)
-  }
-
   private kvPath(key: string) {
     return join(this.options.dataDir, 'kv', `${sanitize(key)}.json`)
   }
@@ -145,7 +140,6 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
     await ensureDir(this.options.dataDir)
     await ensureDir(join(this.options.dataDir, 'streams'))
     await ensureDir(join(this.options.dataDir, 'indices'))
-    await ensureDir(join(this.options.dataDir, 'docs'))
     await ensureDir(join(this.options.dataDir, 'kv'))
 
     // Load existing data from disk
@@ -195,37 +189,6 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
       // No indices yet
     }
 
-    // Load documents from docs/ subdirectory
-    try {
-      const docsDir = join(this.options.dataDir, 'docs')
-      const collections = await fs.readdir(docsDir)
-
-      for (const collection of collections) {
-        const collectionDir = join(docsDir, collection)
-        const docFiles = await fs.readdir(collectionDir)
-
-        if (!self.documents) self.documents = new Map()
-        if (!self.documents.has(collection)) {
-          self.documents.set(collection, new Map())
-        }
-
-        const collectionMap = self.documents.get(collection)
-
-        for (const file of docFiles) {
-          if (!file.endsWith('.json')) continue
-
-          const id = file.replace('.json', '')
-          const content = await fs.readFile(join(collectionDir, file), 'utf-8')
-          const doc = JSON.parse(content)
-
-          collectionMap.set(id, doc)
-        }
-      }
-    }
-    catch {
-      // No documents yet
-    }
-
     // Load KV store from kv/ subdirectory
     try {
       const kvDir = join(this.options.dataDir, 'kv')
@@ -258,28 +221,6 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
     await fs.appendFile(path, JSON.stringify(result) + '\n', 'utf-8')
 
     return result
-  }
-
-  async save(collection: string, id: string, doc: Record<string, any>) {
-    await super.save(collection, id, doc)
-
-    // Save document to individual JSON file
-    const path = this.docPath(collection, id)
-    await ensureDir(dirname(path))
-    await fs.writeFile(path, JSON.stringify(doc, null, 2), 'utf-8')
-  }
-
-  async delete(collection: string, id: string) {
-    await super.delete(collection, id)
-
-    // Delete document file
-    const path = this.docPath(collection, id)
-    try {
-      await fs.unlink(path)
-    }
-    catch {
-      // File might not exist
-    }
   }
 
   // Override index operations
@@ -343,6 +284,51 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
     }
 
     return result
+  }
+
+  async indexDelete(key: string, id: string): Promise<boolean> {
+    // Remove from memory
+    const self = this as any
+    const index = self.sortedIndices?.get(key)
+    if (!index) return false
+
+    const initialLength = index.length
+    const filtered = index.filter((entry: any) => entry.id !== id)
+
+    if (filtered.length === initialLength) {
+      return false // Entry not found
+    }
+
+    self.sortedIndices.set(key, filtered)
+
+    // Persist updated index
+    const path = this.indexPath(key)
+    await ensureDir(dirname(path))
+    await fs.writeFile(path, JSON.stringify(filtered, null, 2), 'utf-8')
+
+    return true
+  }
+
+  async delete(subject: string): Promise<boolean> {
+    // Remove from memory
+    const self = this as any
+    const eventStreams = self.eventStreams as Map<string, any[]>
+    if (!eventStreams || !eventStreams.has(subject)) {
+      return false
+    }
+
+    eventStreams.delete(subject)
+
+    // Delete stream file
+    const path = this.streamPath(subject)
+    try {
+      await fs.unlink(path)
+      return true
+    }
+    catch {
+      // File might not exist
+      return false
+    }
   }
 
   async close() {

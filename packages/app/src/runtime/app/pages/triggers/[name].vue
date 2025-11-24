@@ -51,6 +51,7 @@
             icon="i-lucide-pencil"
             color="neutral"
             variant="outline"
+            size="sm"
             @click="goToEdit"
           >
             Edit
@@ -109,14 +110,194 @@
         v-else
         class="h-full flex gap-px bg-gray-200 dark:bg-gray-800"
       >
-        <!-- Left: Overview & Config -->
-        <div class="w-1/2 min-w-0 bg-white dark:bg-gray-950 flex flex-col min-h-0 overflow-hidden">
-          <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
+        <!-- Left: Events List -->
+        <div class="w-1/3 min-w-0 flex-shrink-0 bg-white dark:bg-gray-950 flex flex-col min-h-0 overflow-hidden">
+          <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
             <h2 class="text-sm font-medium text-gray-900 dark:text-gray-100">
-              Overview
+              Events
             </h2>
+            <div class="flex items-center gap-2">
+              <USelectMenu
+                v-model="eventTypeFilter"
+                :items="eventTypeFilterOptions"
+                value-key="value"
+                placeholder="All Events"
+                size="xs"
+                class="w-40"
+              >
+                <template #label>
+                  <div class="flex items-center gap-2">
+                    <UIcon
+                      :name="getFilterIcon(eventTypeFilter)"
+                      class="w-4 h-4"
+                      :class="getFilterIconColor(eventTypeFilter)"
+                    />
+                    <span class="text-xs">{{ getFilterLabel(eventTypeFilter) }}</span>
+                  </div>
+                </template>
+                <template #option="{ option }">
+                  <div class="flex items-center gap-2">
+                    <UIcon
+                      :name="getFilterIcon(option.value)"
+                      class="w-4 h-4"
+                      :class="getFilterIconColor(option.value)"
+                    />
+                    <span>{{ option.label }}</span>
+                  </div>
+                </template>
+              </USelectMenu>
+            </div>
           </div>
-          <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
+          
+          <div
+            v-if="eventsStatus === 'pending' && !events"
+            class="flex-1 flex items-center justify-center"
+          >
+            <div class="text-center">
+              <UIcon
+                name="i-lucide-loader-2"
+                class="w-8 h-8 animate-spin mx-auto mb-2 text-gray-400"
+              />
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                Loading events...
+              </p>
+            </div>
+          </div>
+
+          <div
+            v-else-if="!events || events.events.length === 0"
+            class="flex-1 flex items-center justify-center"
+          >
+            <div class="text-center">
+              <UIcon
+                name="i-lucide-inbox"
+                class="w-8 h-8 mx-auto mb-2 text-gray-300 dark:text-gray-700"
+              />
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                No events yet
+              </p>
+            </div>
+          </div>
+
+          <div
+            v-else
+            class="flex-1 min-h-0 overflow-y-auto"
+          >
+            <div class="divide-y divide-gray-100 dark:divide-gray-800">
+              <div
+                v-for="(event, idx) in paginatedEvents"
+                :key="idx"
+                class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 cursor-pointer transition-colors"
+                :class="{
+                  'bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-500': selectedEvent && selectedEvent.type === event.type && (selectedEvent.ts || selectedEvent.timestamp) === (event.ts || event.timestamp)
+                }"
+                @click="selectEvent(event)"
+              >
+                <div class="flex items-start gap-3">
+                  <div class="flex-shrink-0 mt-0.5">
+                    <UIcon
+                      :name="getEventIcon(event.type)"
+                      class="w-5 h-5"
+                      :class="getEventIconColor(event.type)"
+                    />
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between gap-2 mb-1">
+                      <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                        {{ event.type }}
+                      </h3>
+                      <UBadge
+                        :label="event.type.split('.')[1] || 'event'"
+                        :color="getEventBadgeColor(event.type)"
+                        variant="subtle"
+                        size="xs"
+                        class="capitalize flex-shrink-0"
+                      />
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 font-mono truncate mb-1">
+                      {{ formatDate(event.ts || event.timestamp) }}
+                    </p>
+                    <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                      <span>
+                        {{ formatTime(event.ts || event.timestamp) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pagination Footer -->
+          <div
+            v-if="events && (events.total || events.count) > eventsPerPage"
+            class="border-t border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-center shrink-0"
+          >
+            <UPagination
+              v-model:page="currentPage"
+              :items-per-page="eventsPerPage"
+              :total="events.total || events.count"
+              size="xs"
+            />
+          </div>
+        </div>
+
+        <!-- Right: Overview or Event Details -->
+        <div class="flex-1 min-w-0 bg-white dark:bg-gray-950 flex flex-col min-h-0 overflow-hidden">
+          <div class="px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 shrink-0">
+            <div class="flex items-center justify-between">
+              <UTabs
+                v-model="activeTab"
+                :items="tabItems"
+                size="xs"
+                :ui="{
+                  root: 'gap-0',
+                  trigger: 'px-2 py-0.5',
+                }"
+              />
+            </div>
+          </div>
+
+          <div class="flex-1 min-h-0 overflow-y-auto">
+            <!-- Overview Tab -->
+            <div
+              v-if="activeTab === 'overview'"
+              class="p-6 space-y-6"
+            >
+
+            <!-- Stats Cards -->
+            <div>
+              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                Trigger Statistics
+              </h3>
+              <div class="grid grid-cols-2 gap-4">
+                <StatCard
+                  icon="i-lucide-zap"
+                  :count="trigger.stats.totalFires"
+                  label="Total Fires"
+                  variant="gray"
+                />
+                <StatCard
+                  icon="i-lucide-target"
+                  :count="trigger.stats.last24h"
+                  label="Last 24h"
+                  variant="blue"
+                />
+                <StatCard
+                  icon="i-lucide-check-circle-2"
+                  :count="`${trigger.stats.successRate?.toFixed(1) || '100'}%`"
+                  label="Success Rate"
+                  :variant="(trigger.stats.successRate || 100) >= 95 ? 'emerald' : 'amber'"
+                />
+                <StatCard
+                  icon="i-lucide-git-branch"
+                  :count="trigger.subscriptionCount"
+                  label="Subscribers"
+                  variant="purple"
+                />
+              </div>
+            </div>
+
             <!-- Description -->
             <div
               v-if="trigger.description"
@@ -133,90 +314,56 @@
               </div>
             </div>
 
-            <!-- Stats Cards -->
-            <div class="grid grid-cols-2 gap-4">
-              <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
-                <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-                  Total Fires
-                </div>
-                <div class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                  {{ formatNumber(trigger.stats.totalFires) }}
-                </div>
-              </div>
-              <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
-                <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-                  Success Rate
-                </div>
-                <div
-                  class="text-2xl font-semibold"
-                  :class="(trigger.stats.successRate || 100) >= 95 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'"
-                >
-                  {{ trigger.stats.successRate?.toFixed(1) || '100' }}%
-                </div>
-              </div>
-              <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
-                <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-                  Last 24h
-                </div>
-                <div class="text-2xl font-semibold text-blue-600 dark:text-blue-400">
-                  {{ formatNumber(trigger.stats.last24h) }}
-                </div>
-              </div>
-              <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
-                <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-                  Subscribers
-                </div>
-                <div class="text-2xl font-semibold text-purple-600 dark:text-purple-400">
-                  {{ trigger.subscriptionCount }}
-                </div>
-              </div>
-            </div>
-
             <!-- Configuration -->
             <div>
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
                 Configuration
               </h3>
-              <div class="space-y-2 text-sm">
-                <div class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
-                  <span class="text-gray-500 dark:text-gray-400">Name</span>
-                  <span class="font-mono text-gray-900 dark:text-gray-100">{{ trigger.name }}</span>
+              <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 space-y-3">
+                <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800">
+                  <span class="text-sm text-gray-600 dark:text-gray-400">Name</span>
+                  <span class="text-sm font-medium font-mono text-gray-900 dark:text-gray-100">{{ trigger.name }}</span>
                 </div>
-                <div class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
-                  <span class="text-gray-500 dark:text-gray-400">Type</span>
-                  <span class="text-gray-900 dark:text-gray-100">{{ trigger.type }}</span>
+                <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800">
+                  <span class="text-sm text-gray-600 dark:text-gray-400">Type</span>
+                  <UBadge
+                    :label="trigger.type"
+                    :color="getTriggerTypeColor(trigger.type)"
+                    variant="subtle"
+                    size="xs"
+                  />
                 </div>
-                <div class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
-                  <span class="text-gray-500 dark:text-gray-400">Scope</span>
-                  <span class="text-gray-900 dark:text-gray-100">{{ trigger.scope }}</span>
+                <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800">
+                  <span class="text-sm text-gray-600 dark:text-gray-400">Scope</span>
+                  <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ trigger.scope }}</span>
                 </div>
                 <div
                   v-if="trigger.source"
-                  class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
+                  class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800"
                 >
-                  <span class="text-gray-500 dark:text-gray-400">Source</span>
-                  <span class="text-gray-900 dark:text-gray-100">{{ trigger.source }}</span>
+                  <span class="text-sm text-gray-600 dark:text-gray-400">Source</span>
+                  <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ trigger.source }}</span>
                 </div>
                 <div
                   v-if="trigger.registeredAt"
-                  class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
+                  class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800"
                 >
-                  <span class="text-gray-500 dark:text-gray-400">Registered</span>
-                  <span class="text-gray-900 dark:text-gray-100">{{ formatDate(trigger.registeredAt) }}</span>
+                  <span class="text-sm text-gray-600 dark:text-gray-400">Registered</span>
+                  <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ formatDate(trigger.registeredAt) }}</span>
                 </div>
                 <div
                   v-if="(trigger.stats as any).lastFiredAt"
-                  class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
+                  class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800"
                 >
-                  <span class="text-gray-500 dark:text-gray-400">Last Fired</span>
-                  <span class="text-gray-900 dark:text-gray-100">{{ formatTime((trigger.stats as any).lastFiredAt) }}</span>
+                  <span class="text-sm text-gray-600 dark:text-gray-400">Last Fired</span>
+                  <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ formatTime((trigger.stats as any).lastFiredAt) }}</span>
                 </div>
                 <div
                   v-if="trigger.lastActivityAt"
-                  class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
+                  class="flex items-center justify-between py-2"
                 >
-                  <span class="text-gray-500 dark:text-gray-400">Last Modified</span>
-                  <span class="text-gray-900 dark:text-gray-100">{{ formatTime(trigger.lastActivityAt) }}</span>
+                  <span class="text-sm text-gray-600 dark:text-gray-400">Last Modified</span>
+                  <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ formatTime(trigger.lastActivityAt) }}</span>
                 </div>
               </div>
             </div>
@@ -226,18 +373,27 @@
               <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
                 Webhook Configuration
               </h3>
-              <div class="space-y-2 text-sm">
-                <div class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
-                  <span class="text-gray-500 dark:text-gray-400">Path</span>
-                  <span class="font-mono text-gray-900 dark:text-gray-100">{{ trigger.webhook.path }}</span>
+              <div class="space-y-3">
+                <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs text-gray-500 dark:text-gray-400">Webhook URL</span>
+                    <UButton
+                      v-if="trigger.webhook.fullUrl"
+                      icon="i-lucide-copy"
+                      size="xs"
+                      color="neutral"
+                      variant="ghost"
+                      @click="copyToClipboard(trigger.webhook.fullUrl)"
+                    />
+                  </div>
+                  <code class="text-xs font-mono text-blue-600 dark:text-blue-400 break-all">
+                    {{ trigger.webhook.fullUrl || trigger.webhook.path }}
+                  </code>
                 </div>
-                <div
-                  v-if="trigger.webhook.method"
-                  class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
-                >
-                  <span class="text-gray-500 dark:text-gray-400">Method</span>
+                <div class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                  <span class="text-sm text-gray-500 dark:text-gray-400">Method</span>
                   <UBadge
-                    :label="trigger.webhook.method"
+                    :label="trigger.webhook.method || 'POST'"
                     color="neutral"
                     variant="subtle"
                     size="xs"
@@ -277,14 +433,20 @@
 
             <!-- Subscribed Flows -->
             <div>
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
                 Subscribed Flows ({{ trigger.subscriptionCount }})
               </h3>
               <div
                 v-if="trigger.subscriptions.length === 0"
-                class="text-sm text-gray-500 dark:text-gray-400 text-center py-4"
+                class="text-center py-8"
               >
-                No subscriptions
+                <UIcon
+                  name="i-lucide-git-branch-plus"
+                  class="w-8 h-8 mx-auto mb-2 text-gray-300 dark:text-gray-700"
+                />
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                  No subscriptions
+                </p>
               </div>
               <div
                 v-else
@@ -293,7 +455,8 @@
                 <div
                   v-for="sub in trigger.subscriptions"
                   :key="`${sub.flowName}-${sub.triggerName}`"
-                  class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg"
+                  class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors cursor-pointer"
+                  @click="goToFlow(sub.flowName)"
                 >
                   <div class="flex items-center gap-2 min-w-0">
                     <UIcon
@@ -309,102 +472,65 @@
                       variant="subtle"
                       size="xs"
                     />
-                    <UButton
-                      icon="i-lucide-arrow-right"
-                      size="xs"
-                      color="neutral"
-                      variant="ghost"
-                      square
-                      @click="goToFlow(sub.flowName)"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right: Events -->
-        <div class="w-1/2 min-w-0 bg-white dark:bg-gray-950 flex flex-col min-h-0 overflow-hidden">
-          <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
-            <h2 class="text-sm font-medium text-gray-900 dark:text-gray-100">
-              Recent Events
-            </h2>
-            <div class="flex items-center gap-2">
-              <USelectMenu
-                v-model="eventTypeFilter"
-                :items="eventTypeFilterOptions"
-                placeholder="All Events"
-                size="xs"
-              />
-              <UButton
-                icon="i-lucide-refresh-cw"
-                size="xs"
-                color="neutral"
-                variant="ghost"
-                square
-                :loading="eventsStatus === 'pending'"
-                @click="refreshEvents"
-              />
-            </div>
-          </div>
-          <div class="flex-1 min-h-0 overflow-y-auto">
-            <div
-              v-if="eventsStatus === 'pending' && !events"
-              class="h-full flex items-center justify-center"
-            >
-              <div class="text-center">
-                <UIcon
-                  name="i-lucide-loader-2"
-                  class="w-6 h-6 animate-spin mx-auto mb-2 text-gray-400"
-                />
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                  Loading events...
-                </p>
-              </div>
-            </div>
-            <div
-              v-else-if="!events || events.events.length === 0"
-              class="h-full flex items-center justify-center"
-            >
-              <div class="text-center">
-                <UIcon
-                  name="i-lucide-inbox"
-                  class="w-8 h-8 mx-auto mb-2 text-gray-300 dark:text-gray-700"
-                />
-                <p class="text-sm text-gray-500 dark:text-gray-400">
-                  No events yet
-                </p>
-              </div>
-            </div>
-            <div
-              v-else
-              class="divide-y divide-gray-100 dark:divide-gray-800"
-            >
-              <div
-                v-for="(event, idx) in events.events"
-                :key="idx"
-                class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer"
-                @click="selectEvent(event)"
-              >
-                <div class="flex items-start justify-between gap-3 mb-2">
-                  <div class="flex items-center gap-2 min-w-0">
                     <UIcon
-                      :name="getEventIcon(event.type)"
-                      class="w-4 h-4 shrink-0"
-                      :class="getEventIconColor(event.type)"
+                      name="i-lucide-arrow-right"
+                      class="w-4 h-4 text-gray-400"
                     />
-                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{{ event.type }}</span>
                   </div>
-                  <span class="text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                    {{ formatTime(event.ts || event.timestamp) }}
-                  </span>
                 </div>
-                <div
-                  v-if="event.data"
-                  class="text-xs font-mono text-gray-600 dark:text-gray-400 line-clamp-2 ml-6"
-                >
-                  {{ JSON.stringify(event.data).substring(0, 100) }}...
+              </div>
+            </div>
+          </div>
+
+            <!-- Event Details Tab -->
+            <div
+              v-else-if="activeTab === 'details' && selectedEvent"
+              class="p-6 space-y-6"
+            >
+              <!-- Event Info -->
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+                  <UIcon
+                    :name="getEventIcon(selectedEvent.type)"
+                    class="w-5 h-5"
+                    :class="getEventIconColor(selectedEvent.type)"
+                  />
+                  <span>Event Information</span>
+                </h3>
+                <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 space-y-3">
+                  <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800">
+                    <span class="text-sm text-gray-600 dark:text-gray-400">Type</span>
+                    <UBadge
+                      :label="selectedEvent.type"
+                      :color="getEventBadgeColor(selectedEvent.type)"
+                      variant="subtle"
+                      size="xs"
+                    />
+                  </div>
+                  <div class="flex items-center justify-between py-2">
+                    <span class="text-sm text-gray-600 dark:text-gray-400">Timestamp</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ formatDate(selectedEvent.ts || selectedEvent.timestamp) }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Event Data -->
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                  Event Data
+                </h3>
+                <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 overflow-x-auto">
+                  <pre class="text-xs font-mono">{{ JSON.stringify(selectedEvent.data, null, 2) }}</pre>
+                </div>
+              </div>
+
+              <!-- Raw Event -->
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                  Raw Event
+                </h3>
+                <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 overflow-x-auto">
+                  <pre class="text-xs font-mono">{{ JSON.stringify(selectedEvent, null, 2) }}</pre>
                 </div>
               </div>
             </div>
@@ -412,96 +538,84 @@
         </div>
       </div>
     </div>
-
-    <!-- Event Detail Modal -->
-    <UModal
-      v-model:open="eventModalOpen"
-      :title="selectedEvent?.type || 'Event Details'"
-    >
-      <template #header>
-        <div>
-          <h3 class="text-lg font-semibold flex items-center gap-2">
-            <UIcon
-              v-if="selectedEvent"
-              :name="getEventIcon(selectedEvent.type)"
-              class="w-5 h-5"
-              :class="getEventIconColor(selectedEvent.type)"
-            />
-            <span>{{ selectedEvent?.type }}</span>
-          </h3>
-          <p
-            v-if="selectedEvent"
-            class="text-sm text-gray-500 mt-1"
-          >
-            {{ formatDate(selectedEvent.ts || selectedEvent.timestamp) }}
-          </p>
-        </div>
-      </template>
-      <template #body>
-        <div
-          v-if="selectedEvent"
-          class="space-y-4"
-        >
-          <div>
-            <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-              Event Data
-            </label>
-            <pre class="text-xs font-mono bg-gray-50 dark:bg-gray-900 rounded-lg p-4 overflow-x-auto">{{ JSON.stringify(selectedEvent.data, null, 2) }}</pre>
-          </div>
-          <div>
-            <label class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-              Raw Event
-            </label>
-            <pre class="text-xs font-mono bg-gray-50 dark:bg-gray-900 rounded-lg p-4 overflow-x-auto">{{ JSON.stringify(selectedEvent, null, 2) }}</pre>
-          </div>
-        </div>
-      </template>
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <UButton
-            color="neutral"
-            variant="ghost"
-            @click="eventModalOpen = false"
-          >
-            Close
-          </UButton>
-        </div>
-      </template>
-    </UModal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from '#imports'
-import { UButton, UIcon, UBadge, UModal, USelectMenu } from '#components'
+import { UButton, UIcon, UBadge, USelectMenu, UTabs } from '#components'
 import { useTrigger, useTriggerEvents, type TriggerEvent } from '../../composables/useTrigger'
 import { useComponentRouter } from '../../composables/useComponentRouter'
 import { useTriggerWebSocket } from '../../composables/useTriggerWebSocket'
+import { useRoute, useRouter } from '#app'
+import StatCard from '../../components/StatCard.vue'
 
-const router = useComponentRouter()
-const route = computed(() => {
-  const path = router.route.value?.path || ''
+const componentRouter = useComponentRouter()
+const router = useRouter()
+const route = useRoute()
+
+const triggerName = computed(() => {
+  const path = componentRouter.route.value?.path || ''
   const match = path.match(/\/triggers\/([^/]+)/)
   return match && match[1] ? decodeURIComponent(match[1]) : null
 })
 
-const triggerName = computed(() => route.value)
-
 // Fetch trigger data
 const { trigger, status, refresh: refreshTrigger } = useTrigger(triggerName)
 
-// Fetch events
-const eventTypeFilter = ref('all')
-const eventTypeFilterOptions = ['all', 'trigger.fired', 'trigger.registered', 'trigger.updated']
-
-const eventTypes = computed(() => {
-  return eventTypeFilter.value === 'all' ? undefined : [eventTypeFilter.value]
+// Fetch events with URL-based filters
+const eventTypeFilter = computed({
+  get: () => (route.query.type as string) || 'all',
+  set: (value: string) => {
+    router.push({
+      query: {
+        ...route.query,
+        type: value === 'all' ? undefined : value,
+        page: undefined, // Reset page when filter changes
+      },
+    })
+  },
 })
 
-const { events: fetchedEvents, refresh: refreshEvents, status: eventsStatus } = useTriggerEvents(triggerName, {
-  limit: 100,
-  types: eventTypes.value,
+const currentPage = computed({
+  get: () => {
+    const page = route.query.page as string
+    return page ? parseInt(page, 10) : 1
+  },
+  set: (value: number) => {
+    router.push({
+      query: {
+        ...route.query,
+        page: value > 1 ? value.toString() : undefined,
+      },
+    })
+  },
 })
+
+const eventTypeFilterOptions = [
+  { label: 'All Events', value: 'all' },
+  { label: 'Fired', value: 'trigger.fired' },
+  { label: 'Registered', value: 'trigger.registered' },
+  { label: 'Updated', value: 'trigger.updated' },
+]
+
+const eventsPerPage = 20
+
+// Build query options for server-side filtering
+const eventQueryOptions = computed(() => {
+  const options: any = {
+    limit: eventsPerPage,
+    offset: (currentPage.value - 1) * eventsPerPage,
+  }
+  
+  if (eventTypeFilter.value !== 'all') {
+    options.types = [eventTypeFilter.value]
+  }
+  
+  return options
+})
+
+const { events: fetchedEvents, refresh: refreshEvents, status: eventsStatus } = useTriggerEvents(triggerName, eventQueryOptions)
 
 // WebSocket for live updates
 const { isConnected, isReconnecting, events: liveEvents } = useTriggerWebSocket(triggerName)
@@ -517,60 +631,95 @@ onMounted(() => {
   })
 })
 
-// Merge live and fetched events
+// Use fetched events directly (already paginated by server)
 const events = computed(() => {
-  if (!fetchedEvents.value) return null
+  return fetchedEvents.value
+})
+
+// Display paginated events from server
+const paginatedEvents = computed(() => {
+  if (!events.value) return []
   
-  // Combine live events with fetched events, removing duplicates by id or timestamp
-  const allEvents = [...liveEvents.value, ...(fetchedEvents.value.events || [])]
-  const seen = new Set()
-  const unique = allEvents.filter((event: any) => {
-    // Use id if available (from store), otherwise use ts+type
-    const key = event.id || `${event.type}-${event.ts || event.timestamp}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-  
-  // Sort by ts/timestamp descending (most recent first)
-  unique.sort((a: any, b: any) => {
-    const aTime = a.ts || a.timestamp || 0
-    const bTime = b.ts || b.timestamp || 0
-    return bTime - aTime
-  })
-  
-  return {
-    ...fetchedEvents.value,
-    events: unique,
+  // Only merge live events if we're on page 1
+  if (currentPage.value === 1) {
+    // For live events, only show those that match current filter
+    const filteredLiveEvents = liveEvents.value.filter((event: any) => {
+      if (eventTypeFilter.value === 'all') return true
+      return event.type === eventTypeFilter.value
+    })
+    
+    // Combine with fetched events, removing duplicates by id or timestamp
+    const allEvents = [...filteredLiveEvents, ...(events.value.events || [])]
+    const seen = new Set()
+    const unique = allEvents.filter((event: any) => {
+      const key = event.id || `${event.type}-${event.ts || event.timestamp}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    
+    // Sort by ts/timestamp descending (most recent first)
+    unique.sort((a: any, b: any) => {
+      const aTime = a.ts || a.timestamp || 0
+      const bTime = b.ts || b.timestamp || 0
+      return bTime - aTime
+    })
+    
+    // Only return up to eventsPerPage items
+    return unique.slice(0, eventsPerPage)
   }
+  
+  // For other pages, just return the fetched events
+  return events.value.events || []
 })
 
-// Watch filter changes
-watch(eventTypeFilter, () => {
+// Watch query changes to refresh data
+watch(() => eventQueryOptions.value, () => {
   refreshEvents()
-})
+}, { deep: true })
 
-// Event modal
-const eventModalOpen = ref(false)
+// Tabs
+const activeTab = ref<'overview' | 'details'>('overview')
+const tabItems = computed(() => [
+  { label: 'Overview', value: 'overview', icon: 'i-lucide-bar-chart-3' },
+  {
+    label: 'Event Details',
+    value: 'details',
+    icon: 'i-lucide-file-text',
+    disabled: !selectedEvent.value,
+  },
+])
+
+// Selected event
 const selectedEvent = ref<TriggerEvent | null>(null)
 
 const selectEvent = (event: TriggerEvent) => {
   selectedEvent.value = event
-  eventModalOpen.value = true
+  activeTab.value = 'details'
 }
 
+// Watch for event selection
+watch(selectedEvent, (newEvent) => {
+  if (newEvent) {
+    activeTab.value = 'details'
+  }
+  else {
+    activeTab.value = 'overview'
+  }
+})
+
 const goBack = () => {
-  router.push('/triggers')
+  componentRouter.push('/triggers')
 }
 
 const goToEdit = () => {
   if (triggerName.value) {
-    router.push(`/triggers/${encodeURIComponent(triggerName.value)}/edit`)
+    componentRouter.push(`/triggers/${encodeURIComponent(triggerName.value)}/edit`)
   }
 }
 
 const goToFlow = (flowName: string) => {
-  router.push(`/flows?flow=${encodeURIComponent(flowName)}`)
+  componentRouter.push(`/flows?flow=${encodeURIComponent(flowName)}`)
 }
 
 // Helper functions
@@ -620,6 +769,14 @@ const getEventIconColor = (type: string) => {
   return 'text-gray-500'
 }
 
+const getEventBadgeColor = (type: string): 'success' | 'primary' | 'warning' | 'secondary' | 'neutral' => {
+  if (type.includes('fired')) return 'success'
+  if (type.includes('registered')) return 'primary'
+  if (type.includes('updated')) return 'warning'
+  if (type.includes('subscription')) return 'secondary'
+  return 'neutral'
+}
+
 const formatTime = (timestamp: number) => {
   const date = new Date(timestamp)
   const now = new Date()
@@ -645,5 +802,37 @@ const formatNumber = (num: number | undefined) => {
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
   return num.toString()
+}
+
+const getFilterIcon = (value: string) => {
+  switch (value) {
+    case 'trigger.fired': return 'i-lucide-zap'
+    case 'trigger.registered': return 'i-lucide-plus-circle'
+    case 'trigger.updated': return 'i-lucide-pencil'
+    default: return 'i-lucide-filter'
+  }
+}
+
+const getFilterIconColor = (value: string) => {
+  switch (value) {
+    case 'trigger.fired': return 'text-emerald-500'
+    case 'trigger.registered': return 'text-blue-500'
+    case 'trigger.updated': return 'text-amber-500'
+    default: return 'text-gray-500'
+  }
+}
+
+const getFilterLabel = (value: string) => {
+  const option = eventTypeFilterOptions.find(o => o.value === value)
+  return option?.label || 'All Events'
+}
+
+const copyToClipboard = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    // You could add a toast notification here if you have one
+  } catch (err) {
+    console.error('Failed to copy:', err)
+  }
 }
 </script>

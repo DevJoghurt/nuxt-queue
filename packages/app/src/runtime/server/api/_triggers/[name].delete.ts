@@ -31,8 +31,8 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // Retire the trigger (soft delete)
-    await trigger.retireTrigger(name, 'Deleted via UI')
+    // Delete the trigger completely (removes all data)
+    await trigger.deleteTrigger(name)
 
     logger.info(`Successfully deleted trigger '${name}'`)
 

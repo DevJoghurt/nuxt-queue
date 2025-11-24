@@ -14,69 +14,48 @@
             label="Create Trigger"
             color="primary"
             @click="router.push('/triggers/new')"
+            size="sm"
           />
         </div>
       </div>
     </div>
 
     <!-- Main Content -->
-    <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
-      <!-- Stats Overview -->
-      <div
-        v-if="stats"
-        class="px-6 py-4 border-b border-gray-200 dark:border-gray-800 shrink-0"
-      >
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
-            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-              Total Triggers
-            </div>
-            <div class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-              {{ stats.total }}
-            </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {{ stats.totalSubscriptions }} subscriptions
-            </div>
-          </div>
-          <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
-            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-              Entry Triggers
-            </div>
-            <div class="text-2xl font-semibold text-blue-600 dark:text-blue-400">
-              {{ stats.entryTriggers }}
-            </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Flow-scoped
-            </div>
-          </div>
-          <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
-            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-              Await Triggers
-            </div>
-            <div class="text-2xl font-semibold text-purple-600 dark:text-purple-400">
-              {{ stats.awaitTriggers }}
-            </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Run-scoped
-            </div>
-          </div>
-          <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
-            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-              Fires (Last 24h)
-            </div>
-            <div class="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">
-              {{ stats.totalFires }}
-            </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {{ stats.successRate }}% success
-            </div>
-          </div>
+    <div class="flex-1 min-h-0 overflow-y-auto">
+      <div class="max-w-7xl mx-auto p-6">
+        <!-- Stats Overview -->
+        <div
+          v-if="stats"
+          class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"
+        >
+          <StatCard
+            icon="i-lucide-zap"
+            :count="stats.total"
+            label="Total Triggers"
+            variant="gray"
+          />
+          <StatCard
+            icon="i-lucide-radio"
+            :count="stats.entryTriggers"
+            label="Entry Triggers"
+            variant="blue"
+          />
+          <StatCard
+            icon="i-lucide-hand"
+            :count="stats.awaitTriggers"
+            label="Await Triggers"
+            variant="purple"
+          />
+          <StatCard
+            icon="i-lucide-activity"
+            :count="stats.totalFires"
+            label="Fires (24h)"
+            variant="emerald"
+          />
         </div>
-      </div>
 
-      <!-- Filters -->
-      <div class="px-6 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
-        <div class="flex items-center gap-3">
+        <!-- Filters -->
+        <div class="mb-4 flex items-center gap-3">
           <div class="flex-1">
             <UInput
               v-model="searchQuery"
@@ -88,72 +67,114 @@
           <USelectMenu
             v-model="typeFilter"
             :items="typeFilterOptions"
+            value-key="value"
             placeholder="All Types"
             size="sm"
-            class="w-40"
-          />
+            class="w-44"
+          >
+            <template #label>
+              <span v-if="typeFilter === 'all'">All Types</span>
+              <div
+                v-else
+                class="flex items-center gap-2"
+              >
+                <UIcon
+                  :name="getTriggerIcon(typeFilter)"
+                  class="w-4 h-4"
+                />
+                <span class="capitalize">{{ typeFilter }}</span>
+              </div>
+            </template>
+          </USelectMenu>
           <USelectMenu
             v-model="scopeFilter"
             :items="scopeFilterOptions"
+            value-key="value"
             placeholder="All Scopes"
             size="sm"
             class="w-40"
-          />
+          >
+            <template #label>
+              <span v-if="scopeFilter === 'all'">All Scopes</span>
+              <div
+                v-else
+                class="flex items-center gap-2"
+              >
+                <UIcon
+                  :name="scopeFilter === 'flow' ? 'i-lucide-git-branch' : 'i-lucide-play-circle'"
+                  class="w-4 h-4"
+                />
+                <span class="capitalize">{{ scopeFilter }}</span>
+              </div>
+            </template>
+          </USelectMenu>
           <USelectMenu
             v-model="statusFilter"
             :items="statusFilterOptions"
+            value-key="value"
             placeholder="All Status"
             size="sm"
             class="w-40"
-          />
+          >
+            <template #label>
+              <span v-if="statusFilter === 'all'">All Status</span>
+              <div
+                v-else
+                class="flex items-center gap-2"
+              >
+                <UIcon
+                  :name="statusFilter === 'active' ? 'i-lucide-check-circle' : statusFilter === 'inactive' ? 'i-lucide-pause-circle' : 'i-lucide-archive'"
+                  class="w-4 h-4"
+                />
+                <span class="capitalize">{{ statusFilter }}</span>
+              </div>
+            </template>
+          </USelectMenu>
         </div>
-      </div>
 
       <!-- Triggers List -->
       <div
         v-if="!filteredTriggers || filteredTriggers.length === 0"
-        class="flex-1 flex items-center justify-center text-sm text-gray-400"
+        class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-8 text-center text-gray-500"
       >
-        <div class="text-center">
-          <div v-if="status === 'pending'">
-            <UIcon
-              name="i-lucide-loader-2"
-              class="w-8 h-8 animate-spin mx-auto mb-2"
-            />
-            <p>Loading triggers...</p>
-          </div>
-          <div v-else-if="searchQuery || typeFilter !== 'all' || scopeFilter !== 'all' || statusFilter !== 'all'">
-            <UIcon
-              name="i-lucide-search-x"
-              class="w-8 h-8 mx-auto mb-2 text-gray-300 dark:text-gray-700"
-            />
-            <p>No triggers match your filters</p>
-            <UButton
-              size="xs"
-              color="neutral"
-              variant="ghost"
-              class="mt-2"
-              @click="clearFilters"
-            >
-              Clear Filters
-            </UButton>
-          </div>
-          <div v-else>
-            <UIcon
-              name="i-lucide-zap-off"
-              class="w-8 h-8 mx-auto mb-2 text-gray-300 dark:text-gray-700"
-            />
-            <p>No triggers registered</p>
-          </div>
+        <div v-if="status === 'pending'">
+          <UIcon
+            name="i-lucide-loader-2"
+            class="w-12 h-12 animate-spin mx-auto mb-3 opacity-50"
+          />
+          <p>Loading triggers...</p>
+        </div>
+        <div v-else-if="searchQuery || typeFilter !== 'all' || scopeFilter !== 'all' || statusFilter !== 'all'">
+          <UIcon
+            name="i-lucide-search-x"
+            class="w-12 h-12 mx-auto mb-3 opacity-50"
+          />
+          <p>No triggers match your filters</p>
+          <UButton
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            class="mt-2"
+            @click="clearFilters"
+          >
+            Clear Filters
+          </UButton>
+        </div>
+        <div v-else>
+          <UIcon
+            name="i-lucide-zap-off"
+            class="w-12 h-12 mx-auto mb-3 opacity-50"
+          />
+          <p>No triggers registered</p>
         </div>
       </div>
       <div
         v-else
-        class="flex-1 min-h-0 overflow-y-auto"
+        class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden"
       >
         <div class="divide-y divide-gray-100 dark:divide-gray-800">
           <div
-            v-for="trigger in filteredTriggers"
+            v-for="trigger in paginatedTriggers"
             :key="trigger.name"
             class="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer"
             @click="selectTrigger(trigger.name)"
@@ -282,26 +303,38 @@
             </div>
           </div>
         </div>
+
+        <!-- Pagination -->
+        <div
+          v-if="totalPages > 1"
+          class="border-t border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-center"
+        >
+          <UPagination
+            v-model:page="currentPage"
+            :items-per-page="itemsPerPage"
+            :total="filteredTriggers.length"
+          />
+        </div>
       </div>
 
-      <!-- Footer -->
+      <!-- Footer Info -->
       <div
         v-if="filteredTriggers && filteredTriggers.length > 0"
-        class="border-t border-gray-200 dark:border-gray-800 px-6 py-3 shrink-0"
+        class="mt-4 text-center text-sm text-gray-500 dark:text-gray-400"
       >
-        <div class="text-sm text-gray-500 dark:text-gray-400">
-          Showing {{ filteredTriggers.length }} of {{ triggers?.length || 0 }} trigger{{ (triggers?.length || 0) === 1 ? '' : 's' }}
-        </div>
+        Showing {{ startIndex + 1 }}-{{ endIndex }} of {{ filteredTriggers.length }} trigger{{ filteredTriggers.length === 1 ? '' : 's' }}
       </div>
     </div>
   </div>
+</div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from '#imports'
-import { UButton, UIcon, UBadge, UInput, USelectMenu } from '#components'
+import { UButton, UIcon, UBadge, UInput, USelectMenu, UPagination } from '#components'
 import { useTriggers, useTriggersStats } from '../../composables/useTriggers'
 import { useComponentRouter } from '../../composables/useComponentRouter'
+import StatCard from '../../components/StatCard.vue'
 
 const { triggers, refresh, status } = useTriggers()
 const { stats, refresh: refreshStats } = useTriggersStats()
@@ -329,9 +362,30 @@ const typeFilter = ref('all')
 const scopeFilter = ref('all')
 const statusFilter = ref('all')
 
-const typeFilterOptions = ['all', 'event', 'webhook', 'schedule', 'manual']
-const scopeFilterOptions = ['all', 'flow', 'run']
-const statusFilterOptions = ['all', 'active', 'inactive', 'retired']
+const typeFilterOptions = [
+  { label: 'All Types', value: 'all' },
+  { label: 'Event', value: 'event', icon: 'i-lucide-radio' },
+  { label: 'Webhook', value: 'webhook', icon: 'i-lucide-webhook' },
+  { label: 'Schedule', value: 'schedule', icon: 'i-lucide-clock' },
+  { label: 'Manual', value: 'manual', icon: 'i-lucide-hand' },
+]
+
+const scopeFilterOptions = [
+  { label: 'All Scopes', value: 'all' },
+  { label: 'Flow', value: 'flow', icon: 'i-lucide-git-branch' },
+  { label: 'Run', value: 'run', icon: 'i-lucide-play-circle' },
+]
+
+const statusFilterOptions = [
+  { label: 'All Status', value: 'all' },
+  { label: 'Active', value: 'active', icon: 'i-lucide-check-circle' },
+  { label: 'Inactive', value: 'inactive', icon: 'i-lucide-pause-circle' },
+  { label: 'Retired', value: 'retired', icon: 'i-lucide-archive' },
+]
+
+// Pagination
+const currentPage = ref(1)
+const itemsPerPage = 10
 
 // Filtered triggers
 const filteredTriggers = computed(() => {
@@ -368,11 +422,32 @@ const filteredTriggers = computed(() => {
   return result
 })
 
+// Pagination calculations
+const totalPages = computed(() => {
+  if (!filteredTriggers.value) return 0
+  return Math.ceil(filteredTriggers.value.length / itemsPerPage)
+})
+
+const startIndex = computed(() => {
+  return (currentPage.value - 1) * itemsPerPage
+})
+
+const endIndex = computed(() => {
+  if (!filteredTriggers.value) return 0
+  return Math.min(startIndex.value + itemsPerPage, filteredTriggers.value.length)
+})
+
+const paginatedTriggers = computed(() => {
+  if (!filteredTriggers.value) return []
+  return filteredTriggers.value.slice(startIndex.value, endIndex.value)
+})
+
 const clearFilters = () => {
   searchQuery.value = ''
   typeFilter.value = 'all'
   scopeFilter.value = 'all'
   statusFilter.value = 'all'
+  currentPage.value = 1
 }
 
 const selectTrigger = (name: string) => {

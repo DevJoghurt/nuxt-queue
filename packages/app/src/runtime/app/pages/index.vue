@@ -20,7 +20,8 @@ import Dashboard from './dashboard.vue'
 import Queue from './queues/index.vue'
 import QueueJobs from './queues/jobs.vue'
 import QueueJob from './queues/job.vue'
-import QueueFlows from './flows/index.vue'
+import Flows from './flows/index.vue'
+import FlowDetail from './flows/[name].vue'
 import Triggers from './triggers/index.vue'
 import TriggerDetail from './triggers/[name].vue'
 import TriggerNew from './triggers/new.vue'
@@ -40,7 +41,8 @@ const routes = {
   '/queues': Queue,
   '/queues/:name/jobs': QueueJobs,
   '/queues/:name/jobs/:id': QueueJob,
-  '/flows': QueueFlows,
+  '/flows': Flows,
+  '/flows/:name': FlowDetail,
   '/triggers': Triggers,
   '/triggers/new': TriggerNew,
   '/triggers/:name/edit': TriggerEdit,

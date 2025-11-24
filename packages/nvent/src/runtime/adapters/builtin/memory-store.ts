@@ -4,7 +4,7 @@
  * In-memory storage implementation for development
  * Three-tier storage:
  * 1. Event Stream - Append-only event log
- * 2. Document Store - Generic document storage
+ * 2. Sorted Index - Time-ordered metadata storage
  * 3. Key-Value Store - Fast lookups
  *
  * All data is lost on restart (ephemeral)
@@ -25,16 +25,12 @@ export class MemoryStoreAdapter implements StoreAdapter {
   private eventSubscriptions = new Map<string, Map<string, (event: EventRecord) => void>>()
   private subscriptionCounter = 0
 
-  // Document Store storage: collection -> id -> document
-  private documents = new Map<string, Map<string, any>>()
-
   // Key-Value Store storage: key -> value
   private kvStore = new Map<string, any>()
 
   async close(): Promise<void> {
     this.eventStreams.clear()
     this.eventSubscriptions.clear()
-    this.documents.clear()
     this.kvStore.clear()
   }
 
@@ -148,83 +144,6 @@ export class MemoryStoreAdapter implements StoreAdapter {
           console.error(`[MemoryStoreAdapter] Error in event subscription for ${subject}:`, error)
         }
       })
-    }
-  }
-
-  // ============================================================
-  // Document Store
-  // ============================================================
-
-  async save(collection: string, id: string, doc: Record<string, any>): Promise<void> {
-    // Get or create collection
-    if (!this.documents.has(collection)) {
-      this.documents.set(collection, new Map())
-    }
-
-    const collectionDocs = this.documents.get(collection)!
-    collectionDocs.set(id, doc)
-  }
-
-  async get(collection: string, id: string): Promise<Record<string, any> | null> {
-    const collectionDocs = this.documents.get(collection)
-    if (!collectionDocs) {
-      return null
-    }
-
-    return collectionDocs.get(id) || null
-  }
-
-  async list(collection: string, opts?: ListOptions): Promise<Array<{ id: string, doc: any }>> {
-    const collectionDocs = this.documents.get(collection)
-    if (!collectionDocs) {
-      return []
-    }
-
-    let results = Array.from(collectionDocs.entries()).map(([id, doc]) => ({ id, doc }))
-
-    // Apply filter
-    if (opts?.filter) {
-      results = results.filter((item) => {
-        return Object.entries(opts.filter!).every(([key, value]) => {
-          return item.doc[key] === value
-        })
-      })
-    }
-
-    // Apply sorting
-    if (opts?.sortBy) {
-      results.sort((a, b) => {
-        const aVal = a.doc[opts.sortBy!]
-        const bVal = b.doc[opts.sortBy!]
-
-        if (aVal < bVal) return opts.order === 'desc' ? 1 : -1
-        if (aVal > bVal) return opts.order === 'desc' ? -1 : 1
-        return 0
-      })
-    }
-
-    // Apply offset
-    if (opts?.offset) {
-      results = results.slice(opts.offset)
-    }
-
-    // Apply limit
-    if (opts?.limit) {
-      results = results.slice(0, opts.limit)
-    }
-
-    return results
-  }
-
-  async delete(collection: string, id: string): Promise<void> {
-    const collectionDocs = this.documents.get(collection)
-    if (collectionDocs) {
-      collectionDocs.delete(id)
-
-      // Clean up empty collection
-      if (collectionDocs.size === 0) {
-        this.documents.delete(collection)
-      }
     }
   }
 
@@ -477,6 +396,31 @@ export class MemoryStoreAdapter implements StoreAdapter {
     entry.metadata.version = (entry.metadata.version || 0) + 1
 
     return newValue
+  }
+
+  async indexDelete(key: string, id: string): Promise<boolean> {
+    const index = this.sortedIndices.get(key)
+    if (!index) return false
+
+    const initialLength = index.length
+    const filtered = index.filter(e => e.id !== id)
+    
+    if (filtered.length === initialLength) {
+      return false // Entry not found
+    }
+
+    this.sortedIndices.set(key, filtered)
+    return true
+  }
+
+  async delete(subject: string): Promise<boolean> {
+    const existed = this.eventStreams.has(subject)
+    if (existed) {
+      this.eventStreams.delete(subject)
+      // Also clean up any subscriptions for this stream
+      this.eventSubscriptions.delete(subject)
+    }
+    return existed
   }
 
   // ============================================================

@@ -26,7 +26,7 @@ export interface RedisStoreAdapterOptions {
  * Redis store adapter using Redis Streams for event storage
  * Implements the three-tier storage interface:
  * - Event Stream: Redis Streams (XADD/XRANGE)
- * - Document Store: Redis Hashes
+ * - Sorted Index: Redis Sorted Sets (ZADD/ZRANGE)
  * - Key-Value Store: Redis Strings
  */
 export class RedisStoreAdapter implements StoreAdapter {
@@ -429,107 +429,6 @@ export class RedisStoreAdapter implements StoreAdapter {
   }
 
   // ============================================================
-  // Document Store Methods
-  // ============================================================
-
-  async save(collection: string, id: string, doc: Record<string, any>): Promise<void> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    // Use collection:id as key (e.g., 'nq:flows:flowName:meta:runId')
-    const key = `${collection}:${id}`
-
-    // Use generic serializer for hash storage
-    const serialized = this.serializeHashFields(doc)
-
-    // Clear existing hash and set new values
-    await this.redis.del(key)
-    if (Object.keys(serialized).length > 0) {
-      await this.redis.hset(key, serialized)
-    }
-  }
-
-  async get(collection: string, id: string): Promise<Record<string, any> | null> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    const key = `${collection}:${id}`
-    const rawData = await this.redis.hgetall(key)
-
-    if (!rawData || Object.keys(rawData).length === 0) {
-      return null
-    }
-
-    // Use generic parser to deserialize all fields
-    return this.parseHashFields(rawData)
-  }
-
-  async list(collection: string, opts?: ListOptions): Promise<Array<{ id: string, doc: any }>> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    const pattern = `${collection}:*`
-    const collectionPrefix = `${collection}:`
-
-    let cursor = '0'
-    const results: Array<{ id: string, doc: any }> = []
-
-    do {
-      const result = await this.redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100)
-      cursor = result[0]
-      const keys = result[1]
-
-      for (const key of keys) {
-        const id = key.substring(collectionPrefix.length)
-        const doc = await this.get(collection, id)
-
-        if (doc) {
-          // Apply filter if provided
-          if (opts?.filter) {
-            let matches = true
-            for (const [filterKey, filterValue] of Object.entries(opts.filter)) {
-              if (doc[filterKey] !== filterValue) {
-                matches = false
-                break
-              }
-            }
-            if (!matches) continue
-          }
-
-          results.push({ id, doc })
-        }
-      }
-    } while (cursor !== '0')
-
-    // Apply sorting if specified
-    if (opts?.sortBy) {
-      results.sort((a, b) => {
-        const aVal = a.doc[opts.sortBy!]
-        const bVal = b.doc[opts.sortBy!]
-        const order = opts.order === 'desc' ? -1 : 1
-        return aVal < bVal ? -order : aVal > bVal ? order : 0
-      })
-    }
-
-    // Apply offset and limit
-    const offset = opts?.offset || 0
-    const limit = opts?.limit || results.length
-    return results.slice(offset, offset + limit)
-  }
-
-  async delete(collection: string, id: string): Promise<void> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    const key = `${collection}:${id}`
-    await this.redis.del(key)
-  }
-
-  // ============================================================
   // Sorted Index Methods (optional)
   // ============================================================
 
@@ -694,6 +593,33 @@ export class RedisStoreAdapter implements StoreAdapter {
     await this.redis.hincrby(metaKey, 'version', 1)
 
     return newValue
+  }
+
+  async indexDelete(key: string, id: string): Promise<boolean> {
+    if (!this.redis.status || this.redis.status === 'end') {
+      await this.redis.connect()
+    }
+
+    // Remove from sorted set
+    const removed = await this.redis.zrem(key, id)
+
+    // Delete metadata hash
+    const metaKey = `${key}:meta:${id}`
+    await this.redis.del(metaKey)
+
+    return removed > 0
+  }
+
+  async delete(subject: string): Promise<boolean> {
+    if (!this.redis.status || this.redis.status === 'end') {
+      await this.redis.connect()
+    }
+
+    // Delete Redis stream (XDEL removes individual entries, but we want to delete the entire stream)
+    // Use DEL to remove the entire stream key
+    const deleted = await this.redis.del(subject)
+
+    return deleted > 0
   }
 
   // ============================================================

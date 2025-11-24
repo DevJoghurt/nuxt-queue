@@ -1,4 +1,4 @@
-import { ref, useFetch, type Ref } from '#imports'
+import { ref, useFetch, type Ref, isRef } from '#imports'
 import type { FetchError } from 'ofetch'
 
 export interface TriggerDetail {
@@ -58,6 +58,7 @@ export interface TriggerEventsResponse {
   triggerName: string
   events: TriggerEvent[]
   count: number
+  total: number // Total count for pagination
   hasMore: boolean
 }
 
@@ -111,10 +112,15 @@ export function useTrigger(
  */
 export function useTriggerEvents(
   name: Ref<string | null>,
-  options: {
+  options?: Ref<{
     limit?: number
+    offset?: number
     types?: string[]
-  } = {},
+  }> | {
+    limit?: number
+    offset?: number
+    types?: string[]
+  },
 ): {
   events: Ref<TriggerEventsResponse | null | undefined>
   refresh: () => Promise<void>
@@ -123,13 +129,17 @@ export function useTriggerEvents(
 } {
   const refreshCounter = ref(0)
 
+  // Support both reactive and non-reactive options
+  const opts = isRef(options) ? options : ref(options || {})
+
   const buildUrl = () => {
     if (!name.value) return '/api/_triggers/null/events'
 
     const params = new URLSearchParams()
     params.append('_t', refreshCounter.value.toString())
-    if (options.limit) params.append('limit', options.limit.toString())
-    if (options.types) params.append('types', options.types.join(','))
+    if (opts.value.limit) params.append('limit', opts.value.limit.toString())
+    if (opts.value.offset) params.append('offset', opts.value.offset.toString())
+    if (opts.value.types) params.append('types', opts.value.types.join(','))
 
     return `/api/_triggers/${encodeURIComponent(name.value)}/events?${params.toString()}`
   }

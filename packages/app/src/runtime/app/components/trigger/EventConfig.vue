@@ -1,6 +1,6 @@
 <template>
-  <UCard>
-    <template #header>
+  <component :is="noCard ? 'div' : UCard">
+    <template v-if="!noCard" #header>
       <div class="flex items-center gap-2">
         <UIcon
           name="i-lucide-radio"
@@ -13,8 +13,10 @@
     </template>
 
     <UForm
-      :state="config"
-      class="space-y-4"
+      nested
+      :name="name"
+      :schema="schema"
+      :class="noCard ? 'space-y-6' : 'space-y-4'"
     >
       <UFormField
         label="Event Name"
@@ -25,8 +27,7 @@
           <span class="text-xs text-gray-500">The event type to listen for</span>
         </template>
         <UInput
-          :model-value="config.event"
-          @update:model-value="$emit('update:event', $event)"
+          v-model="config.event"
           placeholder="user.created"
           icon="i-lucide-radio"
         />
@@ -37,29 +38,34 @@
         name="filter"
       >
         <template #hint>
-          <span class="text-xs text-gray-500">Optional JSON filter for event data</span>
+          <span class="text-xs text-gray-500">Optional JSON filter to match specific event payloads</span>
         </template>
         <UTextarea
-          :model-value="config.filter"
-          @update:model-value="$emit('update:filter', $event)"
-          placeholder="{&quot;status&quot;: &quot;active&quot;}"
+          v-model="config.filter"
+          placeholder='{"status": "active"}'
           :rows="4"
         />
       </UFormField>
     </UForm>
-  </UCard>
+  </component>
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  config: {
-    event: string
-    filter: string
-  }
+import { UCard } from '#components'
+import { z } from 'zod'
+
+const { noCard = false, name = 'config' } = defineProps<{
+  noCard?: boolean
+  name?: string
 }>()
 
-defineEmits<{
-  'update:event': [value: string]
-  'update:filter': [value: string]
-}>()
+const config = defineModel<{
+  event: string
+  filter: string
+}>({ required: true })
+
+const schema = z.object({
+  event: z.string().min(1, 'Event name is required'),
+  filter: z.string().optional(),
+})
 </script>

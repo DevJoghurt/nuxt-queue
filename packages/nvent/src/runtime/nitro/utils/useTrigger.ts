@@ -18,6 +18,7 @@ export interface RegisterTriggerOptions {
   name: string
   type: 'event' | 'webhook' | 'schedule' | 'manual'
   scope: 'flow' | 'run'
+  status?: 'active' | 'inactive' | 'retired'
   displayName?: string
   description?: string
   source?: string
@@ -89,6 +90,7 @@ export function useTrigger() {
           data: {
             type: opts.type,
             scope: opts.scope,
+            status: opts.status,
             displayName: opts.displayName,
             description: opts.description,
             source: opts.source || 'programmatic',
@@ -361,26 +363,50 @@ export function useTrigger() {
     },
 
     /**
-     * Retire a trigger (mark as inactive)
+     * Delete a trigger completely (removes all data)
      * Publishes event to bus - triggerWiring handles persistence and orchestration
      */
-    async retireTrigger(name: string, reason: string = 'Manual retirement') {
+    async deleteTrigger(name: string) {
       const eventBus = getEventBus()
       const trigger = runtime.getTrigger(name)
 
       if (!trigger) {
-        logger.warn(`Cannot retire non-existent trigger: ${name}`)
+        logger.warn(`Cannot delete non-existent trigger: ${name}`)
         return
       }
 
-      logger.info(`Retiring trigger: ${name} (reason: ${reason})`)
+      logger.info(`Deleting trigger: ${name}`)
 
-      // Publish trigger.retired event
+      // Publish trigger.deleted event
       await eventBus.publish({
-        type: 'trigger.retired',
+        type: 'trigger.deleted',
+        triggerName: name,
+        data: {},
+      } as any)
+    },
+
+    /**
+     * Update trigger status (active/inactive/retired)
+     * For future status management UI
+     */
+    async updateTriggerStatus(name: string, status: 'active' | 'inactive' | 'retired') {
+      const eventBus = getEventBus()
+      const trigger = runtime.getTrigger(name)
+
+      if (!trigger) {
+        logger.warn(`Cannot update status of non-existent trigger: ${name}`)
+        return
+      }
+
+      logger.info(`Updating trigger ${name} status to: ${status}`)
+
+      // Publish trigger.updated event with status change
+      await eventBus.publish({
+        type: 'trigger.updated',
         triggerName: name,
         data: {
-          reason,
+          ...trigger,
+          status,
         },
       } as any)
     },

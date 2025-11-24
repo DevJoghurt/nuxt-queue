@@ -1,4 +1,4 @@
-import { defineEventHandler, getRouterParam, useTrigger, createError } from '#imports'
+import { defineEventHandler, getRouterParam, useTrigger, createError, getRequestURL } from '#imports'
 
 /**
  * Get detailed information about a specific trigger
@@ -15,6 +15,10 @@ export default defineEventHandler(async (event: any) => {
   }
 
   const { getTrigger, getSubscribedFlows, getTriggerStats, getAllSubscriptions, getTriggerHistory } = useTrigger()
+
+  // Get the base URL from the request
+  const requestURL = getRequestURL(event)
+  const baseURL = `${requestURL.protocol}//${requestURL.host}`
 
   const trigger = getTrigger(name)
 
@@ -53,6 +57,16 @@ export default defineEventHandler(async (event: any) => {
     // If history fails, just use 0
   }
 
+  // Enhance webhook config with full URL if it's a webhook trigger
+  // The actual route is /api/_webhook/trigger/:triggerName
+  const webhookConfig = trigger.webhook
+    ? {
+        ...trigger.webhook,
+        path: trigger.webhook.path || `/api/_webhook/trigger/${name}`,
+        fullUrl: `${baseURL}/api/_webhook/trigger/${name}`,
+      }
+    : undefined
+
   return {
     name: trigger.name,
     type: trigger.type,
@@ -64,7 +78,7 @@ export default defineEventHandler(async (event: any) => {
     registeredAt: trigger.registeredAt,
     registeredBy: trigger.registeredBy,
     lastActivityAt: trigger.lastActivityAt,
-    webhook: trigger.webhook,
+    webhook: webhookConfig,
     schedule: trigger.schedule,
     config: trigger.config,
     version: trigger.version,
