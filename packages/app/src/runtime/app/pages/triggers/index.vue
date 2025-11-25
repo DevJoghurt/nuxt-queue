@@ -8,7 +8,11 @@
             Triggers
           </h1>
         </div>
-        <div>
+        <div class="flex items-center gap-3">
+          <LiveIndicator
+            :is-connected="triggerWs.connected.value"
+            :is-reconnecting="triggerWs.reconnecting.value"
+          />
           <UButton
             icon="i-lucide-plus"
             label="Create Trigger"
@@ -137,7 +141,7 @@
         v-if="!filteredTriggers || filteredTriggers.length === 0"
         class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-8 text-center text-gray-500"
       >
-        <div v-if="status === 'pending'">
+        <div v-if="loading">
           <UIcon
             name="i-lucide-loader-2"
             class="w-12 h-12 animate-spin mx-auto mb-3 opacity-50"
@@ -330,30 +334,110 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from '#imports'
+import { ref, computed, onMounted, onBeforeUnmount } from '#imports'
 import { UButton, UIcon, UBadge, UInput, USelectMenu, UPagination } from '#components'
-import { useTriggers, useTriggersStats } from '../../composables/useTriggers'
 import { useComponentRouter } from '../../composables/useComponentRouter'
+import { useTriggerWebSocket } from '../../composables/useTriggerWebSocket'
 import StatCard from '../../components/StatCard.vue'
+import LiveIndicator from '../../components/LiveIndicator.vue'
 
-const { triggers, refresh, status } = useTriggers()
-const { stats, refresh: refreshStats } = useTriggersStats()
 const router = useComponentRouter()
 
-// Auto-refresh every 5 seconds
-let refreshInterval: NodeJS.Timeout | null = null
+// Reactive triggers data (populated via WebSocket)
+const triggers = ref<any[]>([])
+const loading = ref(true)
 
-onMounted(() => {
-  refreshInterval = setInterval(() => {
-    refresh()
-    refreshStats()
-  }, 5000)
+// WebSocket connection
+const triggerWs = useTriggerWebSocket()
+
+// Fetch initial trigger list
+async function fetchTriggers() {
+  try {
+    const data = await $fetch('/api/_triggers')
+    triggers.value = data as any[]
+  }
+  catch (err) {
+    console.error('Error fetching triggers:', err)
+  }
+}
+
+// Update trigger stats from WebSocket message
+function updateTriggerStats(data: any) {
+  const triggerName = data?.id
+  if (!triggerName || !triggers.value)
+    return
+
+  const triggerIndex = triggers.value.findIndex(t => t.name === triggerName)
+  if (triggerIndex === -1) {
+    console.warn('[Trigger Stats] Trigger not found in list:', triggerName)
+    return
+  }
+
+  const metadata = data?.metadata
+  if (!metadata) {
+    console.warn('[Trigger Stats] No metadata in update:', data)
+    return
+  }
+
+  console.log('[Trigger Stats] Updating trigger:', triggerName, 'metadata:', metadata)
+
+  // Check if stats are nested or flat
+  const stats = metadata.stats || {
+    totalFires: metadata['stats.totalFires'] || 0,
+    totalFlowsStarted: metadata['stats.totalFlowsStarted'] || 0,
+    lastFiredAt: metadata['stats.lastFiredAt'],
+    activeSubscribers: metadata['stats.activeSubscribers'] || 0,
+  }
+
+  // Create a new trigger object to trigger Vue reactivity
+  triggers.value[triggerIndex] = {
+    ...triggers.value[triggerIndex],
+    stats: {
+      ...triggers.value[triggerIndex].stats,
+      totalFires: stats.totalFires || 0,
+      totalFlowsStarted: stats.totalFlowsStarted || 0,
+      lastFiredAt: stats.lastFiredAt,
+      activeSubscribers: stats.activeSubscribers || 0,
+    },
+    lastActivityAt: metadata.lastActivityAt,
+  }
+
+  console.log('[Trigger Stats] Updated stats for', triggerName, ':', triggers.value[triggerIndex].stats)
+}
+
+onMounted(async () => {
+  await fetchTriggers()
+
+  if (import.meta.client) {
+    // Subscribe to trigger stats updates
+    triggerWs.subscribeStats(
+      {
+        onInitial: (data) => {
+          console.log('[Trigger Stats] Received initial data:', data.id)
+          updateTriggerStats(data)
+        },
+        onUpdate: (data) => {
+          console.log('[Trigger Stats] Received update:', data.id)
+          updateTriggerStats(data)
+        },
+      },
+      {
+        autoReconnect: true,
+        onOpen: () => {
+          console.log('[Trigger Stats] Connected')
+          loading.value = false
+        },
+        onError: (err) => {
+          console.error('[Trigger Stats] Error:', err)
+        },
+      },
+    )
+  }
 })
 
-onUnmounted(() => {
-  if (refreshInterval) {
-    clearInterval(refreshInterval)
-  }
+onBeforeUnmount(() => {
+  triggerWs.unsubscribeStats()
+  triggerWs.stop()
 })
 
 // Filters
@@ -507,4 +591,23 @@ const formatNumber = (num: number | undefined) => {
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
   return num.toString()
 }
+
+// Computed aggregate stats
+const stats = computed(() => {
+  if (!triggers.value || triggers.value.length === 0) {
+    return {
+      total: 0,
+      active: 0,
+      totalSubscriptions: 0,
+      totalFires: 0,
+    }
+  }
+
+  return {
+    total: triggers.value.length,
+    active: triggers.value.filter(t => t.status === 'active').length,
+    totalSubscriptions: triggers.value.reduce((acc, t) => acc + (t.subscriptionCount || t.stats?.activeSubscribers || 0), 0),
+    totalFires: triggers.value.reduce((acc, t) => acc + (t.stats?.totalFires || 0), 0),
+  }
+})
 </script>

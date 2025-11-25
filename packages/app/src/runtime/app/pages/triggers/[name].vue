@@ -542,7 +542,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from '#imports'
+import { ref, computed, onMounted, onUnmounted, watch } from '#imports'
 import { UButton, UIcon, UBadge, USelectMenu, UTabs } from '#components'
 import { useTrigger, useTriggerEvents, type TriggerEvent } from '../../composables/useTrigger'
 import { useComponentRouter } from '../../composables/useComponentRouter'
@@ -618,7 +618,32 @@ const eventQueryOptions = computed(() => {
 const { events: fetchedEvents, refresh: refreshEvents, status: eventsStatus } = useTriggerEvents(triggerName, eventQueryOptions)
 
 // WebSocket for live updates
-const { isConnected, isReconnecting, events: liveEvents } = useTriggerWebSocket(triggerName)
+const liveEvents = ref<TriggerEvent[]>([])
+const { connected: isConnected, reconnecting: isReconnecting, subscribe, unsubscribe } = useTriggerWebSocket()
+
+// Subscribe to trigger events when triggerName changes (client-side only)
+watch([triggerName], () => {
+  // Skip on server
+  if (import.meta.server) return
+  
+  if (!triggerName.value) {
+    unsubscribe()
+    liveEvents.value = []
+    return
+  }
+
+  subscribe({
+    triggerName: triggerName.value,
+    onEvent: (event: any) => {
+      // Add new event to the beginning of the array
+      liveEvents.value = [event, ...liveEvents.value].slice(0, 50) // Keep last 50 live events
+    },
+    onHistory: (events: any[]) => {
+      // Replace live events with history (on reconnect or initial load)
+      liveEvents.value = events.slice(0, 50)
+    },
+  })
+}, { immediate: true })
 
 // Auto-refresh trigger metadata every 5 seconds using useFetch's refresh
 onMounted(() => {
@@ -628,6 +653,7 @@ onMounted(() => {
 
   onUnmounted(() => {
     clearInterval(refreshInterval)
+    unsubscribe()
   })
 })
 
@@ -797,13 +823,6 @@ const formatDate = (timestamp: number) => {
   return new Date(timestamp).toLocaleString()
 }
 
-const formatNumber = (num: number | undefined) => {
-  if (num == null) return '0'
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
-  return num.toString()
-}
-
 const getFilterIcon = (value: string) => {
   switch (value) {
     case 'trigger.fired': return 'i-lucide-zap'
@@ -831,7 +850,8 @@ const copyToClipboard = async (text: string) => {
   try {
     await navigator.clipboard.writeText(text)
     // You could add a toast notification here if you have one
-  } catch (err) {
+  }
+  catch (err) {
     console.error('Failed to copy:', err)
   }
 }

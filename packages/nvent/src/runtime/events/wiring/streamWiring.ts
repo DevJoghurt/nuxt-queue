@@ -181,6 +181,28 @@ export function createStreamWiring(opts: StreamWiringOptions = {}) {
       }
     }
 
+    // Handler for trigger stats updates
+    const handleTriggerStatsUpdate = async (e: any) => {
+      try {
+        const { SubjectPatterns } = useStreamTopics()
+        const triggerIndexKey = SubjectPatterns.triggerIndex()
+        const topic = `store:index:${triggerIndexKey}`
+
+        await stream.publish(topic, {
+          id: e.triggerName,
+          metadata: e.metadata,
+        })
+
+        logger.debug('Published trigger stats update to stream', { triggerName: e.triggerName })
+      }
+      catch (err) {
+        logger.error('Failed to publish trigger stats to stream', {
+          triggerName: e.triggerName,
+          error: (err as any)?.message,
+        })
+      }
+    }
+
     // Register flow event handlers
     for (const type of flowEventTypes) {
       unsubs.push(bus.onType(type, handleFlowClientMessage))
@@ -193,6 +215,9 @@ export function createStreamWiring(opts: StreamWiringOptions = {}) {
 
     // Register flow stats update handler
     unsubs.push(bus.onType('flow.stats.updated', handleFlowStatsUpdate))
+
+    // Register trigger stats update handler
+    unsubs.push(bus.onType('trigger.stats.updated', handleTriggerStatsUpdate))
 
     logger.info('Stream wiring started - listening for persisted flow and trigger events')
   }

@@ -5,12 +5,13 @@ import {
   useStreamAdapter,
   useStoreAdapter,
   useStreamTopics,
+  useTrigger,
 } from '#imports'
 
 import type { SubscriptionHandle } from '#nvent/adapters'
 
 interface PeerContext {
-  subscriptions: Map<string, SubscriptionHandle> // triggerName -> subscription handle
+  subscriptions: Map<string, (() => void) | SubscriptionHandle> // subscription key -> unsubscribe function or handle
 }
 
 const peerContexts = new WeakMap<any, PeerContext>()
@@ -50,6 +51,14 @@ function safeSend(peer: any, data: any): boolean {
  *   "type": "ping"
  * }
  *
+ * {
+ *   "type": "subscribe.stats"
+ * }
+ *
+ * {
+ *   "type": "unsubscribe.stats"
+ * }
+ *
  * Message format (server -> client):
  * {
  *   "type": "event",
@@ -71,6 +80,18 @@ function safeSend(peer: any, data: any): boolean {
  * {
  *   "type": "unsubscribed",
  *   "triggerName": "user.created"
+ * }
+ *
+ * {
+ *   "type": "trigger.stats.initial",
+ *   "data": { id: "triggerName", metadata: {...} },
+ *   "timestamp": 1234567890
+ * }
+ *
+ * {
+ *   "type": "trigger.stats.update",
+ *   "data": { id: "triggerName", metadata: {...} },
+ *   "timestamp": 1234567890
  * }
  *
  * {
@@ -157,7 +178,12 @@ export default defineWebSocketHandler({
       const existingHandle = context.subscriptions.get(triggerName)
       if (existingHandle) {
         try {
-          await existingHandle.unsubscribe()
+          if (typeof existingHandle === 'function') {
+            await existingHandle()
+          }
+          else {
+            await existingHandle.unsubscribe()
+          }
         }
         catch (err) {
           logger.error('[ws] error unsubscribing:', { error: err })
@@ -227,7 +253,12 @@ export default defineWebSocketHandler({
 
       if (handle) {
         try {
-          await handle.unsubscribe()
+          if (typeof handle === 'function') {
+            await handle()
+          }
+          else {
+            await handle.unsubscribe()
+          }
           context.subscriptions.delete(triggerName)
 
           safeSend(peer, {
@@ -240,6 +271,133 @@ export default defineWebSocketHandler({
           safeSend(peer, {
             type: 'error',
             message: 'Failed to unsubscribe',
+          })
+        }
+      }
+    }
+    else if (type === 'subscribe.stats') {
+      // Subscribe to trigger stats updates (trigger index changes)
+      const statsKey = 'stats'
+
+      // Check if already subscribed
+      const existingUnsub = context.subscriptions.get(statsKey)
+      if (existingUnsub) {
+        safeSend(peer, {
+          type: 'error',
+          message: 'Already subscribed to stats',
+        })
+        return
+      }
+
+      try {
+        const stream = useStreamAdapter()
+        const { SubjectPatterns } = useStreamTopics()
+        const triggerIndexKey = SubjectPatterns.triggerIndex()
+        const topic = `store:index:${triggerIndexKey}`
+
+        const handle = await stream.subscribe(topic, (message: any) => {
+          safeSend(peer, {
+            type: 'trigger.stats.update',
+            data: message,
+            timestamp: Date.now(),
+          })
+        })
+
+        // Store unsubscribe function
+        const unsub = async () => {
+          try {
+            await handle.unsubscribe()
+          }
+          catch (err) {
+            logger.error('[ws] error in stats unsub:', { error: err })
+          }
+        }
+
+        context.subscriptions.set(statsKey, unsub)
+
+        // Send all current stats immediately after subscription
+        try {
+          const trigger = useTrigger()
+          const allTriggers = trigger.getAllTriggers()
+          const { getSubscribedFlows, getTriggerStats } = trigger
+
+          if (allTriggers && allTriggers.length > 0) {
+            for (const triggerEntry of allTriggers) {
+              const subscribedFlows = getSubscribedFlows(triggerEntry.name)
+              const stats = await getTriggerStats(triggerEntry.name)
+
+              safeSend(peer, {
+                type: 'trigger.stats.initial',
+                data: {
+                  id: triggerEntry.name,
+                  metadata: {
+                    'name': triggerEntry.name,
+                    'type': triggerEntry.type,
+                    'scope': triggerEntry.scope,
+                    'displayName': triggerEntry.displayName,
+                    'description': triggerEntry.description,
+                    'source': triggerEntry.source,
+                    'status': triggerEntry.status || 'active',
+                    'registeredAt': triggerEntry.registeredAt,
+                    'lastActivityAt': triggerEntry.lastActivityAt,
+                    'webhook': triggerEntry.webhook,
+                    'schedule': triggerEntry.schedule,
+                    'config': triggerEntry.config,
+                    'subscribedFlows': subscribedFlows,
+                    'subscriptionCount': subscribedFlows.length,
+                    'stats.totalFires': stats?.totalFires || 0,
+                    'stats.totalFlowsStarted': stats?.totalFlowsStarted || 0,
+                    'stats.activeSubscribers': stats?.activeSubscribers || subscribedFlows.length,
+                    'stats.lastFiredAt': stats?.lastFiredAt,
+                  },
+                },
+                timestamp: Date.now(),
+              })
+            }
+          }
+        }
+        catch (err) {
+          logger.error('[ws] error fetching initial trigger stats:', { error: err })
+        }
+
+        safeSend(peer, {
+          type: 'stats.subscribed',
+          timestamp: Date.now(),
+        })
+      }
+      catch (err) {
+        logger.error('[ws] error subscribing to stats:', { error: err })
+        safeSend(peer, {
+          type: 'error',
+          message: 'Failed to subscribe to stats',
+        })
+      }
+    }
+    else if (type === 'unsubscribe.stats') {
+      // Unsubscribe from trigger stats
+      const statsKey = 'stats'
+      const unsub = context.subscriptions.get(statsKey)
+
+      if (unsub) {
+        try {
+          if (typeof unsub === 'function') {
+            await unsub()
+          }
+          else {
+            await unsub.unsubscribe()
+          }
+          context.subscriptions.delete(statsKey)
+
+          safeSend(peer, {
+            type: 'stats.unsubscribed',
+            timestamp: Date.now(),
+          })
+        }
+        catch (err) {
+          logger.error('[ws] error unsubscribing from stats:', { error: err })
+          safeSend(peer, {
+            type: 'error',
+            message: 'Failed to unsubscribe from stats',
           })
         }
       }
@@ -272,9 +430,14 @@ export default defineWebSocketHandler({
     const context = peerContexts.get(peer)
     if (context) {
       // Unsubscribe from all streams
-      for (const handle of Array.from(context.subscriptions.values())) {
+      for (const handleOrUnsub of Array.from(context.subscriptions.values())) {
         try {
-          await handle.unsubscribe()
+          if (typeof handleOrUnsub === 'function') {
+            await handleOrUnsub()
+          }
+          else {
+            await handleOrUnsub.unsubscribe()
+          }
         }
         catch (err) {
           // Suppress errors during normal closure
@@ -300,9 +463,14 @@ export default defineWebSocketHandler({
     const context = peerContexts.get(peer)
     if (context) {
       // Cleanup on error
-      for (const handle of Array.from(context.subscriptions.values())) {
+      for (const handleOrUnsub of Array.from(context.subscriptions.values())) {
         try {
-          await handle.unsubscribe()
+          if (typeof handleOrUnsub === 'function') {
+            await handleOrUnsub()
+          }
+          else {
+            await handleOrUnsub.unsubscribe()
+          }
         }
         catch (err) {
           logger.error('[ws] error unsubscribing on error:', { error: err })

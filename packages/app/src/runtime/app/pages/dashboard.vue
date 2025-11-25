@@ -11,17 +11,13 @@
             Overview of your Nuxt Queue system
           </p>
         </div>
-        <button
-          class="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-          @click="refreshAll"
+        <div
+          v-if="isConnected"
+          class="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400"
         >
-          <UIcon
-            name="i-lucide-refresh-cw"
-            class="w-4 h-4"
-            :class="{ 'animate-spin': isRefreshing }"
-          />
-          <span>Refresh</span>
-        </button>
+          <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Live</span>
+        </div>
       </div>
     </div>
 
@@ -90,8 +86,14 @@
               Registered Flows
             </div>
             <div class="flex items-center gap-4 text-xs opacity-75">
+              <div v-if="flowsStats?.running > 0">
+                <span class="font-semibold">{{ flowsStats?.running }}</span> running
+              </div>
+              <div v-if="flowsStats?.awaiting > 0">
+                <span class="font-semibold">{{ flowsStats?.awaiting }}</span> awaiting
+              </div>
               <div>
-                <span class="font-semibold">{{ flowsStats?.active || 0 }}</span> active
+                <span class="font-semibold">{{ formatNumber(flowsStats?.success || 0) }}</span> success
               </div>
             </div>
           </div>
@@ -124,7 +126,7 @@
                 <span class="font-semibold">{{ formatNumber(triggersStats?.totalFires || 0) }}</span> fires
               </div>
               <div>
-                <span class="font-semibold">{{ triggersStats?.totalSubscriptions || 0 }}</span> subs
+                <span class="font-semibold">{{ formatNumber(triggersStats?.totalFlowsStarted || 0) }}</span> flows started
               </div>
             </div>
           </div>
@@ -269,12 +271,18 @@
                   </div>
                   <div>
                     <div class="text-xs text-gray-500 dark:text-gray-400">
-                      Recent Flows
+                      Total Flow Runs
                     </div>
                     <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      {{ recentFlowRuns.length }} runs
+                      {{ formatNumber(flowsStats?.totalRuns || 0) }} runs
                     </div>
                   </div>
+                </div>
+                <div
+                  v-if="flowsStats?.running > 0"
+                  class="text-xs text-blue-600 dark:text-blue-400 font-semibold"
+                >
+                  {{ flowsStats?.running }} running
                 </div>
               </div>
 
@@ -289,12 +297,15 @@
                   </div>
                   <div>
                     <div class="text-xs text-gray-500 dark:text-gray-400">
-                      Total Trigger Fires
+                      Trigger → Flow Starts
                     </div>
                     <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      {{ formatNumber(triggersStats?.totalFires || 0) }} events
+                      {{ formatNumber(triggersStats?.totalFlowsStarted || 0) }} flows
                     </div>
                   </div>
+                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">
+                  from {{ formatNumber(triggersStats?.totalFires || 0) }} fires
                 </div>
               </div>
             </div>
@@ -397,27 +408,37 @@
                 v-for="run in recentFlowRuns"
                 :key="run.id"
                 class="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer"
-                @click="navigateTo(`/flows`)"
+                @click="navigateTo(`/flows/${encodeURIComponent(run.flowName)}`)"
               >
                 <div class="flex items-center gap-2 min-w-0">
                   <div
                     class="w-2 h-2 rounded-full"
                     :class="{
-                      'bg-emerald-500': run.status === 'completed',
-                      'bg-red-500': run.status === 'failed',
-                      'bg-blue-500': run.status === 'running',
-                      'bg-gray-400': run.status === 'unknown',
+                      'bg-purple-500': (run.stats?.running || 0) > 0,
+                      'bg-amber-500': (run.stats?.awaiting || 0) > 0 && (run.stats?.running || 0) === 0,
+                      'bg-red-500': (run.stats?.failure || 0) > 0 && (run.stats?.running || 0) === 0 && (run.stats?.awaiting || 0) === 0,
+                      'bg-emerald-500': (run.stats?.success || 0) > 0 && (run.stats?.running || 0) === 0 && (run.stats?.awaiting || 0) === 0 && (run.stats?.failure || 0) === 0,
+                      'bg-gray-400': (run.stats?.total || 0) === 0,
                     }"
                   />
                   <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{{ run.flowDisplayName || run.flowName }}</span>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
-                  <UBadge
-                    :label="run.status"
-                    :color="run.status === 'completed' ? 'success' : run.status === 'failed' ? 'error' : run.status === 'running' ? 'info' : 'neutral'"
-                    variant="subtle"
-                    size="xs"
-                  />
+                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 shrink-0">
+                  <span
+                    v-if="(run.stats?.running || 0) > 0"
+                    class="text-purple-600 dark:text-purple-400 font-medium"
+                  >
+                    {{ run.stats?.running }} running
+                  </span>
+                  <span
+                    v-else-if="(run.stats?.awaiting || 0) > 0"
+                    class="text-amber-600 dark:text-amber-400 font-medium"
+                  >
+                    {{ run.stats?.awaiting }} awaiting
+                  </span>
+                  <span v-else>
+                    {{ run.stats?.total || 0 }} runs
+                  </span>
                 </div>
               </div>
             </div>
@@ -475,37 +496,199 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from '#imports'
-import { UIcon, UBadge } from '#components'
+import { ref, computed, onMounted } from '#imports'
+import { UIcon } from '#components'
 import { useComponentRouter } from '../composables/useComponentRouter'
-import { useFetch } from '#app'
+import { useQueuesWebSocket } from '../composables/useQueuesWebSocket'
+import { useFlowWebSocket } from '../composables/useFlowWebSocket'
+import { useTriggerWebSocket } from '../composables/useTriggerWebSocket'
 
 const router = useComponentRouter()
 
-// Refresh state
-const isRefreshing = ref(false)
+// Live data stores
+const queues = ref<any[]>([])
+const flows = ref<any[]>([])
+const triggers = ref<any[]>([])
 
-// Fetch data from APIs
-const { data: queuesData, refresh: refreshQueues } = useFetch('/api/_queues')
-const { data: flowsData, refresh: refreshFlows } = useFetch('/api/_flows')
-const { data: flowRunsData, refresh: refreshFlowRuns } = useFetch('/api/_flows/recent-runs?limit=5')
-const { data: triggersStats, refresh: refreshStats } = useFetch('/api/_triggers/stats')
-const { data: recentTriggers, refresh: refreshTriggers } = useFetch('/api/_triggers')
+// WebSocket connections for live stats
+const { connected: queuesConnected, subscribe: subscribeQueue } = useQueuesWebSocket()
+const { connected: flowsConnected, subscribeStats: subscribeFlowStats } = useFlowWebSocket()
+const { connected: triggersConnected, subscribeStats: subscribeTriggerStats } = useTriggerWebSocket()
+
+// Initialize live data on mount
+onMounted(async () => {
+  // Skip on server
+  if (import.meta.server) return
+
+  // Fetch initial data
+  const [queuesResponse, flowsResponse, triggersResponse] = await Promise.all([
+    $fetch('/api/_queues'),
+    $fetch('/api/_flows'),
+    $fetch('/api/_triggers'),
+  ])
+
+  queues.value = Array.isArray(queuesResponse) ? queuesResponse : []
+  
+  // Initialize flows with proper structure (same as flows/index.vue)
+  const analyzedFlows = Array.isArray(flowsResponse) ? flowsResponse : []
+  flows.value = analyzedFlows.map((flow: any) => ({
+    id: flow.id,
+    name: flow.id, // Add name property for consistency
+    displayName: flow.id,
+    entry: flow.entry,
+    steps: flow.analyzed?.steps || flow.steps || {},
+    levels: flow.analyzed?.levels || [],
+    maxLevel: flow.analyzed?.maxLevel || 0,
+    stallTimeout: flow.analyzed?.stallTimeout,
+    awaitPatterns: flow.analyzed?.awaitPatterns,
+    hasAwait: flow.analyzed?.awaitPatterns?.steps?.length > 0 || false,
+    timeout: flow.timeout,
+    stats: { total: 0, success: 0, failure: 0, cancel: 0, running: 0, awaiting: 0 },
+  }))
+  
+  triggers.value = Array.isArray(triggersResponse) ? triggersResponse : []
+
+  // Subscribe to live queue stats for each queue
+  for (const queue of queues.value) {
+    subscribeQueue(
+      queue.name,
+      (counts) => {
+        // Replace the entire array to trigger reactivity
+        queues.value = queues.value.map(q =>
+          q.name === queue.name ? { ...q, counts } : q,
+        )
+      },
+    )
+  }
+
+  // Subscribe to live flow stats
+  subscribeFlowStats({
+    onInitial: (data: any) => {
+      console.log('[Dashboard] Flow stats initial:', data)
+      updateFlowStats(data)
+    },
+    onUpdate: (data: any) => {
+      console.log('[Dashboard] Flow stats update:', data)
+      updateFlowStats(data)
+    },
+  })
+
+  // Subscribe to live trigger stats
+  subscribeTriggerStats({
+    onInitial: (data: any) => {
+      console.log('[Dashboard] Trigger stats initial:', data)
+      updateTriggerStats(data)
+    },
+    onUpdate: (data: any) => {
+      console.log('[Dashboard] Trigger stats update:', data)
+      updateTriggerStats(data)
+    },
+  })
+})
+
+// Update flow stats from WebSocket message (same pattern as flows/index.vue)
+function updateFlowStats(data: any) {
+  const flowId = data?.id
+  if (!flowId || !flows.value)
+    return
+
+  const flowIndex = flows.value.findIndex(f => f.id === flowId)
+  if (flowIndex === -1) {
+    console.warn('[Dashboard] Flow not found in list:', flowId)
+    return
+  }
+
+  const metadata = data?.metadata
+  if (!metadata) {
+    console.warn('[Dashboard] No metadata in update:', data)
+    return
+  }
+
+  console.log('[Dashboard] Updating flow:', flowId, 'metadata:', metadata)
+
+  // Check if stats are nested or flat
+  const stats = metadata.stats || {
+    total: metadata['stats.total'] || 0,
+    success: metadata['stats.success'] || 0,
+    failure: metadata['stats.failure'] || 0,
+    cancel: metadata['stats.cancel'] || 0,
+    running: metadata['stats.running'] || 0,
+    awaiting: metadata['stats.awaiting'] || 0,
+  }
+
+  // Create a new flow object to trigger Vue reactivity
+  flows.value[flowIndex] = {
+    ...flows.value[flowIndex],
+    stats: {
+      total: stats.total || 0,
+      success: stats.success || 0,
+      failure: stats.failure || 0,
+      cancel: stats.cancel || 0,
+      running: stats.running || 0,
+      awaiting: stats.awaiting || 0,
+    },
+    lastRunAt: metadata.lastRunAt,
+    lastCompletedAt: metadata.lastCompletedAt,
+  }
+
+  console.log('[Dashboard] Updated stats for', flowId, ':', flows.value[flowIndex].stats)
+}
+
+// Update trigger stats from WebSocket message (same pattern as triggers/index.vue)
+function updateTriggerStats(data: any) {
+  const triggerName = data?.id
+  if (!triggerName || !triggers.value)
+    return
+
+  const triggerIndex = triggers.value.findIndex(t => t.name === triggerName)
+  if (triggerIndex === -1) {
+    console.warn('[Dashboard] Trigger not found in list:', triggerName)
+    return
+  }
+
+  const metadata = data?.metadata
+  if (!metadata) {
+    console.warn('[Dashboard] No metadata in update:', data)
+    return
+  }
+
+  console.log('[Dashboard] Updating trigger:', triggerName, 'metadata:', metadata)
+
+  // Check if stats are nested or flat
+  const stats = metadata.stats || {
+    totalFires: metadata['stats.totalFires'] || 0,
+    totalFlowsStarted: metadata['stats.totalFlowsStarted'] || 0,
+    lastFiredAt: metadata['stats.lastFiredAt'],
+    activeSubscribers: metadata['stats.activeSubscribers'] || 0,
+  }
+
+  // Create a new trigger object to trigger Vue reactivity
+  triggers.value[triggerIndex] = {
+    ...triggers.value[triggerIndex],
+    stats: {
+      ...triggers.value[triggerIndex].stats,
+      totalFires: stats.totalFires || 0,
+      totalFlowsStarted: stats.totalFlowsStarted || 0,
+      lastFiredAt: stats.lastFiredAt,
+      activeSubscribers: stats.activeSubscribers || 0,
+    },
+    lastActivityAt: metadata.lastActivityAt,
+  }
+
+  console.log('[Dashboard] Updated stats for', triggerName, ':', triggers.value[triggerIndex].stats)
+}
 
 // Computed stats
 const queuesStats = computed(() => {
-  if (!queuesData.value) return { total: 0, pending: 0, completed: 0, failed: 0 }
-  
-  const queues = Array.isArray(queuesData.value) ? queuesData.value : []
-  const pending = queues.reduce((sum: number, q: any) => {
+  const pending = queues.value.reduce((sum, q) => {
     const counts = q.counts || {}
     return sum + (counts.active || 0) + (counts.waiting || 0) + (counts.delayed || 0)
   }, 0)
-  const completed = queues.reduce((sum: number, q: any) => sum + (q.counts?.completed || 0), 0)
-  const failed = queues.reduce((sum: number, q: any) => sum + (q.counts?.failed || 0), 0)
+  const completed = queues.value.reduce((sum, q) => sum + (q.counts?.completed || 0), 0)
+  const failed = queues.value.reduce((sum, q) => sum + (q.counts?.failed || 0), 0)
   
   return {
-    total: queues.length,
+    total: queues.value.length,
     pending,
     completed,
     failed,
@@ -513,47 +696,83 @@ const queuesStats = computed(() => {
 })
 
 const flowsStats = computed(() => {
-  if (!flowsData.value) return { total: 0, active: 0 }
+  const totalRuns = flows.value.reduce((sum, f) => sum + (f.stats?.total || 0), 0)
+  const running = flows.value.reduce((sum, f) => sum + (f.stats?.running || 0), 0)
+  const awaiting = flows.value.reduce((sum, f) => sum + (f.stats?.awaiting || 0), 0)
+  const success = flows.value.reduce((sum, f) => sum + (f.stats?.success || 0), 0)
+  const failure = flows.value.reduce((sum, f) => sum + (f.stats?.failure || 0), 0)
   
-  const flows = Array.isArray(flowsData.value) ? flowsData.value : []
   return {
-    total: flows.length,
-    active: flows.filter((f: any) => f.enabled !== false).length,
+    total: flows.value.length,
+    active: flows.value.filter(f => f.enabled !== false).length,
+    totalRuns,
+    running,
+    awaiting,
+    success,
+    failure,
   }
 })
 
-const recentFlowRuns = computed(() => {
-  if (!flowRunsData.value || typeof flowRunsData.value !== 'object') return []
-  const data = flowRunsData.value as any
-  return data.items || []
+const triggersStats = computed(() => {
+  const totalFires = triggers.value.reduce((sum, t) => sum + (t.stats?.totalFires || 0), 0)
+  const totalFlowsStarted = triggers.value.reduce((sum, t) => sum + (t.stats?.totalFlowsStarted || 0), 0)
+  const totalSubscriptions = triggers.value.reduce((sum, t) => sum + (t.subscriptionCount || 0), 0)
+  
+  return {
+    total: triggers.value.length,
+    totalFires,
+    totalFlowsStarted,
+    totalSubscriptions,
+  }
 })
 
 const recentQueues = computed(() => {
-  if (!queuesData.value) return []
-  const queues = Array.isArray(queuesData.value) ? queuesData.value : []
-  return queues.map((q: any) => ({
-    ...q,
-    displayName: q.name,
-    status: q.isPaused ? 'paused' : 'active',
-  }))
+  return queues.value
+    .map(q => ({
+      ...q,
+      displayName: q.name,
+      status: q.isPaused ? 'paused' : 'active',
+    }))
+    .sort((a, b) => {
+      const aPending = (a.counts?.active || 0) + (a.counts?.waiting || 0)
+      const bPending = (b.counts?.active || 0) + (b.counts?.waiting || 0)
+      return bPending - aPending // Sort by most pending jobs first
+    })
 })
 
-// Refresh all data
-const refreshAll = async () => {
-  isRefreshing.value = true
-  try {
-    await Promise.all([
-      refreshQueues(),
-      refreshFlows(),
-      refreshFlowRuns(),
-      refreshStats(),
-      refreshTriggers(),
-    ])
-  }
-  finally {
-    isRefreshing.value = false
-  }
-}
+const recentFlowRuns = computed(() => {
+  return [...flows.value]
+    .filter(f => f.stats?.total > 0) // Only show flows that have been run
+    .sort((a, b) => {
+      // Prioritize running/awaiting, then sort by most recent
+      const aActive = (a.stats?.running || 0) + (a.stats?.awaiting || 0)
+      const bActive = (b.stats?.running || 0) + (b.stats?.awaiting || 0)
+      if (aActive !== bActive) return bActive - aActive
+      const aTime = a.lastRunAt || 0
+      const bTime = b.lastRunAt || 0
+      return bTime - aTime
+    })
+    .slice(0, 5)
+    .map(f => ({
+      id: f.name,
+      flowName: f.name,
+      flowDisplayName: f.displayName || f.name,
+      stats: f.stats,
+    }))
+})
+
+const recentTriggers = computed(() => {
+  return [...triggers.value]
+    .sort((a, b) => {
+      const aFires = a.stats?.totalFires || 0
+      const bFires = b.stats?.totalFires || 0
+      return bFires - aFires // Sort by most fires
+    })
+})
+
+const isConnected = computed(() => {
+  return queuesConnected.value || flowsConnected.value || triggersConnected.value
+})
 
 // Navigation helper
 const navigateTo = (path: string) => {

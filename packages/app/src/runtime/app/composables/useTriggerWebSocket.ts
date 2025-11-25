@@ -1,228 +1,419 @@
-import { ref, onMounted, onUnmounted, watch, type Ref } from '#imports'
+import { ref, onBeforeUnmount } from '#imports'
 
-interface TriggerEventMessage {
-  type: 'event'
+export interface UseTriggerWebSocketOptions {
+  autoReconnect?: boolean
+  maxRetries?: number
+  baseDelayMs?: number
+  maxDelayMs?: number
+  onOpen?: () => void
+  onError?: (err?: any) => void
+  onClose?: (event?: CloseEvent) => void
+}
+
+export interface TriggerSubscription {
   triggerName: string
-  event: any
+  onEvent: (event: any) => void
+  onHistory?: (events: any[]) => void
 }
 
-interface TriggerHistoryMessage {
-  type: 'history'
-  triggerName: string
-  events: any[]
+export interface TriggerStatsSubscription {
+  onInitial?: (data: any) => void
+  onUpdate?: (data: any) => void
 }
 
-interface TriggerSubscribedMessage {
-  type: 'subscribed'
-  triggerName: string
-}
-
-interface TriggerUnsubscribedMessage {
-  type: 'unsubscribed'
-  triggerName: string
-}
-
-interface TriggerErrorMessage {
-  type: 'error'
-  message: string
-}
-
-type TriggerWebSocketMessage
-  = | TriggerEventMessage
-    | TriggerHistoryMessage
-    | TriggerSubscribedMessage
-    | TriggerUnsubscribedMessage
-    | TriggerErrorMessage
-    | { type: 'connected' | 'pong', timestamp: number }
+// Singleton state - shared across all instances
+let sharedWs: WebSocket | null = null
+let sharedConnected = false
+let sharedReconnecting = false
+let retry = 0
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let currentOptions: UseTriggerWebSocketOptions | undefined
+let currentSubscription: TriggerSubscription | null = null
+let currentStatsSubscription: TriggerStatsSubscription | null = null
+let pingInterval: ReturnType<typeof setInterval> | null = null
+let isServerRestarting = false
+let refCount = 0 // Track how many components are using the connection
 
 /**
- * Composable for managing WebSocket connection to trigger events
+ * WebSocket composable for trigger events and trigger stats
+ * Supports subscribing to specific triggers and global trigger statistics
+ * Uses a singleton connection shared across all instances
  */
-export function useTriggerWebSocket(triggerName: Ref<string | null>) {
-  const ws = ref<WebSocket | null>(null)
-  const isConnected = ref(false)
-  const isReconnecting = ref(false)
-  const events = ref<any[]>([])
-  const error = ref<string | null>(null)
+export function useTriggerWebSocket() {
+  const ws = ref<WebSocket | null>(sharedWs)
+  const connected = ref(sharedConnected)
+  const reconnecting = ref(sharedReconnecting)
 
-  let reconnectTimeout: NodeJS.Timeout | null = null
-  let pingInterval: NodeJS.Timeout | null = null
-  let currentTriggerName: string | null = null
+  refCount++
 
-  const connect = () => {
-    if (import.meta.server) return
+  const computeDelay = (opts?: UseTriggerWebSocketOptions) => {
+    const base = Math.max(100, opts?.baseDelayMs ?? 1000)
+    const max = Math.max(base, opts?.maxDelayMs ?? 10_000)
+    // Exponential backoff with jitter
+    const exp = Math.min(max, base * Math.pow(2, retry))
+    const jitter = Math.floor(Math.random() * Math.min(1000, exp / 4))
+    return exp + jitter
+  }
 
-    // Close existing connection if any
-    cleanup()
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/api/_triggers/ws`
-
-    try {
-      ws.value = new WebSocket(wsUrl)
-
-      ws.value.onopen = () => {
-        isConnected.value = true
-        isReconnecting.value = false
-        error.value = null
-
-        // Subscribe to trigger if name is set
-        if (triggerName.value) {
-          subscribe(triggerName.value)
-        }
-
-        // Start ping interval
-        startPingInterval()
+  const clearTimers = () => {
+    if (reconnectTimer) {
+      try {
+        clearTimeout(reconnectTimer)
       }
-
-      ws.value.onmessage = (event) => {
-        try {
-          const message: TriggerWebSocketMessage = JSON.parse(event.data)
-
-          if (message.type === 'event') {
-            // New event from trigger stream
-            events.value.unshift(message.event)
-            // Keep only last 100 events in memory
-            if (events.value.length > 100) {
-              events.value = events.value.slice(0, 100)
-            }
-          }
-          else if (message.type === 'history') {
-            // Historical events (backfill)
-            events.value = [...message.events]
-          }
-          else if (message.type === 'error') {
-            error.value = message.message
-          }
-        }
-        catch (err) {
-          console.error('[trigger-ws] Failed to parse message:', err)
-        }
+      catch {
+        // ignore
       }
-
-      ws.value.onerror = (event) => {
-        console.error('[trigger-ws] WebSocket error:', event)
-        error.value = 'Connection error'
-      }
-
-      ws.value.onclose = () => {
-        isConnected.value = false
-        stopPingInterval()
-
-        // Attempt to reconnect after 2 seconds
-        if (!isReconnecting.value) {
-          isReconnecting.value = true
-          reconnectTimeout = setTimeout(() => {
-            connect()
-          }, 2000)
-        }
-      }
+      reconnectTimer = null
     }
-    catch (err) {
-      console.error('[trigger-ws] Failed to create WebSocket:', err)
-      error.value = 'Failed to connect'
-    }
-  }
 
-  const subscribe = (name: string) => {
-    if (!ws.value || ws.value.readyState !== WebSocket.OPEN) return
-
-    currentTriggerName = name
-    events.value = [] // Clear old events
-
-    ws.value.send(
-      JSON.stringify({
-        type: 'subscribe',
-        triggerName: name,
-      }),
-    )
-  }
-
-  const unsubscribe = (name: string) => {
-    if (!ws.value || ws.value.readyState !== WebSocket.OPEN) return
-
-    ws.value.send(
-      JSON.stringify({
-        type: 'unsubscribe',
-        triggerName: name,
-      }),
-    )
-
-    if (currentTriggerName === name) {
-      currentTriggerName = null
-      events.value = []
-    }
-  }
-
-  const startPingInterval = () => {
-    stopPingInterval()
-    pingInterval = setInterval(() => {
-      if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-        ws.value.send(JSON.stringify({ type: 'ping' }))
-      }
-    }, 30000) // Ping every 30 seconds
-  }
-
-  const stopPingInterval = () => {
     if (pingInterval) {
-      clearInterval(pingInterval)
+      try {
+        clearInterval(pingInterval)
+      }
+      catch {
+        // ignore
+      }
       pingInterval = null
     }
   }
 
-  const cleanup = () => {
-    stopPingInterval()
-
-    if (reconnectTimeout) {
-      clearTimeout(reconnectTimeout)
-      reconnectTimeout = null
-    }
-
-    if (ws.value) {
-      // Remove event listeners to prevent memory leaks
-      ws.value.onopen = null
-      ws.value.onmessage = null
-      ws.value.onerror = null
-      ws.value.onclose = null
-
-      if (ws.value.readyState === WebSocket.OPEN || ws.value.readyState === WebSocket.CONNECTING) {
-        ws.value.close()
-      }
-      ws.value = null
-    }
-
-    isConnected.value = false
-    isReconnecting.value = false
-    currentTriggerName = null
+  const updateRefs = () => {
+    ws.value = sharedWs
+    connected.value = sharedConnected
+    reconnecting.value = sharedReconnecting
   }
 
-  // Watch trigger name changes
-  watch(triggerName, (newName, oldName) => {
-    if (oldName && oldName !== newName) {
-      unsubscribe(oldName)
-    }
-
-    if (newName && newName !== oldName) {
-      if (isConnected.value) {
-        subscribe(newName)
+  const send = (data: any) => {
+    if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+      try {
+        sharedWs.send(JSON.stringify(data))
+        return true
+      }
+      catch (err) {
+        console.error('[useTriggerWebSocket] Error sending message:', err)
+        return false
       }
     }
-  })
+    return false
+  }
 
-  onMounted(() => {
-    connect()
-  })
+  const startPingInterval = () => {
+    clearTimers()
+    // Send ping every 30 seconds to keep connection alive
+    pingInterval = setInterval(() => {
+      if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+        send({ type: 'ping' })
+      }
+    }, 30000)
+  }
 
-  onUnmounted(() => {
-    cleanup()
+  const stop = () => {
+    // Only decrement ref count, don't close connection
+    refCount = Math.max(0, refCount - 1)
+    console.log('[useTriggerWebSocket] Component unmounting, ref count:', refCount)
+  }
+
+  const forceClose = () => {
+    clearTimers()
+    isServerRestarting = false
+    try {
+      if (sharedWs) {
+        sharedWs.close(1000, 'Client closing')
+      }
+    }
+    catch (err) {
+      console.warn('[useTriggerWebSocket] Error closing WebSocket:', err)
+    }
+    sharedWs = null
+    sharedConnected = false
+    sharedReconnecting = false
+    updateRefs()
+    retry = 0
+    refCount = 0
+    currentSubscription = null
+    currentStatsSubscription = null
+  }
+
+  const attemptReconnect = () => {
+    if (!currentOptions?.autoReconnect) {
+      stop()
+      return
+    }
+
+    const max = Math.max(0, currentOptions?.maxRetries ?? 10)
+    if (retry >= max) {
+      console.error('[useTriggerWebSocket] Max retries reached')
+      stop()
+      return
+    }
+
+    retry++
+    reconnecting.value = true
+
+    const baseDelay = isServerRestarting ? 2000 : computeDelay(currentOptions)
+    const delay = baseDelay
+
+    console.log(`[useTriggerWebSocket] Will attempt reconnection in ${delay}ms (attempt ${retry}/${max})${isServerRestarting ? ' [server restart]' : ''}`)
+
+    clearTimers()
+    reconnectTimer = setTimeout(() => {
+      // Reconnect with both subscriptions if they existed
+      if (currentSubscription || currentStatsSubscription) {
+        connect(currentOptions)
+      }
+    }, delay)
+  }
+
+  const setupWebSocket = (socket: WebSocket, opts?: UseTriggerWebSocketOptions) => {
+    socket.onopen = () => {
+      console.log('[useTriggerWebSocket] Connected')
+      sharedConnected = true
+      sharedReconnecting = false
+      updateRefs()
+      retry = 0
+
+      // Start ping interval
+      startPingInterval()
+
+      // Resubscribe to trigger if needed
+      if (currentSubscription) {
+        send({
+          type: 'subscribe',
+          triggerName: currentSubscription.triggerName,
+        })
+      }
+
+      // Resubscribe to stats if needed
+      if (currentStatsSubscription) {
+        send({
+          type: 'subscribe.stats',
+        })
+      }
+
+      opts?.onOpen?.()
+    }
+
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+
+        switch (data.type) {
+          case 'connected':
+            console.log('[useTriggerWebSocket] Server acknowledged connection')
+            break
+
+          case 'subscribed':
+            console.log('[useTriggerWebSocket] Subscribed to trigger:', data.triggerName)
+            break
+
+          case 'unsubscribed':
+            console.log('[useTriggerWebSocket] Unsubscribed from trigger:', data.triggerName)
+            break
+
+          case 'stats.subscribed':
+            console.log('[useTriggerWebSocket] Subscribed to trigger stats')
+            break
+
+          case 'stats.unsubscribed':
+            console.log('[useTriggerWebSocket] Unsubscribed from trigger stats')
+            break
+
+          case 'trigger.stats.initial':
+            if (currentStatsSubscription?.onInitial) {
+              currentStatsSubscription.onInitial(data.data)
+            }
+            break
+
+          case 'trigger.stats.update':
+            if (currentStatsSubscription?.onUpdate) {
+              currentStatsSubscription.onUpdate(data.data)
+            }
+            break
+
+          case 'history':
+            if (currentSubscription) {
+              if (currentSubscription.onHistory) {
+                currentSubscription.onHistory(data.events)
+              }
+              else {
+                // If no onHistory handler, treat as individual events
+                for (const eventData of data.events) {
+                  currentSubscription.onEvent(eventData)
+                }
+              }
+            }
+            break
+
+          case 'event':
+            if (currentSubscription) {
+              currentSubscription.onEvent(data.event)
+            }
+            break
+
+          case 'pong':
+            // Keep-alive response
+            break
+
+          case 'server-restart':
+            console.log('[useTriggerWebSocket] Server is restarting (HMR)')
+            isServerRestarting = true
+            break
+
+          case 'error':
+            console.error('[useTriggerWebSocket] Server error:', data.message)
+            opts?.onError?.(new Error(data.message))
+            break
+
+          default:
+            console.warn('[useTriggerWebSocket] Unknown message type:', data.type)
+        }
+      }
+      catch (err) {
+        console.error('[useTriggerWebSocket] Error parsing message:', err)
+      }
+    }
+
+    socket.onerror = (err) => {
+      console.error('[useTriggerWebSocket] WebSocket error:', err)
+      opts?.onError?.(err)
+    }
+
+    socket.onclose = (event) => {
+      console.log('[useTriggerWebSocket] Connection closed:', event.code, event.reason)
+      sharedConnected = false
+      updateRefs()
+      clearTimers()
+      opts?.onClose?.(event)
+
+      const shouldReconnect = event.code !== 1000 && opts?.autoReconnect
+      if (shouldReconnect) {
+        console.log('[useTriggerWebSocket] Will attempt reconnection (code:', event.code, ')')
+        attemptReconnect()
+      }
+      else {
+        isServerRestarting = false
+      }
+    }
+  }
+
+  const connect = (opts?: UseTriggerWebSocketOptions) => {
+    // WebSocket is only available in the browser
+    if (import.meta.server || typeof WebSocket === 'undefined') {
+      console.warn('[useTriggerWebSocket] WebSocket not available (SSR context)')
+      return
+    }
+
+    // If already connected, no need to reconnect
+    if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+      console.log('[useTriggerWebSocket] Reusing existing connection')
+      return
+    }
+
+    // Close any stale connection
+    if (sharedWs) {
+      try {
+        sharedWs.close()
+      }
+      catch {
+        // ignore
+      }
+    }
+
+    currentOptions = opts
+
+    try {
+      // Construct WebSocket URL
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const wsUrl = `${protocol}//${window.location.host}/api/_triggers/ws`
+
+      const socket = new WebSocket(wsUrl)
+      sharedWs = socket
+      updateRefs()
+      setupWebSocket(socket, opts)
+    }
+    catch (err) {
+      console.error('[useTriggerWebSocket] Error creating WebSocket:', err)
+      opts?.onError?.(err)
+      attemptReconnect()
+    }
+  }
+
+  const subscribe = (subscription: TriggerSubscription, opts?: UseTriggerWebSocketOptions) => {
+    // Unsubscribe from previous trigger if exists
+    if (currentSubscription && sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+      send({
+        type: 'unsubscribe',
+        triggerName: currentSubscription.triggerName,
+      })
+    }
+
+    // Update subscription
+    currentSubscription = subscription
+
+    // If we already have an open connection, just subscribe
+    if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+      console.log('[useTriggerWebSocket] Reusing connection, subscribing to trigger')
+      send({
+        type: 'subscribe',
+        triggerName: subscription.triggerName,
+      })
+      return
+    }
+
+    // No active connection, connect first
+    connect(opts)
+  }
+
+  const unsubscribe = () => {
+    if (currentSubscription && sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+      send({
+        type: 'unsubscribe',
+        triggerName: currentSubscription.triggerName,
+      })
+    }
+    currentSubscription = null
+  }
+
+  const subscribeStats = (subscription: TriggerStatsSubscription, opts?: UseTriggerWebSocketOptions) => {
+    // Store stats subscription
+    currentStatsSubscription = subscription
+
+    // If we already have an open connection, just subscribe to stats
+    if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+      console.log('[useTriggerWebSocket] Reusing connection, subscribing to stats')
+      send({
+        type: 'subscribe.stats',
+      })
+      return
+    }
+
+    // No active connection, connect first
+    connect(opts)
+  }
+
+  const unsubscribeStats = () => {
+    if (currentStatsSubscription && sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+      send({
+        type: 'unsubscribe.stats',
+      })
+    }
+    currentStatsSubscription = null
+  }
+
+  onBeforeUnmount(() => {
+    stop()
   })
 
   return {
-    isConnected,
-    isReconnecting,
-    events,
-    error,
     subscribe,
     unsubscribe,
+    subscribeStats,
+    unsubscribeStats,
+    stop,
+    forceClose,
+    connected,
+    reconnecting,
   }
 }
+
+export default useTriggerWebSocket

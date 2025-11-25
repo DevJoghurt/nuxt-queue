@@ -77,13 +77,14 @@ export function useTrigger(
 
   const { data: trigger, refresh: _refresh, status, error } = useFetch<TriggerDetail>(
     () => {
-      if (!name.value) return '/api/_triggers/null'
+      if (!name.value) return null
       return `/api/_triggers/${encodeURIComponent(name.value)}?_t=${refreshCounter.value}`
     },
     {
       immediate: false,
       watch: false,
       server: false, // Client-only
+      default: () => null as TriggerDetail | null,
     },
   )
 
@@ -150,6 +151,7 @@ export function useTriggerEvents(
       immediate: false,
       watch: false,
       server: false, // Client-only
+      default: () => null as TriggerEventsResponse | null,
     },
   )
 

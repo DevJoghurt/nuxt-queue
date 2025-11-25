@@ -245,23 +245,15 @@ export function createTriggerWiring() {
           logger.info('Subscription removed', { triggerName, flow })
         }
 
-        // For trigger.fired, update stats and start flows
+        // For trigger.fired, orchestrate flow starts
         if (e.type === 'trigger.fired') {
-          // Update statistics in index
-          if (store.indexUpdateWithRetry) {
-            await store.indexUpdateWithRetry(indexKey, triggerName, {
-              ['stats.lastFiredAt']: now,
-              ['lastActivityAt']: now,
-            })
-          }
-
-          // Increment fire count atomically
-          if (store.indexIncrement) {
-            await store.indexIncrement(indexKey, triggerName, 'stats.totalFires', 1)
-          }
-
-          // Orchestrate flow starts (this is the critical part!)
+          // Orchestrate flow starts (critical part!)
           const flowsStarted = await handleTriggerFired(e as unknown as TriggerFiredEvent)
+
+          // Increment totalFlowsStarted directly here where we have the data
+          if (flowsStarted.length > 0 && store.indexIncrement) {
+            await store.indexIncrement(indexKey, triggerName, 'stats.totalFlowsStarted', flowsStarted.length)
+          }
 
           logger.debug('Trigger fired and processed', { triggerName, flowsStarted: flowsStarted.length })
         }
@@ -295,8 +287,72 @@ export function createTriggerWiring() {
       }
     }
 
-    // Subscribe to all trigger event types with persistence and orchestration handlers
-    // Order matters: Persistence runs first, then orchestration, then streaming
+    // ============================================================================
+    // HANDLER 3: TRIGGER STATS - Update trigger-level statistics from trigger events
+    // ============================================================================
+    const handleTriggerStats = async (e: EventRecord) => {
+      try {
+        // Only process persisted trigger events
+        if (!e.id || !e.ts) {
+          return
+        }
+
+        const triggerName = (e as any).triggerName || (e.data as any)?.triggerName
+        if (!triggerName) return
+
+        const indexKey = SubjectPatterns.triggerIndex()
+        const now = new Date().toISOString()
+
+        // Update trigger index stats based on event type
+        if (e.type === 'trigger.fired') {
+          // Update statistics in index
+          if (store.indexUpdateWithRetry) {
+            await store.indexUpdateWithRetry(indexKey, triggerName, {
+              ['stats.lastFiredAt']: now,
+              ['lastActivityAt']: now,
+            })
+          }
+
+          // Increment fire count atomically
+          if (store.indexIncrement) {
+            await store.indexIncrement(indexKey, triggerName, 'stats.totalFires', 1)
+          }
+
+          logger.debug('Updated trigger stats for fire', { triggerName })
+        }
+
+        // Publish stats update event to internal bus so streamWiring can send it to clients
+        try {
+          const indexEntry = await store.indexGet(indexKey, triggerName)
+          if (indexEntry) {
+            await eventBus.publish({
+              type: 'trigger.stats.updated',
+              triggerName,
+              id: indexEntry.id,
+              metadata: indexEntry.metadata,
+              ts: Date.now(),
+            } as any)
+            logger.debug('Published trigger stats update event to bus', { triggerName })
+          }
+        }
+        catch (err) {
+          logger.warn('Failed to publish trigger stats update event', {
+            triggerName,
+            error: (err as any)?.message,
+          })
+        }
+      }
+      catch (err) {
+        logger.warn('Failed to update trigger stats', {
+          type: e.type,
+          triggerName: (e as any).triggerName,
+          error: (err as any)?.message,
+        })
+      }
+    }
+
+    // Subscribe to all trigger event types with persistence, orchestration, and stats handlers
+    // Order matters: Persistence runs first, then orchestration (creates indexes), then stats
     const eventTypes = [
       'trigger.registered',
       'trigger.updated',
@@ -305,6 +361,8 @@ export function createTriggerWiring() {
       'subscription.added',
       'subscription.removed',
     ]
+
+    const triggerStatsEventTypes = ['trigger.fired']
 
     // Register persistence handler first (stores events)
     for (const type of eventTypes) {
@@ -316,7 +374,12 @@ export function createTriggerWiring() {
       unsubs.push(eventBus.onType(type, handleOrchestration))
     }
 
-    logger.info('Trigger event wiring setup complete (persistence + orchestration)')
+    // Register trigger stats handler third (updates trigger-level stats after indexes exist)
+    for (const type of triggerStatsEventTypes) {
+      unsubs.push(eventBus.onType(type, handleTriggerStats))
+    }
+
+    logger.info('Trigger event wiring setup complete (persistence + orchestration + stats)')
   }
 
   function stop() {
