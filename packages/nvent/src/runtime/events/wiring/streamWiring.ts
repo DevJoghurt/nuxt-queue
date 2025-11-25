@@ -49,12 +49,12 @@ export function createStreamWiring(opts: StreamWiringOptions = {}) {
 
     const logger = useNventLogger('stream-wiring')
     const stream = useStreamAdapter()
-    const { getClientFlowTopic } = useStreamTopics()
+    const { getClientFlowTopic, getTriggerEventTopic } = useStreamTopics()
 
     logger.info('Starting stream wiring for UI clients')
 
-    // Publish persisted events to UI clients via StreamAdapter
-    const handleClientMessage = async (e: EventRecord) => {
+    // Publish persisted flow events to UI clients via StreamAdapter
+    const handleFlowClientMessage = async (e: EventRecord) => {
       // Only publish persisted events (with id/ts from store)
       if (!e.id || !e.ts) return
 
@@ -83,17 +83,57 @@ export function createStreamWiring(opts: StreamWiringOptions = {}) {
           timestamp: Date.now(),
         })
 
-        logger.debug('Published to UI clients', { type: e.type, runId })
+        logger.debug('Published flow event to UI clients', { type: e.type, runId })
       }
       catch (err) {
-        logger.error('Failed to publish to UI clients', {
+        logger.error('Failed to publish flow event to UI clients', {
           error: (err as any)?.message,
         })
       }
     }
 
-    // Subscribe to all event types that clients should receive
-    const clientEventTypes = [
+    // Publish persisted trigger events to UI clients via StreamAdapter
+    const handleTriggerClientMessage = async (e: EventRecord) => {
+      // Only publish persisted events (with id/ts from store)
+      if (!e.id || !e.ts) return
+
+      const triggerName = (e as any).triggerName
+      if (!triggerName) return
+
+      try {
+        const topic = getTriggerEventTopic(triggerName)
+
+        await stream.publish(topic, {
+          type: 'trigger.event',
+          data: {
+            event: {
+              id: e.id,
+              ts: e.ts,
+              type: e.type,
+              triggerName,
+              data: e.data,
+            },
+          },
+          timestamp: Date.now(),
+        })
+
+        logger.debug('Published trigger event to UI clients', {
+          triggerName,
+          type: e.type,
+          id: e.id,
+        })
+      }
+      catch (err) {
+        logger.error('Failed to publish trigger event to UI clients', {
+          triggerName,
+          type: e.type,
+          error: (err as any)?.message,
+        })
+      }
+    }
+
+    // Subscribe to all flow event types that clients should receive
+    const flowEventTypes = [
       'flow.start',
       'flow.completed',
       'flow.failed',
@@ -107,14 +147,54 @@ export function createStreamWiring(opts: StreamWiringOptions = {}) {
       'await.timeout',
       'log',
       'emit',
-      'state',
     ]
 
-    for (const type of clientEventTypes) {
-      unsubs.push(bus.onType(type, handleClientMessage))
+    // Subscribe to all trigger event types that clients should receive
+    const triggerEventTypes = [
+      'trigger.registered',
+      'trigger.updated',
+      'trigger.deleted',
+      'trigger.fired',
+      'subscription.added',
+      'subscription.removed',
+    ]
+
+    // Handler for flow stats updates
+    const handleFlowStatsUpdate = async (e: any) => {
+      try {
+        const { SubjectPatterns } = useStreamTopics()
+        const flowIndexKey = SubjectPatterns.flowIndex()
+        const topic = `store:index:${flowIndexKey}`
+
+        await stream.publish(topic, {
+          id: e.flowName,
+          metadata: e.metadata,
+        })
+
+        logger.debug('Published flow stats update to stream', { flowName: e.flowName })
+      }
+      catch (err) {
+        logger.error('Failed to publish flow stats to stream', {
+          flowName: e.flowName,
+          error: (err as any)?.message,
+        })
+      }
     }
 
-    logger.info('Stream wiring started - listening for persisted events')
+    // Register flow event handlers
+    for (const type of flowEventTypes) {
+      unsubs.push(bus.onType(type, handleFlowClientMessage))
+    }
+
+    // Register trigger event handlers
+    for (const type of triggerEventTypes) {
+      unsubs.push(bus.onType(type, handleTriggerClientMessage))
+    }
+
+    // Register flow stats update handler
+    unsubs.push(bus.onType('flow.stats.updated', handleFlowStatsUpdate))
+
+    logger.info('Stream wiring started - listening for persisted flow and trigger events')
   }
 
   function stop() {

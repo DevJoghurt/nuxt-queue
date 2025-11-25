@@ -97,14 +97,10 @@ const SubjectPatterns = {
   flowRunIndex: (flowName: string) => `nq:flows:${flowName}`,
 
   /**
-   * Flow definition subject
+   * Flow index (sorted set of all flows)
+   * Stores flow metadata and statistics
    */
-  flowDefinition: (flowName: string) => `flow-def:${flowName}`,
-
-  /**
-   * Worker heartbeat subject
-   */
-  workerHeartbeat: (workerId: string) => `worker:${workerId}`,
+  flowIndex: () => `nq:flows`,
 
   // ============================================================
   // Trigger System (v0.5.1) - Index + Stream Architecture
@@ -124,29 +120,6 @@ const SubjectPatterns = {
 
   triggerFired: (triggerName: string) => `nq:trigger:${triggerName}`,
 
-  // ============================================================
-  // Await Patterns (v0.5) - Run-scoped ephemeral triggers
-  // ============================================================
-
-  /**
-   * Await trigger event stream (for a specific step in a run)
-   */
-  awaitTrigger: (runId: string, stepName: string) => `nq:await:${runId}:${stepName}`,
-
-  /**
-   * Await registry for a run (all awaits in this run)
-   */
-  awaitRegistry: (runId: string) => `nq:await:${runId}`,
-
-  /**
-   * Await status in KV store
-   */
-  awaitStatus: (runId: string, stepName: string) => `await:${runId}:${stepName}:status`,
-
-  /**
-   * Webhook route mapping in KV store
-   */
-  webhookRoute: (path: string) => `webhook:route:${path}`,
 } as const
 
 export function useStreamTopics() {

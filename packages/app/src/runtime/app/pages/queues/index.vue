@@ -8,22 +8,10 @@
             Queues
           </h1>
         </div>
-        <div class="flex items-center gap-3">
-          <div
-            v-if="isConnected"
-            class="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400"
-          >
-            <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Live</span>
-          </div>
-          <div
-            v-else-if="isReconnecting"
-            class="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400"
-          >
-            <div class="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-            <span>Reconnecting...</span>
-          </div>
-        </div>
+        <LiveIndicator
+          :is-connected="isConnected"
+          :is-reconnecting="isReconnecting"
+        />
       </div>
     </div>
 
@@ -142,6 +130,7 @@ import { useQueuesLive } from '../../composables/useQueuesLive'
 import { useComponentRouter } from '../../composables/useComponentRouter'
 import QueueConfigDetails from '../../components/QueueConfigDetails.vue'
 import StatCard from '../../components/StatCard.vue'
+import LiveIndicator from '../../components/LiveIndicator.vue'
 
 const UBadgeComponent = resolveComponent('UBadge')
 const UButtonComponent = resolveComponent('UButton')

@@ -239,6 +239,7 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
   }
 
   async indexUpdate(key: string, id: string, metadata: Record<string, any>) {
+    // Call parent which handles locking internally
     const result = await super.indexUpdate!(key, id, metadata)
 
     // Persist updated index
@@ -272,6 +273,7 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
   }
 
   async indexIncrement(key: string, id: string, field: string, increment?: number) {
+    // Call parent which handles locking internally
     const result = await super.indexIncrement!(key, id, field, increment)
 
     // Persist updated index

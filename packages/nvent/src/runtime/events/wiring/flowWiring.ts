@@ -492,6 +492,9 @@ export function createFlowWiring() {
   let wired = false
   let stallDetector: ReturnType<typeof createStallDetector> | undefined
 
+  // Track terminal events being published to prevent duplicates during race conditions
+  const publishingTerminalEvents = new Set<string>()
+
   /**
    * Add flow run to sorted set index for listing
    */
@@ -582,6 +585,19 @@ export function createFlowWiring() {
         await bus.publish(persistedEvent as any)
 
         if (e.type === 'flow.completed' || e.type === 'flow.failed') {
+          // Clean up the publishing tracker after a short delay to ensure
+          // all concurrent orchestration handlers have finished their checks
+          const publishKey = `${runId}:terminal`
+          setTimeout(() => {
+            try {
+              publishingTerminalEvents.delete(publishKey)
+            }
+            catch (err) {
+              // Ignore cleanup errors (shouldn't happen, but defensive)
+              logger.debug('Error cleaning up terminal event tracker', { publishKey, error: (err as any)?.message })
+            }
+          }, 200)
+
           logger.info('Stored terminal event', {
             type: e.type,
             flowName,
@@ -610,7 +626,129 @@ export function createFlowWiring() {
     }
 
     // ============================================================================
-    // HANDLER 2: ORCHESTRATION - Update metadata, analyze completion, trigger events
+    // HANDLER 2: FLOW STATS - Update flow-level statistics from flow events
+    // ============================================================================
+    const handleFlowStats = async (e: EventRecord) => {
+      try {
+        // Only process persisted flow events
+        if (!e.id || !e.ts) {
+          return
+        }
+
+        const flowName = e.flowName
+        if (!flowName) return
+
+        const flowIndexKey = SubjectPatterns.flowIndex()
+
+        // Update flow index stats based on event type
+        if (e.type === 'flow.start') {
+          if (store.indexIncrement) {
+            await store.indexIncrement(flowIndexKey, flowName, 'stats.total', 1)
+            await store.indexIncrement(flowIndexKey, flowName, 'stats.running', 1)
+          }
+
+          if (store.indexUpdateWithRetry) {
+            await store.indexUpdateWithRetry(flowIndexKey, flowName, {
+              lastRunAt: new Date().toISOString(),
+            })
+          }
+
+          logger.debug('Updated flow stats for start', { flowName })
+        }
+        else if (e.type === 'flow.completed') {
+          if (store.indexIncrement) {
+            await store.indexIncrement(flowIndexKey, flowName, 'stats.running', -1)
+            await store.indexIncrement(flowIndexKey, flowName, 'stats.success', 1)
+          }
+
+          if (store.indexUpdateWithRetry) {
+            await store.indexUpdateWithRetry(flowIndexKey, flowName, {
+              lastCompletedAt: new Date().toISOString(),
+            })
+          }
+
+          logger.debug('Updated flow stats for completion', { flowName })
+        }
+        else if (e.type === 'flow.failed') {
+          if (store.indexIncrement) {
+            await store.indexIncrement(flowIndexKey, flowName, 'stats.running', -1)
+            await store.indexIncrement(flowIndexKey, flowName, 'stats.failure', 1)
+          }
+
+          if (store.indexUpdateWithRetry) {
+            await store.indexUpdateWithRetry(flowIndexKey, flowName, {
+              lastCompletedAt: new Date().toISOString(),
+            })
+          }
+
+          logger.debug('Updated flow stats for failure', { flowName })
+        }
+        else if (e.type === 'flow.cancel') {
+          if (store.indexIncrement) {
+            await store.indexIncrement(flowIndexKey, flowName, 'stats.running', -1)
+            await store.indexIncrement(flowIndexKey, flowName, 'stats.cancel', 1)
+          }
+
+          if (store.indexUpdateWithRetry) {
+            await store.indexUpdateWithRetry(flowIndexKey, flowName, {
+              lastCompletedAt: new Date().toISOString(),
+            })
+          }
+
+          logger.debug('Updated flow stats for cancellation', { flowName })
+        }
+        else if (e.type === 'await.registered') {
+          // Flow enters awaiting state - decrement running, increment awaiting
+          if (store.indexIncrement) {
+            await store.indexIncrement(flowIndexKey, flowName, 'stats.running', -1)
+            await store.indexIncrement(flowIndexKey, flowName, 'stats.awaiting', 1)
+          }
+
+          logger.debug('Updated flow stats for await registered', { flowName })
+        }
+        else if (e.type === 'await.resolved' || e.type === 'await.timeout') {
+          // Flow leaves awaiting state - decrement awaiting, increment running
+          // (timeout will be handled by flow.failed event for terminal stats)
+          if (store.indexIncrement) {
+            await store.indexIncrement(flowIndexKey, flowName, 'stats.awaiting', -1)
+            await store.indexIncrement(flowIndexKey, flowName, 'stats.running', 1)
+          }
+
+          logger.debug('Updated flow stats for await resolved/timeout', { flowName, type: e.type })
+        }
+
+        // Publish stats update event to internal bus so streamWiring can send it to clients
+        try {
+          const indexEntry = await store.indexGet(flowIndexKey, flowName)
+          if (indexEntry) {
+            await bus.publish({
+              type: 'flow.stats.updated',
+              flowName,
+              id: indexEntry.id,
+              metadata: indexEntry.metadata,
+              ts: Date.now(),
+            } as any)
+            logger.debug('Published flow stats update event to bus', { flowName })
+          }
+        }
+        catch (err) {
+          logger.warn('Failed to publish flow stats update event', {
+            flowName,
+            error: (err as any)?.message,
+          })
+        }
+      }
+      catch (err) {
+        logger.warn('Failed to update flow stats', {
+          type: e.type,
+          flowName: e.flowName,
+          error: (err as any)?.message,
+        })
+      }
+    }
+
+    // ============================================================================
+    // HANDLER 3: ORCHESTRATION - Update metadata, analyze completion, trigger events
     // ============================================================================
     const handleOrchestration = async (e: EventRecord) => {
       try {
@@ -866,9 +1004,6 @@ export function createFlowWiring() {
           // This handles both emit events and step completions, so we only need to call it here
           await checkAndTriggerPendingSteps(flowName, runId, store)
 
-          // Small delay to ensure completedSteps increment is persisted
-          await new Promise(resolve => setTimeout(resolve, 50))
-
           try {
             // Read all events for this flow to analyze completion
             const allEvents = await store.read(streamName)
@@ -897,7 +1032,6 @@ export function createFlowWiring() {
               // If there are awaits, preserve 'awaiting' status
               if (store.indexGet) {
                 const currentEntry = await store.indexGet(indexKey, runId)
-                const currentStatus = currentEntry?.metadata?.status
 
                 // Check for active or timed-out awaits
                 const awaitingStepsObj = (currentEntry?.metadata as any)?.awaitingSteps || {}
@@ -948,19 +1082,33 @@ export function createFlowWiring() {
                   currentStatus = currentEntry?.metadata?.status
                 }
 
-                // Also check if terminal event already exists in stream
+                // Check if terminal event already exists in stream
                 const terminalEventExists = allEvents.some((evt: any) =>
                   evt.type === 'flow.completed' || evt.type === 'flow.failed')
 
+                // Check if we're already publishing a terminal event for this run (race condition prevention)
+                const publishKey = `${runId}:terminal`
+                const alreadyPublishing = publishingTerminalEvents.has(publishKey)
+
                 if (terminalEventExists) {
-                  logger.debug('Flow terminal event already exists, skipping publish', {
+                  logger.debug('Flow terminal event already exists in stream, skipping publish', {
                     flowName,
                     runId,
                     currentStatus,
                     eventType,
                   })
                 }
+                else if (alreadyPublishing) {
+                  logger.debug('Flow terminal event already being published, skipping duplicate', {
+                    flowName,
+                    runId,
+                    eventType,
+                  })
+                }
                 else {
+                  // Mark as publishing to prevent race conditions
+                  publishingTerminalEvents.add(publishKey)
+
                   logger.info('Publishing terminal event to bus', {
                     flowName,
                     runId,
@@ -968,6 +1116,8 @@ export function createFlowWiring() {
                   })
 
                   // Publish to bus WITHOUT id/ts so it gets persisted by handlePersistence
+                  // Flow stats will be updated by handleFlowStats when the persisted event is processed
+                  // The publishingTerminalEvents entry will be cleaned up by handlePersistence after storage
                   await bus.publish({
                     type: eventType,
                     runId,
@@ -997,8 +1147,8 @@ export function createFlowWiring() {
       }
     }
 
-    // v0.4: Subscribe to event types with BOTH handlers
-    // Order matters: Persistence runs first, then orchestration
+    // v0.4: Subscribe to event types with handlers
+    // Order matters: Persistence runs first, then orchestration (creates indexes), then stats
     const eventTypes = [
       'flow.start', 'flow.completed', 'flow.failed', 'flow.cancel',
       'step.started', 'step.completed', 'step.failed', 'step.retry',
@@ -1006,14 +1156,21 @@ export function createFlowWiring() {
       'log', 'emit', 'state',
     ]
 
+    const flowStatsEventTypes = ['flow.start', 'flow.completed', 'flow.failed', 'flow.cancel', 'await.registered', 'await.resolved', 'await.timeout']
+
     // Register persistence handler first (stores events)
     for (const type of eventTypes) {
       unsubs.push(bus.onType(type, handlePersistence))
     }
 
-    // Register orchestration handler second (updates metadata, triggers new events)
+    // Register orchestration handler second (creates indexes, triggers new events)
     for (const type of eventTypes) {
       unsubs.push(bus.onType(type, handleOrchestration))
+    }
+
+    // Register flow stats handler third (updates flow-level stats after indexes exist)
+    for (const type of flowStatsEventTypes) {
+      unsubs.push(bus.onType(type, handleFlowStats))
     }
 
     // Note: Await cleanup removed - await state is now stored in flow index metadata
@@ -1046,6 +1203,9 @@ export function createFlowWiring() {
         // ignore
       }
     }
+
+    // Clear the terminal event tracking set to prevent memory leaks
+    publishingTerminalEvents.clear()
 
     wired = false
 

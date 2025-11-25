@@ -28,6 +28,9 @@ export class MemoryStoreAdapter implements StoreAdapter {
   // Key-Value Store storage: key -> value
   private kvStore = new Map<string, any>()
 
+  // Lock mechanism for atomic index operations
+  private indexLocks = new Map<string, Promise<void>>()
+
   async close(): Promise<void> {
     this.eventStreams.clear()
     this.eventSubscriptions.clear()
@@ -246,46 +249,80 @@ export class MemoryStoreAdapter implements StoreAdapter {
     return index.slice(offset, offset + limit).map(e => ({ ...e }))
   }
 
-  async indexUpdate(key: string, id: string, metadata: Record<string, any>): Promise<boolean> {
-    const index = this.sortedIndices.get(key)
-    if (!index) return false
-
-    const entry = index.find(e => e.id === id)
-    if (!entry || !entry.metadata) return false
-
-    // Check version for optimistic locking
-    const currentVersion = entry.metadata.version || 0
-
-    // Convert dot notation to nested objects
-    const updates = this.expandDotNotation(metadata)
-
-    // Extract delete markers before merge
-    const deleteMarkers = (updates as any).__deleteMarkers
-    delete (updates as any).__deleteMarkers
-
-    // Deep merge updates with existing metadata using defu
-    // defu merges right to left, so we want: defu(updates, existing)
-    entry.metadata = defu(updates, entry.metadata)
-
-    // Handle deletions after merge
-    if (deleteMarkers) {
-      for (const { path } of deleteMarkers) {
-        let current = entry.metadata
-        for (let i = 0; i < path.length - 1; i++) {
-          if (!current[path[i]]) break
-          current = current[path[i]]
-        }
-        if (current) {
-          const lastKey = path[path.length - 1]
-          // Use Reflect.deleteProperty to avoid eslint error
-          Reflect.deleteProperty(current, lastKey)
-        }
-      }
+  /**
+   * Acquire a lock for atomic index operations
+   * Protected to allow access from FileStoreAdapter
+   */
+  protected async acquireIndexLock(key: string): Promise<() => void> {
+    // Wait for any existing lock on this key
+    while (this.indexLocks.has(key)) {
+      await this.indexLocks.get(key)
     }
 
-    entry.metadata.version = currentVersion + 1
+    // Create a new lock
+    let releaseLock!: () => void
+    const lockPromise = new Promise<void>((resolve) => {
+      releaseLock = resolve
+    })
+    this.indexLocks.set(key, lockPromise)
 
-    return true
+    // Return release function
+    return () => {
+      this.indexLocks.delete(key)
+      releaseLock()
+    }
+  }
+
+  async indexUpdate(key: string, id: string, metadata: Record<string, any>): Promise<boolean> {
+    // Acquire lock for this index key to prevent concurrent modifications
+    const lockKey = `${key}:${id}`
+    const release = await this.acquireIndexLock(lockKey)
+
+    try {
+      const index = this.sortedIndices.get(key)
+      if (!index) return false
+
+      const entry = index.find(e => e.id === id)
+      if (!entry || !entry.metadata) return false
+
+      // Check version for optimistic locking
+      const currentVersion = entry.metadata.version || 0
+
+      // Convert dot notation to nested objects
+      const updates = this.expandDotNotation(metadata)
+
+      // Extract delete markers before merge
+      const deleteMarkers = (updates as any).__deleteMarkers
+      delete (updates as any).__deleteMarkers
+
+      // Deep merge updates with existing metadata using defu
+      // defu merges right to left, so we want: defu(updates, existing)
+      entry.metadata = defu(updates, entry.metadata)
+
+      // Handle deletions after merge
+      if (deleteMarkers) {
+        for (const { path } of deleteMarkers) {
+          let current = entry.metadata
+          for (let i = 0; i < path.length - 1; i++) {
+            if (!current[path[i]]) break
+            current = current[path[i]]
+          }
+          if (current) {
+            const lastKey = path[path.length - 1]
+            // Use Reflect.deleteProperty to avoid eslint error
+            Reflect.deleteProperty(current, lastKey)
+          }
+        }
+      }
+
+      entry.metadata.version = currentVersion + 1
+
+      return true
+    }
+    finally {
+      // Always release the lock
+      release()
+    }
   }
 
   /**
@@ -355,47 +392,57 @@ export class MemoryStoreAdapter implements StoreAdapter {
   }
 
   async indexIncrement(key: string, id: string, field: string, increment: number = 1): Promise<number> {
-    const index = this.sortedIndices.get(key)
-    if (!index) throw new Error(`Index not found: ${key}`)
+    // Acquire lock for this index key to prevent concurrent modifications
+    const lockKey = `${key}:${id}`
+    const release = await this.acquireIndexLock(lockKey)
 
-    const entry = index.find(e => e.id === id)
-    if (!entry) throw new Error(`Entry not found: ${id} in index ${key}`)
+    try {
+      const index = this.sortedIndices.get(key)
+      if (!index) throw new Error(`Index not found: ${key}`)
 
-    if (!entry.metadata) {
-      entry.metadata = { version: 0 }
-    }
+      const entry = index.find(e => e.id === id)
+      if (!entry) throw new Error(`Entry not found: ${id} in index ${key}`)
 
-    // Handle dot notation (e.g., 'stats.totalFires')
-    let currentValue: number
-    let newValue: number
-
-    if (field.includes('.')) {
-      const keys = field.split('.')
-      let current = entry.metadata
-
-      // Navigate to parent object
-      for (let i = 0; i < keys.length - 1; i++) {
-        const k = keys[i]
-        if (!current[k] || typeof current[k] !== 'object') {
-          current[k] = {}
-        }
-        current = current[k]
+      if (!entry.metadata) {
+        entry.metadata = { version: 0 }
       }
 
-      const lastKey = keys[keys.length - 1]
-      currentValue = current[lastKey] || 0
-      newValue = (typeof currentValue === 'number' ? currentValue : 0) + increment
-      current[lastKey] = newValue
-    }
-    else {
-      currentValue = entry.metadata[field] || 0
-      newValue = (typeof currentValue === 'number' ? currentValue : 0) + increment
-      entry.metadata[field] = newValue
-    }
+      // Handle dot notation (e.g., 'stats.totalFires')
+      let currentValue: number
+      let newValue: number
 
-    entry.metadata.version = (entry.metadata.version || 0) + 1
+      if (field.includes('.')) {
+        const keys = field.split('.')
+        let current = entry.metadata
 
-    return newValue
+        // Navigate to parent object
+        for (let i = 0; i < keys.length - 1; i++) {
+          const k = keys[i]
+          if (!current[k] || typeof current[k] !== 'object') {
+            current[k] = {}
+          }
+          current = current[k]
+        }
+
+        const lastKey = keys[keys.length - 1]
+        currentValue = current[lastKey] || 0
+        newValue = (typeof currentValue === 'number' ? currentValue : 0) + increment
+        current[lastKey] = newValue
+      }
+      else {
+        currentValue = entry.metadata[field] || 0
+        newValue = (typeof currentValue === 'number' ? currentValue : 0) + increment
+        entry.metadata[field] = newValue
+      }
+
+      entry.metadata.version = (entry.metadata.version || 0) + 1
+
+      return newValue
+    }
+    finally {
+      // Always release the lock
+      release()
+    }
   }
 
   async indexDelete(key: string, id: string): Promise<boolean> {
@@ -404,7 +451,7 @@ export class MemoryStoreAdapter implements StoreAdapter {
 
     const initialLength = index.length
     const filtered = index.filter(e => e.id !== id)
-    
+
     if (filtered.length === initialLength) {
       return false // Entry not found
     }

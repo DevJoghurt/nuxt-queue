@@ -109,7 +109,10 @@ export function getServerImports(resolverFn: (path: string) => string, buildDir:
       name: 'useTrigger',
       from: resolverFn('./runtime/nitro/utils/useTrigger'),
     },
-
+    {
+      name: 'useFlow',
+      from: resolverFn('./runtime/nitro/utils/useFlow'),
+    },
     // Adapter registration utilities for external modules
     {
       name: 'registerQueueAdapter',
