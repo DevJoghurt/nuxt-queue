@@ -52,7 +52,7 @@
           />
         </div>
 
-        <!-- Queues Table -->
+        <!-- Queues List -->
         <div
           v-if="!queuesWithLive || queuesWithLive.length === 0"
           class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-8 text-center text-gray-500"
@@ -67,25 +67,100 @@
           v-else
           class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden"
         >
-          <UTable
-            :data="paginatedQueues"
-            :columns="columns"
-            :ui="{
-              wrapper: 'relative overflow-x-auto',
-              base: 'w-full',
-              thead: 'bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-800',
-              tbody: 'divide-y divide-gray-200 dark:divide-gray-800',
-              tr: {
-                base: 'hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer',
-              },
-              th: {
-                base: 'px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider',
-              },
-              td: {
-                base: 'px-6 py-4',
-              },
-            }"
-          />
+          <div class="divide-y divide-gray-100 dark:divide-gray-800">
+            <div
+              v-for="queue in paginatedQueues"
+              :key="queue.name"
+              class="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer"
+              @click="selectQueue(queue.name)"
+            >
+              <div class="flex items-start justify-between gap-4">
+                <!-- Left: Queue Info -->
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-2">
+                    <UIcon
+                      name="i-lucide-inbox"
+                      class="w-4 h-4 shrink-0 text-blue-500"
+                    />
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                      {{ queue.name }}
+                    </h3>
+                    <UBadge
+                      :label="queue.isPaused ? 'Paused' : 'Running'"
+                      :color="queue.isPaused ? 'warning' : 'success'"
+                      variant="subtle"
+                      size="xs"
+                    />
+                  </div>
+                  
+                  <div class="flex items-center gap-4 text-xs">
+                    <div
+                      class="flex items-center gap-1"
+                      :class="queue.counts.waiting > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'"
+                    >
+                      <UIcon
+                        name="i-lucide-clock"
+                        class="w-3 h-3"
+                      />
+                      <span>{{ queue.counts.waiting }} waiting</span>
+                    </div>
+                    <div
+                      class="flex items-center gap-1"
+                      :class="queue.counts.active > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-600'"
+                    >
+                      <UIcon
+                        name="i-lucide-loader-2"
+                        class="w-3 h-3"
+                      />
+                      <span>{{ queue.counts.active }} active</span>
+                    </div>
+                    <div
+                      class="flex items-center gap-1"
+                      :class="queue.counts.completed > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-600'"
+                    >
+                      <UIcon
+                        name="i-lucide-check-circle"
+                        class="w-3 h-3"
+                      />
+                      <span>{{ queue.counts.completed }} completed</span>
+                    </div>
+                    <div
+                      class="flex items-center gap-1"
+                      :class="queue.counts.failed > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-600'"
+                    >
+                      <UIcon
+                        name="i-lucide-x-circle"
+                        class="w-3 h-3"
+                      />
+                      <span>{{ queue.counts.failed }} failed</span>
+                    </div>
+                    <div
+                      class="flex items-center gap-1"
+                      :class="queue.counts.delayed > 0 ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400 dark:text-gray-600'"
+                    >
+                      <UIcon
+                        name="i-lucide-timer"
+                        class="w-3 h-3"
+                      />
+                      <span>{{ queue.counts.delayed }} delayed</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right: Actions -->
+                <div class="flex items-center gap-3">
+                  <!-- Arrow Button -->
+                  <UButton
+                    icon="i-lucide-arrow-right"
+                    size="xs"
+                    color="neutral"
+                    variant="ghost"
+                    square
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
 
           <!-- Pagination -->
           <div
@@ -109,183 +184,25 @@
         </div>
       </div>
     </div>
-
-    <!-- Config Details Slideover -->
-    <QueueConfigDetails
-      v-if="selectedQueueForConfig"
-      v-model:open="configDetailsOpen"
-      :queue-name="selectedQueueForConfig.name"
-      :queue-config="selectedQueueForConfig.config?.queue"
-      :worker-config="selectedQueueForConfig.config?.worker"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, resolveComponent } from '#imports'
-import type { TableColumn } from '@nuxt/ui'
-import { UIcon, UPagination, UTable } from '#components'
-import { useQueues, type QueueInfo } from '../../composables/useQueues'
+import { ref, computed } from '#imports'
+import { UIcon, UPagination, UButton, UBadge } from '#components'
+import { useQueues } from '../../composables/useQueues'
 import { useQueuesLive } from '../../composables/useQueuesLive'
 import { useComponentRouter } from '../../composables/useComponentRouter'
-import QueueConfigDetails from '../../components/QueueConfigDetails.vue'
 import StatCard from '../../components/StatCard.vue'
 import LiveIndicator from '../../components/LiveIndicator.vue'
-
-const UBadgeComponent = resolveComponent('UBadge')
-const UButtonComponent = resolveComponent('UButton')
-const UIconComponent = resolveComponent('UIcon')
 
 const { queues } = useQueues()
 const { queues: queuesWithLive, isConnected, isReconnecting } = useQueuesLive(queues)
 const router = useComponentRouter()
 
-const configDetailsOpen = ref(false)
-const selectedQueueForConfig = ref<QueueInfo | null>(null)
-
-const openConfigDetails = (queue: QueueInfo) => {
-  selectedQueueForConfig.value = queue
-  configDetailsOpen.value = true
-}
-
 const selectQueue = (queueName: string) => {
   router.push(`/queues/${queueName}/jobs`)
 }
-
-// Table columns with cell renderers
-const columns: TableColumn<QueueInfo>[] = [
-  {
-    accessorKey: 'name',
-    header: 'Queue Name',
-    cell: ({ row }) => {
-      return h('div', { class: 'flex items-center gap-2 cursor-pointer', onClick: () => selectQueue(row.original.name) }, [
-        h(UIconComponent, { name: 'i-lucide-inbox', class: 'w-4 h-4 shrink-0 text-blue-500' }),
-        h('span', { class: 'text-sm font-semibold text-gray-900 dark:text-gray-100' }, row.original.name),
-      ])
-    },
-  },
-  {
-    accessorKey: 'counts.waiting',
-    header: 'Waiting',
-    cell: ({ row }) => {
-      const count = row.original.counts.waiting
-      return h('div', { class: 'flex justify-center' }, [
-        h('div', {
-          class: `flex items-center justify-center min-w-[3rem] h-7 rounded text-sm font-medium px-2 ${
-            count > 0
-              ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400'
-              : 'bg-gray-50 dark:bg-gray-900/50 text-gray-400 dark:text-gray-600'
-          }`,
-        }, String(count)),
-      ])
-    },
-  },
-  {
-    accessorKey: 'counts.active',
-    header: 'Active',
-    cell: ({ row }) => {
-      const count = row.original.counts.active
-      return h('div', { class: 'flex justify-center' }, [
-        h('div', {
-          class: `flex items-center justify-center min-w-[3rem] h-7 rounded text-sm font-medium px-2 ${
-            count > 0
-              ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400'
-              : 'bg-gray-50 dark:bg-gray-900/50 text-gray-400 dark:text-gray-600'
-          }`,
-        }, String(count)),
-      ])
-    },
-  },
-  {
-    accessorKey: 'counts.completed',
-    header: 'Completed',
-    cell: ({ row }) => {
-      const count = row.original.counts.completed
-      return h('div', { class: 'flex justify-center' }, [
-        h('div', {
-          class: `flex items-center justify-center min-w-[3rem] h-7 rounded text-sm font-medium px-2 ${
-            count > 0
-              ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400'
-              : 'bg-gray-50 dark:bg-gray-900/50 text-gray-400 dark:text-gray-600'
-          }`,
-        }, String(count)),
-      ])
-    },
-  },
-  {
-    accessorKey: 'counts.failed',
-    header: 'Failed',
-    cell: ({ row }) => {
-      const count = row.original.counts.failed
-      return h('div', { class: 'flex justify-center' }, [
-        h('div', {
-          class: `flex items-center justify-center min-w-[3rem] h-7 rounded text-sm font-medium px-2 ${
-            count > 0
-              ? 'bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400'
-              : 'bg-gray-50 dark:bg-gray-900/50 text-gray-400 dark:text-gray-600'
-          }`,
-        }, String(count)),
-      ])
-    },
-  },
-  {
-    accessorKey: 'counts.delayed',
-    header: 'Delayed',
-    cell: ({ row }) => {
-      const count = row.original.counts.delayed
-      return h('div', { class: 'flex justify-center' }, [
-        h('div', {
-          class: `flex items-center justify-center min-w-[3rem] h-7 rounded text-sm font-medium px-2 ${
-            count > 0
-              ? 'bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400'
-              : 'bg-gray-50 dark:bg-gray-900/50 text-gray-400 dark:text-gray-600'
-          }`,
-        }, String(count)),
-      ])
-    },
-  },
-  {
-    accessorKey: 'isPaused',
-    header: 'Status',
-    cell: ({ row }) => {
-      return h('div', { class: 'flex justify-center' }, [
-        h(UBadgeComponent, {
-          label: row.original.isPaused ? 'Paused' : 'Running',
-          color: row.original.isPaused ? 'warning' : 'success',
-          variant: 'subtle',
-          size: 'xs',
-        }),
-      ])
-    },
-  },
-  {
-    id: 'actions',
-    header: 'Actions',
-    cell: ({ row }) => {
-      return h('div', { class: 'flex justify-center gap-1' }, [
-        h(UButtonComponent, {
-          icon: 'i-lucide-settings',
-          size: 'xs',
-          color: 'neutral',
-          variant: 'ghost',
-          square: true,
-          title: 'View configuration',
-          onClick: (e: Event) => {
-            e.stopPropagation()
-            openConfigDetails(row.original)
-          },
-        }),
-        h(UButtonComponent, {
-          icon: 'i-lucide-arrow-right',
-          size: 'xs',
-          color: 'neutral',
-          variant: 'ghost',
-          square: true,
-        }),
-      ])
-    },
-  },
-]
 
 // Pagination
 const currentPage = ref(1)

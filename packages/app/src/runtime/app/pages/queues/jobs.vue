@@ -35,6 +35,15 @@
             <div class="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
             <span>Reconnecting...</span>
           </div>
+          <UButton
+            icon="i-lucide-settings"
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            square
+            title="View configuration"
+            @click="showConfig = !showConfig"
+          />
         </div>
       </div>
     </div>
@@ -362,18 +371,30 @@
         </div>
       </div>
     </div>
+
+    <!-- Configuration Slideover -->
+    <USlideover v-model:open="showConfig" title="Queue Configuration">
+      <template #body>
+        <QueueConfiguration
+          :queue-name="queueName"
+          :queue-config="queueInfo?.config?.queue"
+          :worker-config="queueInfo?.config?.worker"
+        />
+      </template>
+    </USlideover>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from '#imports'
-import { UButton, UBadge, UPagination, USelectMenu, UIcon, UTabs } from '#components'
-import { useQueueJobs, type Job } from '../../composables/useQueueJobs'
+import { UButton, UBadge, UPagination, USelectMenu, UIcon, UTabs, USlideover } from '#components'
+import { useQueueJobs } from '../../composables/useQueueJobs'
 import { useQueueUpdates } from '../../composables/useQueueUpdates'
 import { useQueues } from '../../composables/useQueues'
 import { useComponentRouter } from '../../composables/useComponentRouter'
 import { useRoute, useRouter } from '#app'
 import StatCard from '../../components/StatCard.vue'
+import QueueConfiguration from '../../components/QueueConfiguration.vue'
 
 const componentRouter = useComponentRouter()
 const router = useRouter()
@@ -472,6 +493,9 @@ const selectedJob = computed(() => {
   return data.value.jobs.find(job => job.id === selectedJobId.value)
 })
 
+// Show configuration toggle
+const showConfig = ref(false)
+
 // Tabs
 const activeTab = ref<'overview' | 'details'>('overview')
 const tabItems = computed(() => [
@@ -488,9 +512,17 @@ const tabItems = computed(() => [
 watch(selectedJobId, (newId) => {
   if (newId) {
     activeTab.value = 'details'
+    showConfig.value = false
   }
   else {
     activeTab.value = 'overview'
+  }
+})
+
+// Watch for showConfig - clear job selection when opening config
+watch(showConfig, (show) => {
+  if (show) {
+    selectedJobId.value = null
   }
 })
 
