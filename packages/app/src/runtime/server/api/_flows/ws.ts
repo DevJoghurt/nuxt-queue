@@ -191,16 +191,14 @@ export default defineWebSocketHandler({
         }
       }
 
-      // Subscribe to StreamAdapter client-messages channel
-      // Topic published by StreamCoordinator when client messages are enabled
+      // Subscribe to StreamAdapter for real-time flow events
+      const { StoreSubjects, StreamTopics } = useStreamTopics()
 
-      const { SubjectPatterns, getClientFlowTopic } = useStreamTopics()
+      // Store subject for historical events
+      const subject = StoreSubjects.flowRun(runId)
 
-      // Calculate the subject for store operations (subject pattern: nq:flow:{runId})
-      const subject = SubjectPatterns.flowRun(runId)
-
-      // Subscribe to client:flow:{runId} channel for real-time updates
-      const topic = getClientFlowTopic(runId)
+      // Stream topic for real-time updates
+      const topic = StreamTopics.flowEvents(runId)
       const handle = await stream.subscribe(topic, async (message: any) => {
         // message.data.event contains the flow event
         const event = message.data?.event
@@ -314,9 +312,8 @@ export default defineWebSocketHandler({
 
       try {
         const stream = useStreamAdapter()
-        const { SubjectPatterns } = useStreamTopics()
-        const flowIndexKey = SubjectPatterns.flowIndex()
-        const topic = `store:index:${flowIndexKey}`
+        const { StreamTopics } = useStreamTopics()
+        const topic = StreamTopics.flowStats()
 
         const handle = await stream.subscribe(topic, (message: any) => {
           safeSend(peer, {

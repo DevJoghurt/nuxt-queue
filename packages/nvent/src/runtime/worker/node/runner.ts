@@ -430,8 +430,8 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
         // Capture any emitted events from this step
         // Note: Events are already published, we need to track them for blocking
         const store = useStoreAdapter()
-        const { SubjectPatterns } = useStreamTopics()
-        const streamName = SubjectPatterns.flowRun(flowId || 'unknown')
+        const { StoreSubjects } = useStreamTopics()
+        const streamName = StoreSubjects.flowRun(flowId || 'unknown')
 
         // Read recent events from stream to find emits from this step
         let emitEvents: any[] = []

@@ -264,7 +264,6 @@
               v-if="activeTab === 'overview'"
               class="p-6 space-y-6"
             >
-
             <!-- Stats Cards -->
             <div>
               <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
@@ -278,22 +277,23 @@
                   variant="gray"
                 />
                 <StatCard
-                  icon="i-lucide-target"
-                  :count="trigger.stats.last24h"
-                  label="Last 24h"
+                  icon="i-lucide-git-branch"
+                  :count="trigger.stats.activeSubscribers"
+                  label="Active Subscribers"
+                  variant="purple"
+                />
+                <StatCard
+                  v-if="trigger.stats.lastFiredAt"
+                  icon="i-lucide-clock"
+                  :count="formatTime(new Date(trigger.stats.lastFiredAt).getTime())"
+                  label="Last Fired"
                   variant="blue"
                 />
                 <StatCard
-                  icon="i-lucide-check-circle-2"
-                  :count="`${trigger.stats.successRate?.toFixed(1) || '100'}%`"
-                  label="Success Rate"
-                  :variant="(trigger.stats.successRate || 100) >= 95 ? 'emerald' : 'amber'"
-                />
-                <StatCard
-                  icon="i-lucide-git-branch"
+                  icon="i-lucide-users"
                   :count="trigger.subscriptionCount"
-                  label="Subscribers"
-                  variant="purple"
+                  label="Subscriptions"
+                  variant="emerald"
                 />
               </div>
             </div>
@@ -542,7 +542,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from '#imports'
+import { ref, computed, onUnmounted, watch } from '#imports'
 import { UButton, UIcon, UBadge, USelectMenu, UTabs } from '#components'
 import { useTrigger, useTriggerEvents, type TriggerEvent } from '../../composables/useTrigger'
 import { useComponentRouter } from '../../composables/useComponentRouter'
@@ -560,8 +560,8 @@ const triggerName = computed(() => {
   return match && match[1] ? decodeURIComponent(match[1]) : null
 })
 
-// Fetch trigger data
-const { trigger, status, refresh: refreshTrigger } = useTrigger(triggerName)
+// Fetch trigger data (initial load only, WebSocket handles updates)
+const { trigger, status } = useTrigger(triggerName)
 
 // Fetch events with URL-based filters
 const eventTypeFilter = computed({
@@ -619,7 +619,7 @@ const { events: fetchedEvents, refresh: refreshEvents, status: eventsStatus } = 
 
 // WebSocket for live updates
 const liveEvents = ref<TriggerEvent[]>([])
-const { connected: isConnected, reconnecting: isReconnecting, subscribe, unsubscribe } = useTriggerWebSocket()
+const { connected: isConnected, reconnecting: isReconnecting, subscribe, unsubscribe, subscribeStats, unsubscribeStats } = useTriggerWebSocket()
 
 // Subscribe to trigger events when triggerName changes (client-side only)
 watch([triggerName], () => {
@@ -628,10 +628,12 @@ watch([triggerName], () => {
   
   if (!triggerName.value) {
     unsubscribe()
+    unsubscribeStats()
     liveEvents.value = []
     return
   }
 
+  // Subscribe to trigger events
   subscribe({
     triggerName: triggerName.value,
     onEvent: (event: any) => {
@@ -643,18 +645,67 @@ watch([triggerName], () => {
       liveEvents.value = events.slice(0, 50)
     },
   })
+
+  // Subscribe to trigger stats updates
+  subscribeStats({
+    onInitial: (data: any) => {
+      // Initial stats load
+      if (!trigger.value || data.id !== triggerName.value) {
+        return
+      }
+      
+      const metadata = data?.metadata
+      if (!metadata) {
+        return
+      }
+
+      // Update trigger with initial stats - create new object for Vue reactivity
+      trigger.value = {
+        ...trigger.value,
+        stats: {
+          totalFires: metadata.stats?.totalFires || metadata.totalFires || metadata['stats.totalFires'] || trigger.value.stats.totalFires || 0,
+          totalFlowsStarted: metadata.stats?.totalFlowsStarted || metadata.totalFlowsStarted || metadata['stats.totalFlowsStarted'] || trigger.value.stats.totalFlowsStarted || 0,
+          activeSubscribers: metadata.stats?.activeSubscribers || metadata.activeSubscribers || metadata['stats.activeSubscribers'] || trigger.value.stats.activeSubscribers || 0,
+          lastFiredAt: metadata.stats?.lastFiredAt || metadata.lastFiredAt || metadata['stats.lastFiredAt'] || trigger.value.stats.lastFiredAt,
+        },
+        lastActivityAt: metadata.lastActivityAt || trigger.value.lastActivityAt,
+      }
+    },
+    onUpdate: (data: any) => {
+      // Update trigger stats in real-time
+      if (!trigger.value) {
+        return
+      }
+      
+      if (data.id !== triggerName.value) {
+        return
+      }
+      
+      const metadata = data?.metadata
+      if (!metadata) {
+        console.warn('[Trigger Detail] No metadata in stats update')
+        return
+      }
+
+      // Update trigger stats - must create new object for Vue reactivity
+      trigger.value = {
+        ...trigger.value,
+        stats: {
+          totalFires: metadata.stats?.totalFires || metadata.totalFires || metadata['stats.totalFires'] || trigger.value.stats.totalFires || 0,
+          totalFlowsStarted: metadata.stats?.totalFlowsStarted || metadata.totalFlowsStarted || metadata['stats.totalFlowsStarted'] || trigger.value.stats.totalFlowsStarted || 0,
+          activeSubscribers: metadata.stats?.activeSubscribers || metadata.activeSubscribers || metadata['stats.activeSubscribers'] || trigger.value.stats.activeSubscribers || 0,
+          lastFiredAt: metadata.stats?.lastFiredAt || metadata.lastFiredAt || metadata['stats.lastFiredAt'] || trigger.value.stats.lastFiredAt,
+        },
+        lastActivityAt: metadata.lastActivityAt || trigger.value.lastActivityAt,
+      }
+    },
+  })
 }, { immediate: true })
 
-// Auto-refresh trigger metadata every 5 seconds using useFetch's refresh
-onMounted(() => {
-  const refreshInterval = setInterval(() => {
-    refreshTrigger()
-  }, 5000)
-
-  onUnmounted(() => {
-    clearInterval(refreshInterval)
-    unsubscribe()
-  })
+// Cleanup on unmount
+onUnmounted(() => {
+  unsubscribe()
+  unsubscribeStats()
 })
 
 // Use fetched events directly (already paginated by server)

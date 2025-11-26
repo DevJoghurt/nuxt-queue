@@ -9,10 +9,10 @@
  *
  */
 import { useRuntimeConfig } from '#imports'
-import type { QueueAdapter } from '../adapters/interfaces/queue'
-import type { StreamAdapter } from '../adapters/interfaces/stream'
-import type { StoreAdapter } from '../adapters/interfaces/store'
-import type { AdapterSet } from '../adapters/factory'
+import type { QueueAdapter } from '../../adapters/interfaces/queue'
+import type { StreamAdapter } from '../../adapters/interfaces/stream'
+import type { StoreAdapter } from '../../adapters/interfaces/store'
+import type { AdapterSet } from '../../adapters/factory'
 
 // Global adapter set (initialized by plugin)
 declare global {

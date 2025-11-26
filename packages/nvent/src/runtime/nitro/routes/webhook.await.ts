@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   const logger = useNventLogger('webhook-handler')
   const store = useStoreAdapter()
   const await$ = useAwait()
-  const { SubjectPatterns } = useStreamTopics()
+  const { StoreSubjects } = useStreamTopics()
 
   // Extract path parameters using H3
   const params = getRouterParams(event)
@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
   logger.info(`Webhook received: ${event.method} for ${flowName}/${runId}/${stepName}`)
 
   // Look up flow in store index to verify it exists and is awaiting
-  const indexKey = SubjectPatterns.flowRunIndex(flowName)
+  const indexKey = StoreSubjects.flowRunIndex(flowName)
   const flowEntry = await store.indexGet?.(indexKey, runId)
 
   if (!flowEntry) {

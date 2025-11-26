@@ -23,7 +23,7 @@ export interface FlowStats {
 export function useFlow() {
   const store = useStoreAdapter()
   const logger = useNventLogger('use-flow')
-  const { SubjectPatterns } = useStreamTopics()
+  const { StoreSubjects } = useStreamTopics()
 
   return {
     /**
@@ -31,7 +31,7 @@ export function useFlow() {
      */
     async getFlowStats(flowName: string): Promise<FlowStats | null> {
       try {
-        const indexKey = SubjectPatterns.flowIndex()
+        const indexKey = StoreSubjects.flowIndex()
 
         if (!store.indexGet) {
           logger.warn('Store adapter does not support indexGet')
@@ -81,7 +81,7 @@ export function useFlow() {
       offset?: number
     }): Promise<FlowStats[]> {
       try {
-        const indexKey = SubjectPatterns.flowIndex()
+        const indexKey = StoreSubjects.flowIndex()
 
         if (!store.indexRead) {
           logger.warn('Store adapter does not support indexRead')

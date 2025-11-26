@@ -51,7 +51,7 @@ export async function cleanupTriggers(
   const store = useStoreAdapter()
   const logger = useNventLogger('trigger-cleanup')
   const trigger = useTrigger()
-  const { SubjectPatterns } = useStreamTopics()
+  const { StoreSubjects } = useStreamTopics()
 
   const result: TriggerCleanupResult = {
     triggersRetired: [],
@@ -77,7 +77,7 @@ export async function cleanupTriggers(
     return result
   }
 
-  const indexKey = SubjectPatterns.triggerIndex()
+  const indexKey = StoreSubjects.triggerIndex()
   const entries = await store.indexRead(indexKey, { limit: 10000 })
 
   const patternRegex = triggerPattern ? new RegExp(triggerPattern) : null

@@ -30,12 +30,16 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let currentOptions: UseTriggerWebSocketOptions | undefined
 let currentSubscription: TriggerSubscription | null = null
 let currentStatsSubscription: TriggerStatsSubscription | null = null
+let pendingStatsSubscription = false // Track if stats subscription is pending connection
+let isStatsSubscribed = false // Track if stats are actually subscribed on server
+let statsCache: any[] = [] // Cache last received stats for replay
 let pingInterval: ReturnType<typeof setInterval> | null = null
 let isServerRestarting = false
 let refCount = 0 // Track how many components are using the connection
 
 /**
  * WebSocket composable for trigger events and trigger stats
+ * Architecture: Client (this) → WebSocket → Server Handler → StreamAdapter.subscribe(StreamTopics.triggerEvents)
  * Supports subscribing to specific triggers and global trigger statistics
  * Uses a singleton connection shared across all instances
  */
@@ -110,7 +114,7 @@ export function useTriggerWebSocket() {
   const stop = () => {
     // Only decrement ref count, don't close connection
     refCount = Math.max(0, refCount - 1)
-    console.log('[useTriggerWebSocket] Component unmounting, ref count:', refCount)
+    // Component unmounting
   }
 
   const forceClose = () => {
@@ -132,6 +136,9 @@ export function useTriggerWebSocket() {
     refCount = 0
     currentSubscription = null
     currentStatsSubscription = null
+    isStatsSubscribed = false
+    pendingStatsSubscription = false
+    statsCache = []
   }
 
   const attemptReconnect = () => {
@@ -148,12 +155,13 @@ export function useTriggerWebSocket() {
     }
 
     retry++
-    reconnecting.value = true
+    sharedReconnecting = true
+    updateRefs()
 
     const baseDelay = isServerRestarting ? 2000 : computeDelay(currentOptions)
     const delay = baseDelay
 
-    console.log(`[useTriggerWebSocket] Will attempt reconnection in ${delay}ms (attempt ${retry}/${max})${isServerRestarting ? ' [server restart]' : ''}`)
+    // Will attempt reconnection
 
     clearTimers()
     reconnectTimer = setTimeout(() => {
@@ -184,10 +192,12 @@ export function useTriggerWebSocket() {
       }
 
       // Resubscribe to stats if needed
-      if (currentStatsSubscription) {
+      if (currentStatsSubscription || pendingStatsSubscription) {
+        // Sending stats subscription after connection opened
         send({
           type: 'subscribe.stats',
         })
+        pendingStatsSubscription = false
       }
 
       opts?.onOpen?.()
@@ -199,36 +209,59 @@ export function useTriggerWebSocket() {
 
         switch (data.type) {
           case 'connected':
-            console.log('[useTriggerWebSocket] Server acknowledged connection')
             break
 
           case 'subscribed':
-            console.log('[useTriggerWebSocket] Subscribed to trigger:', data.triggerName)
             break
 
           case 'unsubscribed':
-            console.log('[useTriggerWebSocket] Unsubscribed from trigger:', data.triggerName)
             break
 
           case 'stats.subscribed':
-            console.log('[useTriggerWebSocket] Subscribed to trigger stats')
+            isStatsSubscribed = true
             break
 
           case 'stats.unsubscribed':
-            console.log('[useTriggerWebSocket] Unsubscribed from trigger stats')
+            isStatsSubscribed = false
             break
 
-          case 'trigger.stats.initial':
+          case 'trigger.stats.initial': {
+            // Store in cache
+            const existingIndex = statsCache.findIndex(s => s.id === data.data.id)
+            if (existingIndex >= 0) {
+              statsCache[existingIndex] = data.data
+            }
+            else {
+              statsCache.push(data.data)
+            }
+            // Trigger handler
             if (currentStatsSubscription?.onInitial) {
               currentStatsSubscription.onInitial(data.data)
             }
+            else {
+              console.warn('[useTriggerWebSocket] No onInitial handler for stats:', data.data)
+            }
             break
+          }
 
-          case 'trigger.stats.update':
+          case 'trigger.stats.update': {
+            // Update cache
+            const cacheIndex = statsCache.findIndex(s => s.id === data.data.id)
+            if (cacheIndex >= 0) {
+              statsCache[cacheIndex] = data.data
+            }
+            else {
+              statsCache.push(data.data)
+            }
+            // Trigger handler
             if (currentStatsSubscription?.onUpdate) {
               currentStatsSubscription.onUpdate(data.data)
             }
+            else {
+              console.warn('[useTriggerWebSocket] No onUpdate handler for stats:', data.data)
+            }
             break
+          }
 
           case 'history':
             if (currentSubscription) {
@@ -255,7 +288,7 @@ export function useTriggerWebSocket() {
             break
 
           case 'server-restart':
-            console.log('[useTriggerWebSocket] Server is restarting (HMR)')
+            // Server is restarting (HMR)
             isServerRestarting = true
             break
 
@@ -287,7 +320,7 @@ export function useTriggerWebSocket() {
 
       const shouldReconnect = event.code !== 1000 && opts?.autoReconnect
       if (shouldReconnect) {
-        console.log('[useTriggerWebSocket] Will attempt reconnection (code:', event.code, ')')
+        // Will attempt reconnection
         attemptReconnect()
       }
       else {
@@ -303,9 +336,9 @@ export function useTriggerWebSocket() {
       return
     }
 
-    // If already connected, no need to reconnect
-    if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
-      console.log('[useTriggerWebSocket] Reusing existing connection')
+    // If already connected or connecting, no need to reconnect
+    if (sharedWs && (sharedWs.readyState === WebSocket.OPEN || sharedWs.readyState === WebSocket.CONNECTING)) {
+      // Reusing existing connection
       return
     }
 
@@ -348,11 +381,13 @@ export function useTriggerWebSocket() {
     }
 
     // Update subscription
+    // Server will subscribe to StreamTopics.triggerEvents(triggerName) and send updates
+    // Historical events loaded from StoreSubjects.triggerStream(triggerName)
     currentSubscription = subscription
 
     // If we already have an open connection, just subscribe
     if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
-      console.log('[useTriggerWebSocket] Reusing connection, subscribing to trigger')
+      // Reusing connection, subscribing to trigger
       send({
         type: 'subscribe',
         triggerName: subscription.triggerName,
@@ -376,18 +411,42 @@ export function useTriggerWebSocket() {
 
   const subscribeStats = (subscription: TriggerStatsSubscription, opts?: UseTriggerWebSocketOptions) => {
     // Store stats subscription
+    // Server will subscribe to StreamTopics.triggerStats() and send updates
     currentStatsSubscription = subscription
 
-    // If we already have an open connection, just subscribe to stats
+    // If we already have an open connection with active subscription, just update handlers
     if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
-      console.log('[useTriggerWebSocket] Reusing connection, subscribing to stats')
+      if (isStatsSubscribed) {
+        // Reusing connection and existing stats subscription, replaying cached stats
+        // Replay cached stats to new handlers
+        if (subscription.onInitial && statsCache.length > 0) {
+          for (const cachedStat of statsCache) {
+            subscription.onInitial(cachedStat)
+          }
+        }
+        return
+      }
+      // Not subscribed yet, send subscription
+      // Reusing connection, subscribing to stats
       send({
         type: 'subscribe.stats',
       })
       return
     }
 
+    // If connection is in progress, wait for it to open
+    if (sharedWs && sharedWs.readyState === WebSocket.CONNECTING) {
+      // Connection is opening, marking stats subscription as pending
+      pendingStatsSubscription = true
+      return
+    }
+
+    // Connection is pending or not established, mark subscription as pending
+    // No connection, marking stats subscription as pending
+    pendingStatsSubscription = true
+
     // No active connection, connect first
+    // The subscription will be sent when onopen fires
     connect(opts)
   }
 

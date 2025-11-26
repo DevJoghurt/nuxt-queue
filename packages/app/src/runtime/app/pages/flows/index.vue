@@ -281,8 +281,6 @@ function updateFlowStats(data: any) {
     return
   }
 
-  console.log('[Flow Stats] Updating flow:', flowId, 'metadata:', metadata)
-
   // Check if stats are nested or flat
   const stats = metadata.stats || {
     total: metadata['stats.total'] || 0,
@@ -307,8 +305,6 @@ function updateFlowStats(data: any) {
     lastRunAt: metadata.lastRunAt,
     lastCompletedAt: metadata.lastCompletedAt,
   }
-
-  console.log('[Flow Stats] Updated stats for', flowId, ':', flows.value[flowIndex].stats)
 }
 
 onMounted(async () => {
@@ -319,18 +315,15 @@ onMounted(async () => {
     flowWs.subscribeStats(
       {
         onInitial: (data) => {
-          console.log('[Flow Stats] Received initial data:', data.id)
           updateFlowStats(data)
         },
         onUpdate: (data) => {
-          console.log('[Flow Stats] Received update:', data.id)
           updateFlowStats(data)
         },
       },
       {
         autoReconnect: true,
         onOpen: () => {
-          console.log('[Flow Stats] Connected')
           loading.value = false
         },
         onError: (err) => {

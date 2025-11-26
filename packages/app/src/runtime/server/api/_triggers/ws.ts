@@ -190,10 +190,10 @@ export default defineWebSocketHandler({
         }
       }
 
-      // Subscribe to trigger stream pub/sub topic
-      const { SubjectPatterns, getTriggerEventTopic } = useStreamTopics()
-      const streamTopic = getTriggerEventTopic(triggerName)
-      const storeSubject = SubjectPatterns.trigger(triggerName)
+      // Subscribe to StreamAdapter for real-time trigger events
+      const { StoreSubjects, StreamTopics } = useStreamTopics()
+      const streamTopic = StreamTopics.triggerEvents(triggerName)
+      const storeSubject = StoreSubjects.triggerStream(triggerName)
 
       // Subscribe to trigger stream for real-time updates
       const handle = await stream.subscribe(streamTopic, async (message: any) => {
@@ -217,7 +217,7 @@ export default defineWebSocketHandler({
       try {
         const historicalEvents = await store.read(storeSubject, {
           limit: 100,
-          order: 'desc', // Most recent first
+          order: 'asc', // Forward order to match flows
         })
 
         safeSend(peer, {
@@ -291,9 +291,8 @@ export default defineWebSocketHandler({
 
       try {
         const stream = useStreamAdapter()
-        const { SubjectPatterns } = useStreamTopics()
-        const triggerIndexKey = SubjectPatterns.triggerIndex()
-        const topic = `store:index:${triggerIndexKey}`
+        const { StreamTopics } = useStreamTopics()
+        const topic = StreamTopics.triggerStats()
 
         const handle = await stream.subscribe(topic, (message: any) => {
           safeSend(peer, {

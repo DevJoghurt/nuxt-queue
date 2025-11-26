@@ -1,137 +1,99 @@
 /**
  * Stream topic naming utilities
  *
- * Standardized topic patterns for StreamAdapter pub/sub
- * These match the topics published by StoreAdapter mutations and wiring coordinators
+ * Provides standardized topic patterns for StreamAdapter pub/sub
+ * Used for real-time UI updates via WebSocket/SSE
+ *
+ * Architecture:
+ * 1. Store Subjects - Persistent storage keys (StoreAdapter)
+ * 2. Stream Topics - Pub/sub channels (StreamAdapter)
+ * 3. Wiring - Bridges store events to stream topics
  */
 
 /**
- * Get topic for store append events
- * Pattern: store:append:{subject}
- * Published when: StoreAdapter.append() adds an event to a subject
- * Used by: StreamCoordinator (store-sync channel)
+ * Store subjects for persistent event streams and indexes
+ * These are used with StoreAdapter (append/read operations)
  */
-function getStoreAppendTopic(subject: string): string {
-  return `store:append:${subject}`
-}
-
-/**
- * Get topic for store save events
- * Pattern: store:save:{collection}
- * Published when: StoreAdapter.save() creates/updates a document
- */
-function getStoreSaveTopic(collection: string): string {
-  return `store:save:${collection}`
-}
-
-/**
- * Get topic for store delete events
- * Pattern: store:delete:{collection}
- * Published when: StoreAdapter.delete() removes a document
- */
-function getStoreDeleteTopic(collection: string): string {
-  return `store:delete:${collection}`
-}
-
-/**
- * Get topic for KV store events
- * Pattern: store:kv:{key}
- * Published when: StoreAdapter.kvSet() updates a key
- */
-function getStoreKvTopic(key: string): string {
-  return `store:kv:${key}`
-}
-
-/**
- * Get topic for flow orchestration events
- * Pattern: flow:event:{runId}
- * Published when: StreamCoordinator flow-events channel publishes flow lifecycle events
- * Used by: Future trigger system for cross-instance coordination
- */
-function getFlowEventTopic(runId: string): string {
-  return `flow:event:${runId}`
-}
-
-/**
- * Get topic for client messages (WebSocket/SSE)
- * Pattern: client:flow:{runId}
- * Published when: StreamCoordinator client-messages channel publishes UI updates
- * Used by: WebSocket handler for real-time UI updates
- */
-function getClientFlowTopic(runId: string): string {
-  return `client:flow:${runId}`
-}
-
-/**
- * Get topic for trigger events
- * Pattern: trigger:event:{triggerName}
- * Published when: Trigger fires and routes to subscribed flows
- * Used by: Trigger wiring for cross-instance trigger coordination
- */
-function getTriggerEventTopic(triggerName: string): string {
-  return `trigger:event:${triggerName}`
-}
-
-/**
- * Get topic for await trigger events
- * Pattern: await:event:{runId}:{stepName}
- * Published when: Await trigger is registered, resolved, or timed out
- * Used by: Await wiring for step coordination
- */
-function getAwaitEventTopic(runId: string, stepName: string): string {
-  return `await:event:${runId}:${stepName}`
-}
-
-/**
- * Common subject patterns for event streams
- */
-const SubjectPatterns = {
+const StoreSubjects = {
   /**
-   * Flow run event stream subject
+   * Flow run event stream
+   * Pattern: nq:flow:{runId}
+   * Contains: All events for a specific flow run
    */
   flowRun: (runId: string) => `nq:flow:${runId}`,
 
   /**
-   * Flow run index (sorted set of runs by flow name)
+   * Flow run index (sorted set)
+   * Pattern: nq:flows:{flowName}
+   * Contains: List of run IDs for a flow, sorted by timestamp
    */
   flowRunIndex: (flowName: string) => `nq:flows:${flowName}`,
 
   /**
-   * Flow index (sorted set of all flows)
-   * Stores flow metadata and statistics
+   * Flow index (sorted set)
+   * Pattern: nq:flows
+   * Contains: Flow metadata and statistics
    */
   flowIndex: () => `nq:flows`,
 
-  // ============================================================
-  // Trigger System (v0.5.1) - Index + Stream Architecture
-  // ============================================================
+  /**
+   * Trigger event stream
+   * Pattern: nq:trigger:{triggerName}
+   * Contains: All events for a specific trigger
+   */
+  triggerStream: (triggerName: string) => `nq:trigger:${triggerName}`,
 
   /**
-   * Trigger index (sorted set of all triggers)
-   * Stores trigger metadata, subscriptions, and statistics
+   * Trigger index (sorted set)
+   * Pattern: nq:triggers
+   * Contains: Trigger metadata, subscriptions, and statistics
    */
   triggerIndex: () => `nq:triggers`,
+} as const
+
+/**
+ * Stream topics for real-time pub/sub
+ * These are used with StreamAdapter (publish/subscribe operations)
+ */
+const StreamTopics = {
+  /**
+   * Flow events for a specific run
+   * Pattern: stream:flow:events:{runId}
+   * Published: When flow events occur (StreamWiring)
+   * Subscribed: By WebSocket clients watching a specific flow run
+   */
+  flowEvents: (runId: string) => `stream:flow:events:${runId}`,
 
   /**
-   * Trigger event stream (lifecycle and fire events for a specific trigger)
-   * Subject: nq_trigger:{triggerName}
+   * Flow statistics updates
+   * Pattern: stream:flow:stats
+   * Published: When flow stats change (StreamWiring)
+   * Subscribed: By WebSocket clients watching flow overview
    */
-  trigger: (triggerName: string) => `nq:trigger:${triggerName}`,
+  flowStats: () => `stream:flow:stats`,
 
-  triggerFired: (triggerName: string) => `nq:trigger:${triggerName}`,
+  /**
+   * Trigger events for a specific trigger
+   * Pattern: stream:trigger:events:{triggerName}
+   * Published: When trigger events occur (StreamWiring)
+   * Subscribed: By WebSocket clients watching a specific trigger
+   */
+  triggerEvents: (triggerName: string) => `stream:trigger:events:${triggerName}`,
 
+  /**
+   * Trigger statistics updates
+   * Pattern: stream:trigger:stats
+   * Published: When trigger stats change (StreamWiring)
+   * Subscribed: By WebSocket clients watching trigger overview
+   */
+  triggerStats: () => `stream:trigger:stats`,
 } as const
 
 export function useStreamTopics() {
   return {
-    getStoreAppendTopic,
-    getStoreSaveTopic,
-    getStoreDeleteTopic,
-    getStoreKvTopic,
-    getFlowEventTopic,
-    getClientFlowTopic,
-    getTriggerEventTopic,
-    getAwaitEventTopic,
-    SubjectPatterns,
+    StoreSubjects,
+    StreamTopics,
+    // Legacy aliases for backward compatibility (deprecated)
+    SubjectPatterns: StoreSubjects,
   }
 }

@@ -24,12 +24,12 @@ export default defineEventHandler(async (event) => {
 
   // Check if adapters are initialized
   let store: any
-  let SubjectPatterns: any
+  let StoreSubjects: any
   let flows: any
   try {
     store = useStoreAdapter()
     const topics = useStreamTopics()
-    SubjectPatterns = topics.SubjectPatterns
+    StoreSubjects = topics.StoreSubjects
     flows = $useAnalyzedFlows() as any
   }
   catch (err) {
@@ -50,7 +50,7 @@ export default defineEventHandler(async (event) => {
       try {
         // Use flow.id instead of flow.name
         const flowName = flow.id || flow.name
-        const runIndexKey = SubjectPatterns.flowRunIndex(flowName)
+        const runIndexKey = StoreSubjects.flowRunIndex(flowName)
         const entries = await store.indexRead(runIndexKey, { offset: 0, limit: 5 })
 
         // Map to include flow name and details

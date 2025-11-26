@@ -464,7 +464,6 @@ const nextStep = async () => {
     }
     catch {
       // Validation failed, errors are already displayed by UForm
-      console.log(`Validation failed at step ${currentStep.value}`)
     }
   }
   else {

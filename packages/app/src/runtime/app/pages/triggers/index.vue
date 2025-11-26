@@ -259,32 +259,29 @@
 
               <!-- Right: Stats & Status -->
               <div class="flex items-center gap-3">
-                <!-- Today's Fires -->
-                <div
-                  v-if="trigger.stats.last24h > 0"
-                  class="text-center"
-                >
-                  <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-                    Last 24h
-                  </div>
-                  <div class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                    {{ formatNumber(trigger.stats.last24h) }}
-                  </div>
-                </div>
-
-                <!-- Success Rate -->
+                <!-- Total Fires -->
                 <div
                   v-if="trigger.stats.totalFires > 0"
                   class="text-center"
                 >
                   <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-                    Success
+                    Total Fires
                   </div>
-                  <div
-                    class="text-sm font-semibold"
-                    :class="trigger.stats.successRate && trigger.stats.successRate >= 95 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'"
-                  >
-                    {{ trigger.stats.successRate?.toFixed(1) || '100' }}%
+                  <div class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                    {{ formatNumber(trigger.stats.totalFires) }}
+                  </div>
+                </div>
+
+                <!-- Active Subscribers -->
+                <div
+                  v-if="trigger.stats.activeSubscribers > 0"
+                  class="text-center"
+                >
+                  <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+                    Subscribers
+                  </div>
+                  <div class="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                    {{ trigger.stats.activeSubscribers }}
                   </div>
                 </div>
 
@@ -369,40 +366,30 @@ function updateTriggerStats(data: any) {
 
   const triggerIndex = triggers.value.findIndex(t => t.name === triggerName)
   if (triggerIndex === -1) {
-    console.warn('[Trigger Stats] Trigger not found in list:', triggerName)
+    console.warn('[Trigger Index] Trigger not found in list:', triggerName)
     return
   }
 
   const metadata = data?.metadata
   if (!metadata) {
-    console.warn('[Trigger Stats] No metadata in update:', data)
+    console.warn('[Trigger Index] No metadata in update:', data)
     return
   }
 
-  console.log('[Trigger Stats] Updating trigger:', triggerName, 'metadata:', metadata)
-
-  // Check if stats are nested or flat
-  const stats = metadata.stats || {
-    totalFires: metadata['stats.totalFires'] || 0,
-    totalFlowsStarted: metadata['stats.totalFlowsStarted'] || 0,
-    lastFiredAt: metadata['stats.lastFiredAt'],
-    activeSubscribers: metadata['stats.activeSubscribers'] || 0,
+  // Extract stats from metadata - support nested object, dotted keys, and flat formats
+  const stats = {
+    totalFires: metadata.stats?.totalFires || metadata.totalFires || metadata['stats.totalFires'] || triggers.value[triggerIndex].stats?.totalFires || 0,
+    totalFlowsStarted: metadata.stats?.totalFlowsStarted || metadata.totalFlowsStarted || metadata['stats.totalFlowsStarted'] || triggers.value[triggerIndex].stats?.totalFlowsStarted || 0,
+    activeSubscribers: metadata.stats?.activeSubscribers || metadata.activeSubscribers || metadata['stats.activeSubscribers'] || triggers.value[triggerIndex].stats?.activeSubscribers || 0,
+    lastFiredAt: metadata.stats?.lastFiredAt || metadata.lastFiredAt || metadata['stats.lastFiredAt'] || triggers.value[triggerIndex].stats?.lastFiredAt,
   }
 
   // Create a new trigger object to trigger Vue reactivity
   triggers.value[triggerIndex] = {
     ...triggers.value[triggerIndex],
-    stats: {
-      ...triggers.value[triggerIndex].stats,
-      totalFires: stats.totalFires || 0,
-      totalFlowsStarted: stats.totalFlowsStarted || 0,
-      lastFiredAt: stats.lastFiredAt,
-      activeSubscribers: stats.activeSubscribers || 0,
-    },
-    lastActivityAt: metadata.lastActivityAt,
+    stats,
+    lastActivityAt: metadata.lastActivityAt ?? triggers.value[triggerIndex].lastActivityAt,
   }
-
-  console.log('[Trigger Stats] Updated stats for', triggerName, ':', triggers.value[triggerIndex].stats)
 }
 
 onMounted(async () => {
@@ -413,18 +400,15 @@ onMounted(async () => {
     triggerWs.subscribeStats(
       {
         onInitial: (data) => {
-          console.log('[Trigger Stats] Received initial data:', data.id)
           updateTriggerStats(data)
         },
         onUpdate: (data) => {
-          console.log('[Trigger Stats] Received update:', data.id)
           updateTriggerStats(data)
         },
       },
       {
         autoReconnect: true,
         onOpen: () => {
-          console.log('[Trigger Stats] Connected')
           loading.value = false
         },
         onError: (err) => {

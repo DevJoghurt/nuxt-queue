@@ -45,7 +45,7 @@ export async function checkAndTriggerPendingSteps(
     const analyzedFlows = $useAnalyzedFlows()
     const registry = $useFunctionRegistry() as any
     const queue = useQueueAdapter()
-    const { SubjectPatterns } = useStreamTopics()
+    const { StoreSubjects } = useStreamTopics()
 
     // Get flow definition
     const flowDef = analyzedFlows.find((f: any) => f.id === flowName) as any
@@ -55,7 +55,7 @@ export async function checkAndTriggerPendingSteps(
     }
 
     // Get current flow metadata
-    const indexKey = SubjectPatterns.flowRunIndex(flowName)
+    const indexKey = StoreSubjects.flowRunIndex(flowName)
     if (!store.indexGet) {
       logger.info('No indexGet method on store', { flowName })
       return
@@ -67,7 +67,7 @@ export async function checkAndTriggerPendingSteps(
     }
 
     // Read all events to get completed steps
-    const streamName = SubjectPatterns.flowRun(runId)
+    const streamName = StoreSubjects.flowRun(runId)
     const allEvents = await store.read(streamName)
 
     // Check if flow is canceled - if so, don't trigger any new steps
@@ -502,9 +502,9 @@ export function createFlowWiring() {
     const logger = useNventLogger('flow-wiring')
     try {
       const store = useStoreAdapter()
-      const { SubjectPatterns } = useStreamTopics()
+      const { StoreSubjects } = useStreamTopics()
       // Use centralized naming function
-      const indexKey = SubjectPatterns.flowRunIndex(flowName)
+      const indexKey = StoreSubjects.flowRunIndex(flowName)
 
       if (!store.indexAdd) {
         throw new Error('StoreAdapter does not support indexAdd')
@@ -522,7 +522,7 @@ export function createFlowWiring() {
     if (wired) return
     wired = true
     const logger = useNventLogger('flow-wiring')
-    const { SubjectPatterns } = useStreamTopics()
+    const { StoreSubjects } = useStreamTopics()
 
     // Get store - must be available after adapters are initialized
     const store = useStoreAdapter()
@@ -557,7 +557,7 @@ export function createFlowWiring() {
         }
 
         // Use centralized naming function
-        const streamName = SubjectPatterns.flowRun(runId)
+        const streamName = StoreSubjects.flowRun(runId)
 
         // Validate event has required type field
         if (!e.type) {
@@ -638,7 +638,7 @@ export function createFlowWiring() {
         const flowName = e.flowName
         if (!flowName) return
 
-        const flowIndexKey = SubjectPatterns.flowIndex()
+        const flowIndexKey = StoreSubjects.flowIndex()
 
         // Update flow index stats based on event type
         if (e.type === 'flow.start') {
@@ -769,8 +769,8 @@ export function createFlowWiring() {
         const flowName = e.flowName
         if (!flowName) return
 
-        const streamName = SubjectPatterns.flowRun(runId)
-        const indexKey = SubjectPatterns.flowRunIndex(flowName)
+        const streamName = StoreSubjects.flowRun(runId)
+        const indexKey = StoreSubjects.flowRunIndex(flowName)
 
         // For flow.start, initialize index with running status
         if (e.type === 'flow.start') {

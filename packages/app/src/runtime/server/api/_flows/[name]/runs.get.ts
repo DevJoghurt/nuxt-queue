@@ -33,11 +33,11 @@ export default defineEventHandler(async (event) => {
 
   // Check if adapters are initialized
   let store: any
-  let SubjectPatterns: any
+  let StoreSubjects: any
   try {
     store = useStoreAdapter()
     const topics = useStreamTopics()
-    SubjectPatterns = topics.SubjectPatterns
+    StoreSubjects = topics.StoreSubjects
   }
   catch (err) {
     logger.error('[flows/runs] Adapters not initialized yet:', { error: err })
@@ -49,7 +49,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     // Use centralized naming function
-    const runIndexKey = SubjectPatterns.flowRunIndex(flowName)
+    const runIndexKey = StoreSubjects.flowRunIndex(flowName)
 
     // First, get the total count (Redis ZCARD for sorted sets)
     // We'll need to add a method to get the count

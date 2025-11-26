@@ -144,8 +144,8 @@ export class FlowStallDetector {
    * Should be called on every step event (started, completed, failed, retry)
    */
   async updateActivity(flowName: string, runId: string): Promise<void> {
-    const { SubjectPatterns } = useStreamTopics()
-    const indexKey = SubjectPatterns.flowRunIndex(flowName)
+    const { StoreSubjects } = useStreamTopics()
+    const indexKey = StoreSubjects.flowRunIndex(flowName)
 
     try {
       // Update lastActivityAt timestamp in index metadata
@@ -173,8 +173,8 @@ export class FlowStallDetector {
    * v0.5: Await-aware - uses flow-specific timeout and skips awaiting flows
    */
   async isStalled(flowName: string, runId: string): Promise<boolean> {
-    const { SubjectPatterns } = useStreamTopics()
-    const indexKey = SubjectPatterns.flowRunIndex(flowName)
+    const { StoreSubjects } = useStreamTopics()
+    const indexKey = StoreSubjects.flowRunIndex(flowName)
 
     try {
       if (!this.store.indexGet) return false
@@ -231,8 +231,8 @@ export class FlowStallDetector {
    * Emits a flow.stalled event and updates the flow status
    */
   async markAsStalled(flowName: string, runId: string, reason: string = 'No activity timeout'): Promise<void> {
-    const { SubjectPatterns } = useStreamTopics()
-    const indexKey = SubjectPatterns.flowRunIndex(flowName)
+    const { StoreSubjects } = useStreamTopics()
+    const indexKey = StoreSubjects.flowRunIndex(flowName)
 
     try {
       // Get current flow metadata
@@ -257,7 +257,7 @@ export class FlowStallDetector {
       }
 
       // Emit flow.stalled event
-      const streamName = SubjectPatterns.flowRun(runId)
+      const streamName = StoreSubjects.flowRun(runId)
       await this.store.append(streamName, {
         type: 'flow.stalled',
         runId,
@@ -298,13 +298,13 @@ export class FlowStallDetector {
         return
       }
 
-      const { SubjectPatterns } = useStreamTopics()
+      const { StoreSubjects } = useStreamTopics()
       let checkedCount = 0
       let stalledCount = 0
 
       // Check each flow
       for (const flowName of flowNames) {
-        const indexKey = SubjectPatterns.flowRunIndex(flowName)
+        const indexKey = StoreSubjects.flowRunIndex(flowName)
 
         // v0.5: Get flow-specific stall timeout
         const stallTimeout = await this.getFlowStallTimeout(flowName)

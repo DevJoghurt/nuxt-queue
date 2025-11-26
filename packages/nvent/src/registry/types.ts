@@ -108,6 +108,7 @@ export type TriggerEntry = {
   // Statistics
   stats?: {
     totalFires: number
+    totalFlowsStarted: number
     lastFiredAt?: string
     activeSubscribers: number
   }

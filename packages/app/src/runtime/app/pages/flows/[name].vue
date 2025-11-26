@@ -692,8 +692,6 @@ const handleCancelFlow = async () => {
     await $fetch(`/api/_flows/${selectedFlow.value}/runs/${selectedRunId.value}/cancel`, {
       method: 'POST',
     })
-    // Toast notification (if available) or console
-    console.log('Flow canceled successfully')
   }
   catch (error) {
     console.error('Failed to cancel flow:', error)
@@ -729,7 +727,6 @@ const handleNodeAction = async (payload: { id: string, action: 'run' | 'logs' | 
   const _stepName = payload.id.split(':')[1] // Extract step name from "entry:stepName" or "step:stepName"
 
   if (!selectedRunId.value) {
-    console.log('[flows/index] No run selected, showing alert')
     alert('Please select a flow run first to view logs or details.')
     return
   }
@@ -832,7 +829,6 @@ const clearFlowHistory = async () => {
     await refreshRuns()
 
     // Show success notification (could be enhanced with toast notification)
-    console.log(`Successfully cleared history for "${selectedFlow.value}"`)
   }
   catch (err) {
     console.error('Failed to clear history:', err)

@@ -95,7 +95,7 @@ export const useFlowEngine = () => {
   const isRunning = async (flowName: string, runId?: string) => {
     try {
       const store = useStoreAdapter()
-      const { SubjectPatterns } = useStreamTopics()
+      const { StoreSubjects } = useStreamTopics()
 
       // Check if indexRead is available
       if (!store.indexRead) {
@@ -104,14 +104,14 @@ export const useFlowEngine = () => {
 
       // If runId is provided, check specific run
       if (runId) {
-        const runIndexKey = SubjectPatterns.flowRunIndex(flowName)
+        const runIndexKey = StoreSubjects.flowRunIndex(flowName)
         const entries = await store.indexRead(runIndexKey, { limit: 1000 })
         const run = entries.find(e => e.id === runId)
         return run?.metadata?.status === 'running'
       }
 
       // Otherwise, check if ANY run of this flow is running
-      const runIndexKey = SubjectPatterns.flowRunIndex(flowName)
+      const runIndexKey = StoreSubjects.flowRunIndex(flowName)
       const entries = await store.indexRead(runIndexKey, { limit: 1000 })
       return entries.some(e => e.metadata?.status === 'running')
     }
@@ -124,14 +124,14 @@ export const useFlowEngine = () => {
   const getRunningFlows = async (flowName: string) => {
     try {
       const store = useStoreAdapter()
-      const { SubjectPatterns } = useStreamTopics()
+      const { StoreSubjects } = useStreamTopics()
 
       // Check if indexRead is available
       if (!store.indexRead) {
         return []
       }
 
-      const runIndexKey = SubjectPatterns.flowRunIndex(flowName)
+      const runIndexKey = StoreSubjects.flowRunIndex(flowName)
       const entries = await store.indexRead(runIndexKey, { limit: 1000 })
 
       return entries

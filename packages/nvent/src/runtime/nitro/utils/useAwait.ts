@@ -21,7 +21,7 @@ import { useStoreAdapter, useStreamTopics, useNventLogger } from '#imports'
 export function useAwait() {
   const logger = useNventLogger('await')
   const store = useStoreAdapter()
-  const { SubjectPatterns } = useStreamTopics()
+  const { StoreSubjects } = useStreamTopics()
 
   return {
     /**
@@ -63,7 +63,7 @@ export function useAwait() {
      * Get await state for a specific flow run and step
      */
     async getAwaitState(flowName: string, runId: string, stepName?: string) {
-      const indexKey = SubjectPatterns.flowRunIndex(flowName)
+      const indexKey = StoreSubjects.flowRunIndex(flowName)
 
       if (!store.indexGet) {
         logger.warn('Store does not support indexGet')
@@ -114,7 +114,7 @@ export function useAwait() {
 
       // If flowName specified, scan only that flow's index
       if (flowName) {
-        const indexKey = SubjectPatterns.flowRunIndex(flowName)
+        const indexKey = StoreSubjects.flowRunIndex(flowName)
         const entries = await store.indexRead(indexKey, { limit: 1000 })
 
         for (const entry of entries) {
@@ -147,7 +147,7 @@ export function useAwait() {
      * Get await history for a specific flow run from stream
      */
     async getAwaitHistory(runId: string, opts?: { limit?: number, stepName?: string }) {
-      const streamName = SubjectPatterns.flowRun(runId)
+      const streamName = StoreSubjects.flowRun(runId)
 
       const events = await store.read(streamName, {
         limit: opts?.limit || 100,
@@ -167,7 +167,7 @@ export function useAwait() {
      * Cancel/timeout an active await
      */
     async timeoutAwait(flowName: string, runId: string, stepName: string, reason: string = 'Manual timeout') {
-      const indexKey = SubjectPatterns.flowRunIndex(flowName)
+      const indexKey = StoreSubjects.flowRunIndex(flowName)
 
       // Update await status to timeout
       if (store.indexUpdateWithRetry) {

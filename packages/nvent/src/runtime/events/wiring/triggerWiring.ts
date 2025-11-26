@@ -22,7 +22,7 @@ export function createTriggerWiring() {
     const eventBus = getEventBus()
     const trigger = useTrigger()
     const store = useStoreAdapter()
-    const { SubjectPatterns } = useStreamTopics()
+    const { StoreSubjects } = useStreamTopics()
     const runtime = getTriggerRuntime(store, logger)
 
     // Initialize trigger runtime
@@ -45,7 +45,7 @@ export function createTriggerWiring() {
           return
         }
 
-        const streamName = SubjectPatterns.trigger(triggerName)
+        const streamName = StoreSubjects.triggerStream(triggerName)
 
         // Validate event has required type field
         if (!e.type) {
@@ -98,7 +98,7 @@ export function createTriggerWiring() {
 
         logger.debug('Processing trigger orchestration', { type: e.type, triggerName })
 
-        const indexKey = SubjectPatterns.triggerIndex()
+        const indexKey = StoreSubjects.triggerIndex()
         const now = new Date().toISOString()
         const nowTimestamp = Date.now()
 
@@ -119,6 +119,7 @@ export function createTriggerWiring() {
               'registeredBy': 'runtime',
               'lastActivityAt': now,
               'stats.totalFires': 0,
+              'stats.totalFlowsStarted': 0,
               'stats.activeSubscribers': 0,
               'webhook': data.webhook,
               'schedule': data.schedule,
@@ -140,7 +141,7 @@ export function createTriggerWiring() {
             registeredBy: 'runtime',
             lastActivityAt: now,
             subscriptions: {},
-            stats: { totalFires: 0, activeSubscribers: 0 },
+            stats: { totalFires: 0, totalFlowsStarted: 0, activeSubscribers: 0 },
             webhook: data.webhook,
             schedule: data.schedule,
             config: data.config,
@@ -266,7 +267,7 @@ export function createTriggerWiring() {
           }
 
           // Remove trigger stream (contains event history)
-          const triggerStreamKey = SubjectPatterns.trigger(triggerName)
+          const triggerStreamKey = StoreSubjects.triggerStream(triggerName)
           if (store.delete) {
             await store.delete(triggerStreamKey)
           }
@@ -300,7 +301,7 @@ export function createTriggerWiring() {
         const triggerName = (e as any).triggerName || (e.data as any)?.triggerName
         if (!triggerName) return
 
-        const indexKey = SubjectPatterns.triggerIndex()
+        const indexKey = StoreSubjects.triggerIndex()
         const now = new Date().toISOString()
 
         // Update trigger index stats based on event type

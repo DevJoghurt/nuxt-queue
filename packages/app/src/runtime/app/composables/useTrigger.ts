@@ -1,6 +1,42 @@
 import { ref, useFetch, type Ref, isRef } from '#imports'
 import type { FetchError } from 'ofetch'
 
+// Shared stats interface
+export interface TriggerStats {
+  totalFires: number
+  totalFlowsStarted: number
+  activeSubscribers: number
+  lastFiredAt?: string
+}
+
+// Base trigger info (used in list views)
+export interface TriggerInfo {
+  name: string
+  type: 'event' | 'webhook' | 'schedule' | 'manual'
+  scope: 'flow' | 'run'
+  displayName?: string
+  description?: string
+  source?: string
+  status: 'active' | 'inactive' | 'retired'
+  registeredAt?: number
+  lastActivityAt?: number
+  webhook?: {
+    path: string
+    method?: string
+    auth?: any
+  }
+  schedule?: {
+    cron: string
+    timezone?: string
+    enabled?: boolean
+  }
+  config?: any
+  subscribedFlows: string[]
+  subscriptionCount: number
+  stats: TriggerStats
+}
+
+// Detailed trigger info (used in detail views)
 export interface TriggerDetail {
   name: string
   type: 'event' | 'webhook' | 'schedule' | 'manual'
@@ -33,17 +69,21 @@ export interface TriggerDetail {
     registeredAt?: number
   }>
   subscriptionCount: number
-  stats: {
-    totalFires: number
-    successCount: number
-    failureCount: number
-    last24h: number
-    last7d?: number
-    last30d?: number
-    activeSubscribers: number
-    avgResponseTime?: number
-    successRate?: number
-  }
+  stats: TriggerStats
+}
+
+// Aggregate statistics overview
+export interface TriggerStatsOverview {
+  total: number
+  active: number
+  inactive: number
+  retired: number
+  byType: Record<string, number>
+  byScope: Record<string, number>
+  byStatus: Record<string, number>
+  totalSubscriptions: number
+  totalFires: number
+  withSubscribers: number
 }
 
 export interface TriggerEvent {
@@ -77,14 +117,13 @@ export function useTrigger(
 
   const { data: trigger, refresh: _refresh, status, error } = useFetch<TriggerDetail>(
     () => {
-      if (!name.value) return null
+      if (!name.value) return '/api/_triggers/__invalid__'
       return `/api/_triggers/${encodeURIComponent(name.value)}?_t=${refreshCounter.value}`
     },
     {
       immediate: false,
       watch: false,
       server: false, // Client-only
-      default: () => null as TriggerDetail | null,
     },
   )
 
@@ -101,7 +140,7 @@ export function useTrigger(
   }
 
   return {
-    trigger,
+    trigger: trigger as Ref<TriggerDetail | null | undefined>,
     refresh,
     status,
     error,
@@ -151,7 +190,6 @@ export function useTriggerEvents(
       immediate: false,
       watch: false,
       server: false, // Client-only
-      default: () => null as TriggerEventsResponse | null,
     },
   )
 
@@ -168,7 +206,85 @@ export function useTriggerEvents(
   }
 
   return {
-    events,
+    events: events as Ref<TriggerEventsResponse | null | undefined>,
+    refresh,
+    status,
+    error,
+  }
+}
+
+/**
+ * Composable for fetching trigger list
+ */
+export function useTriggers(): {
+  triggers: Ref<TriggerInfo[] | null | undefined>
+  refresh: () => Promise<void>
+  status: Ref<'idle' | 'pending' | 'success' | 'error'>
+  error: Ref<FetchError | null | undefined>
+} {
+  const refreshCounter = ref(0)
+
+  const { data: triggers, refresh: _refresh, status, error } = useFetch<TriggerInfo[]>(
+    () => `/api/_triggers?_t=${refreshCounter.value}`,
+    {
+      immediate: false,
+      watch: false,
+      server: false, // Client-only
+    },
+  )
+
+  // Wrapper that increments counter to bust cache
+  const refresh = async () => {
+    refreshCounter.value++
+    await _refresh()
+  }
+
+  // Trigger initial fetch on client
+  if (import.meta.client) {
+    refresh()
+  }
+
+  return {
+    triggers,
+    refresh,
+    status,
+    error,
+  }
+}
+
+/**
+ * Composable for fetching aggregate trigger statistics
+ */
+export function useTriggersStats(): {
+  stats: Ref<TriggerStatsOverview | null | undefined>
+  refresh: () => Promise<void>
+  status: Ref<'idle' | 'pending' | 'success' | 'error'>
+  error: Ref<FetchError | null | undefined>
+} {
+  const refreshCounter = ref(0)
+
+  const { data: stats, refresh: _refresh, status, error } = useFetch<TriggerStatsOverview>(
+    () => `/api/_triggers/stats?_t=${refreshCounter.value}`,
+    {
+      immediate: false,
+      watch: false,
+      server: false, // Client-only
+    },
+  )
+
+  // Wrapper that increments counter to bust cache
+  const refresh = async () => {
+    refreshCounter.value++
+    await _refresh()
+  }
+
+  // Trigger initial fetch on client
+  if (import.meta.client) {
+    refresh()
+  }
+
+  return {
+    stats,
     refresh,
     status,
     error,

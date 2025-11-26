@@ -272,8 +272,8 @@ export function useTrigger() {
     async initialize() {
       if (runtime.initialized) return
 
-      const { SubjectPatterns } = useStreamTopics()
-      const indexKey = SubjectPatterns.triggerIndex()
+      const { StoreSubjects } = useStreamTopics()
+      const indexKey = StoreSubjects.triggerIndex()
 
       logger.info('Initializing trigger runtime from index...')
 
@@ -422,8 +422,8 @@ export function useTrigger() {
      * v0.5.1: New analytics method
      */
     async getTriggerStats(name: string) {
-      const { SubjectPatterns } = useStreamTopics()
-      const indexKey = SubjectPatterns.triggerIndex()
+      const { StoreSubjects } = useStreamTopics()
+      const indexKey = StoreSubjects.triggerIndex()
 
       if (!store.indexGet) {
         // Fallback to runtime data
@@ -442,8 +442,8 @@ export function useTrigger() {
      * v0.5.1: New analytics method
      */
     async getTriggerHistory(name: string, opts?: { limit?: number, types?: string[] }) {
-      const { SubjectPatterns } = useStreamTopics()
-      const streamName = SubjectPatterns.trigger(name)
+      const { StoreSubjects } = useStreamTopics()
+      const streamName = StoreSubjects.triggerStream(name)
 
       const events = await store.read(streamName, {
         limit: opts?.limit || 100,

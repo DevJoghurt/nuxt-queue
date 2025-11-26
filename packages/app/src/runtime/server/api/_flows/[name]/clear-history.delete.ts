@@ -16,11 +16,11 @@ export default defineEventHandler(async (event) => {
 
   // Check if adapters are initialized
   let store: any
-  let SubjectPatterns: any
+  let StoreSubjects: any
   try {
     store = useStoreAdapter()
     const topics = useStreamTopics()
-    SubjectPatterns = topics.SubjectPatterns
+    StoreSubjects = topics.StoreSubjects
   }
   catch {
     throw createError({
@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
     let deletedIndex = false
 
     // Get all run IDs from the index using the proper naming convention
-    const indexKey = SubjectPatterns.flowRunIndex(flowName)
+    const indexKey = StoreSubjects.flowRunIndex(flowName)
 
     if (store.indexRead) {
       const runs = await store.indexRead(indexKey, { limit: 10000 })
@@ -43,7 +43,7 @@ export default defineEventHandler(async (event) => {
       // Delete each run stream and its metadata hash (for Redis adapter)
       if (store.deleteStream) {
         for (const run of runs) {
-          const streamName = SubjectPatterns.flowRun(run.id)
+          const streamName = StoreSubjects.flowRun(run.id)
           await store.deleteStream(streamName)
           // Also delete metadata hash if Redis adapter is used
           if (store.deleteIndex) {

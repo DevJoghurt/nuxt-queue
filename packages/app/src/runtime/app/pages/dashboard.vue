@@ -546,7 +546,16 @@ onMounted(async () => {
     stats: { total: 0, success: 0, failure: 0, cancel: 0, running: 0, awaiting: 0 },
   }))
   
-  triggers.value = Array.isArray(triggersResponse) ? triggersResponse : []
+  // Initialize triggers with empty stats that will be populated by WebSocket
+  triggers.value = (Array.isArray(triggersResponse) ? triggersResponse : []).map((trigger: any) => ({
+    ...trigger,
+    stats: trigger.stats || {
+      totalFires: 0,
+      totalFlowsStarted: 0,
+      lastFiredAt: null,
+      activeSubscribers: 0,
+    },
+  }))
 
   // Subscribe to live queue stats for each queue
   for (const queue of queues.value) {
@@ -564,11 +573,9 @@ onMounted(async () => {
   // Subscribe to live flow stats
   subscribeFlowStats({
     onInitial: (data: any) => {
-      console.log('[Dashboard] Flow stats initial:', data)
       updateFlowStats(data)
     },
     onUpdate: (data: any) => {
-      console.log('[Dashboard] Flow stats update:', data)
       updateFlowStats(data)
     },
   })
@@ -576,11 +583,9 @@ onMounted(async () => {
   // Subscribe to live trigger stats
   subscribeTriggerStats({
     onInitial: (data: any) => {
-      console.log('[Dashboard] Trigger stats initial:', data)
       updateTriggerStats(data)
     },
     onUpdate: (data: any) => {
-      console.log('[Dashboard] Trigger stats update:', data)
       updateTriggerStats(data)
     },
   })
@@ -589,12 +594,19 @@ onMounted(async () => {
 // Update flow stats from WebSocket message (same pattern as flows/index.vue)
 function updateFlowStats(data: any) {
   const flowId = data?.id
-  if (!flowId || !flows.value)
+  if (!flowId) {
+    console.warn('[Dashboard] No flow ID in stats update:', data)
     return
+  }
+  
+  if (!flows.value || flows.value.length === 0) {
+    console.warn('[Dashboard] Flows array not initialized yet')
+    return
+  }
 
   const flowIndex = flows.value.findIndex(f => f.id === flowId)
   if (flowIndex === -1) {
-    console.warn('[Dashboard] Flow not found in list:', flowId)
+    console.warn('[Dashboard] Flow not found in list:', flowId, 'available:', flows.value.map(f => f.id))
     return
   }
 
@@ -604,45 +616,48 @@ function updateFlowStats(data: any) {
     return
   }
 
-  console.log('[Dashboard] Updating flow:', flowId, 'metadata:', metadata)
-
-  // Check if stats are nested or flat
-  const stats = metadata.stats || {
-    total: metadata['stats.total'] || 0,
-    success: metadata['stats.success'] || 0,
-    failure: metadata['stats.failure'] || 0,
-    cancel: metadata['stats.cancel'] || 0,
-    running: metadata['stats.running'] || 0,
-    awaiting: metadata['stats.awaiting'] || 0,
+  // Stats can be nested object, dotted keys, or flat keys
+  const newStats = {
+    total: metadata.stats?.total || metadata.total || metadata['stats.total'] || 0,
+    success: metadata.stats?.success || metadata.success || metadata['stats.success'] || 0,
+    failure: metadata.stats?.failure || metadata.failure || metadata['stats.failure'] || 0,
+    cancel: metadata.stats?.cancel || metadata.cancel || metadata['stats.cancel'] || 0,
+    running: metadata.stats?.running || metadata.running || metadata['stats.running'] || 0,
+    awaiting: metadata.stats?.awaiting || metadata.awaiting || metadata['stats.awaiting'] || 0,
   }
 
-  // Create a new flow object to trigger Vue reactivity
-  flows.value[flowIndex] = {
+  // Create a completely new flow object to ensure Vue reactivity
+  const updatedFlow = {
     ...flows.value[flowIndex],
-    stats: {
-      total: stats.total || 0,
-      success: stats.success || 0,
-      failure: stats.failure || 0,
-      cancel: stats.cancel || 0,
-      running: stats.running || 0,
-      awaiting: stats.awaiting || 0,
-    },
+    stats: newStats,
     lastRunAt: metadata.lastRunAt,
     lastCompletedAt: metadata.lastCompletedAt,
   }
-
-  console.log('[Dashboard] Updated stats for', flowId, ':', flows.value[flowIndex].stats)
+  
+  // Replace in array to trigger reactivity
+  flows.value = [
+    ...flows.value.slice(0, flowIndex),
+    updatedFlow,
+    ...flows.value.slice(flowIndex + 1),
+  ]
 }
 
 // Update trigger stats from WebSocket message (same pattern as triggers/index.vue)
 function updateTriggerStats(data: any) {
   const triggerName = data?.id
-  if (!triggerName || !triggers.value)
+  if (!triggerName) {
+    console.warn('[Dashboard] No trigger name in stats update:', data)
     return
+  }
+  
+  if (!triggers.value || triggers.value.length === 0) {
+    console.warn('[Dashboard] Triggers array not initialized yet, storing for later')
+    return
+  }
 
   const triggerIndex = triggers.value.findIndex(t => t.name === triggerName)
   if (triggerIndex === -1) {
-    console.warn('[Dashboard] Trigger not found in list:', triggerName)
+    console.warn('[Dashboard] Trigger not found in list:', triggerName, 'available:', triggers.value.map(t => t.name))
     return
   }
 
@@ -652,30 +667,30 @@ function updateTriggerStats(data: any) {
     return
   }
 
-  console.log('[Dashboard] Updating trigger:', triggerName, 'metadata:', metadata)
-
-  // Check if stats are nested or flat
-  const stats = metadata.stats || {
-    totalFires: metadata['stats.totalFires'] || 0,
-    totalFlowsStarted: metadata['stats.totalFlowsStarted'] || 0,
-    lastFiredAt: metadata['stats.lastFiredAt'],
-    activeSubscribers: metadata['stats.activeSubscribers'] || 0,
+  // Stats can be nested object, dotted keys, or flat keys
+  const newStats = {
+    totalFires: metadata.stats?.totalFires || metadata.totalFires || metadata['stats.totalFires'] || 0,
+    totalFlowsStarted: metadata.stats?.totalFlowsStarted || metadata.totalFlowsStarted || metadata['stats.totalFlowsStarted'] || 0,
+    last24h: metadata.stats?.last24h || metadata.last24h || metadata['stats.last24h'] || 0,
+    successCount: metadata.stats?.successCount || metadata.successCount || metadata['stats.successCount'] || 0,
+    failureCount: metadata.stats?.failureCount || metadata.failureCount || metadata['stats.failureCount'] || 0,
+    lastFiredAt: metadata.stats?.lastFiredAt || metadata.lastFiredAt || metadata['stats.lastFiredAt'],
+    activeSubscribers: metadata.stats?.activeSubscribers || metadata.activeSubscribers || metadata['stats.activeSubscribers'] || 0,
   }
 
-  // Create a new trigger object to trigger Vue reactivity
-  triggers.value[triggerIndex] = {
+  // Create a completely new trigger object to ensure Vue reactivity
+  const updatedTrigger = {
     ...triggers.value[triggerIndex],
-    stats: {
-      ...triggers.value[triggerIndex].stats,
-      totalFires: stats.totalFires || 0,
-      totalFlowsStarted: stats.totalFlowsStarted || 0,
-      lastFiredAt: stats.lastFiredAt,
-      activeSubscribers: stats.activeSubscribers || 0,
-    },
+    stats: newStats,
     lastActivityAt: metadata.lastActivityAt,
   }
-
-  console.log('[Dashboard] Updated stats for', triggerName, ':', triggers.value[triggerIndex].stats)
+  
+  // Replace in array to trigger reactivity
+  triggers.value = [
+    ...triggers.value.slice(0, triggerIndex),
+    updatedTrigger,
+    ...triggers.value.slice(triggerIndex + 1),
+  ]
 }
 
 // Computed stats

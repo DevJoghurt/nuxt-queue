@@ -28,7 +28,7 @@
         </template>
         <UInput
           v-model="config.path"
-          placeholder="/webhooks/my-trigger"
+          placeholder="/my-trigger-name"
           icon="i-lucide-link"
         />
       </UFormField>

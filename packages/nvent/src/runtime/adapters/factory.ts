@@ -126,8 +126,8 @@ async function createStoreAdapter(
   // Initialize flow index structure after adapter is ready
   // TODO: If we implement distributed flow orchestration, this needs to be handled differently -> it is then part of the registration process
   try {
-    const { SubjectPatterns } = useStreamTopics()
-    const flowIndexKey = SubjectPatterns.flowIndex()
+    const { StoreSubjects } = useStreamTopics()
+    const flowIndexKey = StoreSubjects.flowIndex()
 
     // Check if index exists by trying to read it
     if (adapter.indexRead) {
