@@ -268,13 +268,13 @@ export const config = defineFunctionConfig({
 
 **Start the flow:**
 ```typescript
-const { startFlow } = useFlowEngine()
+const { startFlow } = useFlow()
 await startFlow('my-flow', { input: 'data' })
 ```
 
 **Check flow status:**
 ```typescript
-const { isRunning, getRunningFlows, cancelFlow } = useFlowEngine()
+const { isRunning, getRunningFlows, cancelFlow } = useFlow()
 
 // Check if specific run is still active
 const running = await isRunning('my-flow', runId)

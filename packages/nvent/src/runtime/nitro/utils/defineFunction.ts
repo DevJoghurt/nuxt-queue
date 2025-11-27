@@ -1,9 +1,9 @@
-import { $useFunctionRegistry, useFlowEngine, useQueueAdapter } from '#imports'
+import { $useFunctionRegistry, useFlow, useQueueAdapter } from '#imports'
 import type { RunContext, NodeHandler } from '../worker/node/runner'
 
 export type ExtendedRunContext = RunContext & {
   provider: ReturnType<typeof useQueueAdapter>
-  flow: ReturnType<typeof useFlowEngine>
+  flow: ReturnType<typeof useFlow>
   registry: any
 }
 
@@ -15,7 +15,7 @@ export const defineFunction: DefineFunction = (handler) => {
     // Lazily resolve provider and helpers at run time to avoid early init ordering issues
     const provider = useQueueAdapter()
     // Use ctx.flow if already provided (it has context-aware wrapper), otherwise create new
-    const flow = ctx.flow || useFlowEngine()
+    const flow = ctx.flow || useFlow()
     const registry = $useFunctionRegistry() as any
     const extended: ExtendedRunContext = {
       ...ctx,

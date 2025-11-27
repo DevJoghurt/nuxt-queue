@@ -1,5 +1,5 @@
 import type { RunContext, RunLogger, RunState } from '../worker/node/runner'
-import { useEventManager, useFlowEngine, useRuntimeConfig, useStateAdapter } from '#imports'
+import { useEventManager, useFlow, useRuntimeConfig, useStateAdapter } from '#imports'
 
 const defaultState: RunState = {
   async get() { return null },
@@ -59,7 +59,7 @@ export function useRunContext(partial?: Partial<RunContext>): RunContext {
   })()
 
   // Flow engine with context binding
-  const baseFlowEngine = useFlowEngine()
+  const baseFlowEngine = useFlow()
   const flow = {
     ...baseFlowEngine,
     emit: async (trigger: string, payload: any = {}) => {

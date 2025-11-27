@@ -1,4 +1,4 @@
-import { defineEventHandler, getRouterParam, createError, useFlowEngine } from '#imports'
+import { defineEventHandler, getRouterParam, createError, useFlow } from '#imports'
 
 export default defineEventHandler(async (event) => {
   const flowName = getRouterParam(event, 'name')
@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const flowEngine = useFlowEngine()
+  const flowEngine = useFlow()
 
   try {
     const result = await flowEngine.cancelFlow(flowName, runId)

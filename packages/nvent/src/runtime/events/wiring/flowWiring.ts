@@ -381,52 +381,110 @@ export function analyzeFlowCompletion(
   const totalSteps = allSteps.length
   const hasFinalFailures = finalFailedSteps.size > 0
 
-  // Check if any failed step blocks the flow from completing
-  // A failed step blocks the flow if:
-  // 1. It has emits that other steps depend on (those steps can never run)
-  // 2. Other steps are waiting for those emits
-  let hasBlockingFailure = false
+  // Build a dependency graph to understand step relationships
+  // Map each step to its dependencies (what it subscribes to) and dependents (what depends on it)
+  const stepDependencies = new Map<string, Set<string>>() // step -> its dependencies
+  const stepDependents = new Map<string, Set<string>>() // step -> steps that depend on it
 
-  if (hasFinalFailures) {
-    for (const failedStepName of Array.from(finalFailedSteps)) {
-      // Get failed step definition - check both flowSteps and entry step
-      let failedStepDef = flowSteps[failedStepName] as any
+  // Initialize maps for all steps
+  for (const stepName of allSteps) {
+    stepDependencies.set(stepName, new Set())
+    stepDependents.set(stepName, new Set())
+  }
 
-      // If the failed step is the entry step, use the entry step definition
-      if (!failedStepDef && failedStepName === entryStep && entryStepDef) {
-        failedStepDef = entryStepDef
+  // Build dependency relationships
+  for (const [stepName, stepDef] of Object.entries(flowSteps)) {
+    const step = stepDef as any
+    const subscribes = step.subscribes || []
+
+    for (const sub of subscribes) {
+      // Find which step emits this event
+      for (const [emitStepName, emitStepDef] of Object.entries(flowSteps)) {
+        const emitStep = emitStepDef as any
+        const emits = emitStep.emits || []
+
+        // Check if this emit matches the subscription
+        if (emits.some((emit: string) => sub === `${emitStepName}.${emit}` || sub === emit)) {
+          stepDependencies.get(stepName)?.add(emitStepName)
+          stepDependents.get(emitStepName)?.add(stepName)
+        }
       }
 
-      // Check if this failed step has emits
-      if (failedStepDef?.emits && failedStepDef.emits.length > 0) {
-        // Check if any other step depends on these emits
-        for (const [stepName, stepDef] of Object.entries(flowSteps)) {
-          const step = stepDef as any
+      // Also check entry step
+      if (entryStep && entryStepDef?.emits) {
+        const entryEmits = entryStepDef.emits || []
+        if (entryEmits.some((emit: string) => sub === `${entryStep}.${emit}` || sub === emit)) {
+          stepDependencies.get(stepName)?.add(entryStep)
+          stepDependents.get(entryStep)?.add(stepName)
+        }
+      }
+    }
+  }
 
-          // Skip the failed step itself
-          if (stepName === failedStepName) continue
+  // Check if any failed step blocks the flow from completing
+  // A failed step blocks the flow if:
+  // 1. It has downstream dependents that haven't completed (blocking failure)
+  // 2. OR it's in a "layer" where ALL siblings also failed (critical layer failure)
+  let hasBlockingFailure = false
+  let hasCriticalLayerFailure = false
 
-          // Check if this step subscribes to any of the failed step's emits
-          if (step.subscribes && step.subscribes.length > 0) {
-            const dependsOnFailedStep = step.subscribes.some((sub: string) => {
-              // Check if subscription matches any emit from failed step
-              // Emit names are typically "{stepName}.{eventName}"
-              return failedStepDef.emits.some((emit: string) =>
-                sub === `${failedStepName}.${emit}` || sub === emit,
-              )
-            })
+  if (hasFinalFailures) {
+    // Check for blocking failures (steps with incomplete dependents)
+    for (const failedStepName of Array.from(finalFailedSteps)) {
+      const dependents = stepDependents.get(failedStepName)
 
-            if (dependsOnFailedStep && !completedSteps.has(stepName)) {
-              // This step depends on the failed step and hasn't completed
-              // So the flow is blocked
-              hasBlockingFailure = true
-              break
-            }
+      if (dependents && dependents.size > 0) {
+        // This step has dependents - check if any didn't complete
+        for (const dependentName of Array.from(dependents)) {
+          if (!completedSteps.has(dependentName)) {
+            hasBlockingFailure = true
+            break
           }
         }
       }
 
       if (hasBlockingFailure) break
+    }
+
+    // Check for critical layer failures (all siblings at same level failed)
+    // Group steps by their dependency set (siblings have same dependencies)
+    const layerGroups = new Map<string, Set<string>>()
+
+    for (const stepName of allSteps) {
+      const deps = stepDependencies.get(stepName)
+      const depsKey = Array.from(deps || []).sort().join(',')
+
+      if (!layerGroups.has(depsKey)) {
+        layerGroups.set(depsKey, new Set())
+      }
+      layerGroups.get(depsKey)?.add(stepName)
+    }
+
+    // For each layer, check if ALL steps failed
+    for (const [_depsKey, layerSteps] of Array.from(layerGroups)) {
+      // Skip if this layer has no failures
+      const layerHasFailures = Array.from(layerSteps).some(s => finalFailedSteps.has(s))
+      if (!layerHasFailures) continue
+
+      // Check if ALL steps in this layer failed (not just failed OR didn't run)
+      // We only care about actual failures, not steps that didn't run because dependencies weren't met
+      const allLayerStepsFailed = Array.from(layerSteps).every(s =>
+        finalFailedSteps.has(s),
+      )
+
+      // Only mark as critical layer failure if ALL siblings actually failed
+      // If at least one sibling succeeded, the parallel branch is OK
+      if (allLayerStepsFailed) {
+        const hasLeafNode = Array.from(layerSteps).some((s) => {
+          const deps = stepDependents.get(s)
+          return !deps || deps.size === 0
+        })
+
+        if (hasLeafNode) {
+          hasCriticalLayerFailure = true
+          break
+        }
+      }
     }
   }
 
@@ -441,9 +499,10 @@ export function analyzeFlowCompletion(
     }
   }
 
-  // Flow fails ONLY if there's a blocking failure
-  // A blocking failure prevents the flow from completing
-  if (hasBlockingFailure) {
+  // Flow fails if:
+  // 1. There's a blocking failure (step with incomplete dependents failed)
+  // 2. OR there's a critical layer failure (all siblings at final layer failed)
+  if (hasBlockingFailure || hasCriticalLayerFailure) {
     return {
       status: 'failed',
       totalSteps,
@@ -455,23 +514,16 @@ export function analyzeFlowCompletion(
 
   // Flow completes when all steps have reached a terminal state
   // A step is in terminal state if it's: completed OR failed
-  // Non-blocking failures (parallel/optional steps) are OK
+  // Parallel branch failures are OK as long as at least one sibling succeeded
   const allStepsTerminal = allSteps.every(step =>
     completedSteps.has(step) || finalFailedSteps.has(step),
   )
 
   let status: 'running' | 'completed' | 'failed' | 'canceled' | 'awaiting' = 'running'
 
-  // Flow is completed if all steps have reached a terminal state
-  // If there are any final failures (after retries exhausted), flow is failed
-  // Blocking failures are already checked above, but we also fail for any final failures
+  // Flow is completed if all steps reached terminal state without critical failures
   if (allStepsTerminal) {
-    if (finalFailedSteps.size > 0) {
-      status = 'failed'
-    }
-    else {
-      status = 'completed'
-    }
+    status = 'completed'
     completedAt = Date.now()
   }
 

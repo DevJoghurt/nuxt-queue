@@ -38,10 +38,6 @@ export function getServerImports(resolverFn: (path: string) => string, buildDir:
 
     // Composables users may need in server code
     {
-      name: 'useFlowEngine',
-      from: resolverFn('./runtime/nitro/utils/useFlowEngine'),
-    },
-    {
       name: 'useEventManager',
       from: resolverFn('./runtime/nitro/utils/useEventManager'),
     },

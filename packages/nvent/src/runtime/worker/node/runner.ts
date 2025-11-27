@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import {
   useRuntimeConfig,
-  useFlowEngine,
+  useFlow,
   useEventManager,
   useNventLogger,
   $useFunctionRegistry,
@@ -49,7 +49,7 @@ export interface RunContext {
   attempt?: number
   logger: RunLogger
   state: RunState
-  flow: ReturnType<typeof useFlowEngine>
+  flow: ReturnType<typeof useFlow>
   /**
    * Resolved data from await pattern (awaitBefore only)
    * Available when step resumes after await resolution
@@ -116,7 +116,7 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
     }
   })()
   // Flow engine for trigger handling - bind to context for automatic flowId/flowName/stepName
-  const baseFlowEngine = useFlowEngine()
+  const baseFlowEngine = useFlow()
   const flow = {
     ...baseFlowEngine,
     emit: async (trigger: string, payload: any = {}) => {

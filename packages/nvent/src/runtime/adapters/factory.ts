@@ -130,29 +130,27 @@ async function createStoreAdapter(
     const flowIndexKey = StoreSubjects.flowIndex()
 
     // Check if index exists by trying to read it
-    if (adapter.indexRead) {
-      const existingFlows = await adapter.indexRead(flowIndexKey, { limit: 1 })
-      if (existingFlows.length === 0) {
-        // Index is empty, initialize with analyzed flows
-        const analyzedFlows = $useAnalyzedFlows()
-        if (analyzedFlows && analyzedFlows.length > 0 && adapter.indexAdd) {
-          const now = new Date().toISOString()
-          for (const flow of analyzedFlows) {
-            await adapter.indexAdd(flowIndexKey, flow.id, Date.now(), {
-              name: flow.id,
-              displayName: flow.id,
-              registeredAt: now,
-              stats: {
-                total: 0,
-                success: 0,
-                failure: 0,
-                cancel: 0,
-                running: 0,
-                awaiting: 0,
-              },
-              version: 1,
-            })
-          }
+    const existingFlows = await adapter.index.read(flowIndexKey, { limit: 1 })
+    if (existingFlows.length === 0) {
+      // Index is empty, initialize with analyzed flows
+      const analyzedFlows = $useAnalyzedFlows()
+      if (analyzedFlows && analyzedFlows.length > 0) {
+        const now = new Date().toISOString()
+        for (const flow of analyzedFlows) {
+          await adapter.index.add(flowIndexKey, flow.id, Date.now(), {
+            name: flow.id,
+            displayName: flow.id,
+            registeredAt: now,
+            stats: {
+              total: 0,
+              success: 0,
+              failure: 0,
+              cancel: 0,
+              running: 0,
+              awaiting: 0,
+            },
+            version: 1,
+          })
         }
       }
     }

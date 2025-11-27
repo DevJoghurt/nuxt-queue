@@ -1,7 +1,7 @@
-import { useFlowEngine } from '#imports'
+import { useFlow } from '#imports'
 
 export default defineEventHandler(async (event) => {
-  const flow = useFlowEngine()
+  const flow = useFlow()
   const body = await readBody(event)
   
   const result = await flow.startFlow(body.flowName, body.payload)
