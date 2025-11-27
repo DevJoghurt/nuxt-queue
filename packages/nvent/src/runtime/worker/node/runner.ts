@@ -178,25 +178,6 @@ export type NodeHandler = (input: any, ctx: RunContext) => Promise<any>
  */
 export function createJobProcessor(handler: NodeHandler, queueName: string) {
   return async function processor(job: QueueJob) {
-    // Check if this is a scheduled flow start trigger
-    if (job.data?.__scheduledFlowStart) {
-      const { __flowName, __flowInput } = job.data
-      try {
-        // Dynamically import to avoid circular dependencies
-        const { startFlow } = useFlowEngine()
-        const result = await startFlow(__flowName, __flowInput || {})
-        return {
-          scheduled: true,
-          flowId: result.flowId,
-          flowName: __flowName,
-        }
-      }
-      catch (err: any) {
-        logger.error('[scheduled-flow] Failed to start flow:', err)
-        throw err
-      }
-    }
-
     // Normal job processing
     const eventMgr = useEventManager()
     const rc: any = useRuntimeConfig()

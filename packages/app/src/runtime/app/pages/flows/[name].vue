@@ -211,31 +211,6 @@
               All runs loaded
             </div>
           </div>
-
-          <!-- Schedules Section -->
-          <div
-            v-if="selectedFlow"
-            class="border-t border-gray-200 dark:border-gray-800 shrink-0"
-          >
-            <UAccordion
-              :items="scheduleAccordionItems"
-              :ui="{
-                root: 'w-full',
-                trigger: 'px-4 py-2 bg-gray-50 dark:bg-gray-900/50',
-                content: 'max-h-48 overflow-y-auto',
-              }"
-            >
-              <template #item>
-                <FlowSchedulesList
-                  v-if="selectedFlow"
-                  ref="schedulesListRef"
-                  :flow-name="selectedFlow || ''"
-                  class="px-4 py-3"
-                  @updated="handleSchedulesUpdated"
-                />
-              </template>
-            </UAccordion>
-          </div>
         </div>
 
         <!-- Main Content Area with Tabs -->
@@ -396,14 +371,6 @@
       </template>
     </UModal>
 
-    <!-- Schedule Flow Modal -->
-    <FlowScheduleDialog
-      v-if="selectedFlow"
-      v-model="scheduleModalOpen"
-      :flow-name="selectedFlow"
-      @scheduled="handleFlowScheduled"
-    />
-
     <!-- Confirm Dialog -->
     <ConfirmDialog
       v-model:open="confirmDialogOpen"
@@ -427,8 +394,6 @@ import FlowDiagram from '../../components/flow/Diagram.vue'
 import FlowRunOverview from '../../components/flow/RunOverview.vue'
 import FlowRunTimeline from '../../components/flow/RunTimeline.vue'
 import FlowRunStatusBadge from '../../components/flow/RunStatusBadge.vue'
-import FlowSchedulesList from '../../components/flow/SchedulesList.vue'
-import FlowScheduleDialog from '../../components/flow/ScheduleDialog.vue'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import {
   UIcon,
@@ -437,7 +402,6 @@ import {
   UTextarea,
   UTabs,
   UDropdownMenu,
-  UAccordion,
   UBadge,
 } from '#components'
 import { useRoute, useRouter } from '#app'
@@ -536,23 +500,10 @@ useFlowRunsPolling(checkForNewRuns, shouldPoll)
 
 // Start flow modal state
 const startFlowModalOpen = ref(false)
-const scheduleModalOpen = ref(false)
 const flowInputJson = ref('{}')
 const jsonError = ref('')
 const startingFlow = ref(false)
-
-// Schedules state
-const schedulesListRef = ref()
 const clearingHistory = ref(false)
-
-// Accordion items for schedules
-const scheduleAccordionItems = [
-  {
-    label: 'Schedules',
-    slot: 'item',
-    defaultOpen: false,
-  },
-]
 
 // Confirm dialog state
 const confirmDialogOpen = ref(false)
@@ -566,11 +517,6 @@ const confirmDialogConfig = ref({
 
 // Flow actions dropdown menu
 const flowActionsItems = computed(() => [[
-  {
-    label: 'Schedule Flow',
-    icon: 'i-lucide-clock',
-    onSelect: () => openScheduleModal(),
-  },
   {
     label: 'Clear History',
     icon: 'i-lucide-trash-2',
@@ -739,20 +685,6 @@ const openStartFlowModal = () => {
   flowInputJson.value = '{}'
   jsonError.value = ''
   startFlowModalOpen.value = true
-}
-
-const openScheduleModal = () => {
-  scheduleModalOpen.value = true
-}
-
-const handleFlowScheduled = () => {
-  // Refresh the schedules list after a schedule is created
-  schedulesListRef.value?.loadSchedules()
-}
-
-const handleSchedulesUpdated = () => {
-  // Called when schedules list needs to be refreshed
-  schedulesListRef.value?.loadSchedules()
 }
 
 const startFlowRun = async () => {
