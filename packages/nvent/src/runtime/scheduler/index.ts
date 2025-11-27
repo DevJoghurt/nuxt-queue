@@ -20,7 +20,7 @@ let schedulerInstance: SchedulerAdapter | null = null
 export function createScheduler(store: any): SchedulerAdapter {
   const config = useRuntimeConfig()
   const prefix = config.nvent.store?.prefix || 'nvent'
-  const useIndexLocking = !!(store.indexAdd && store.indexGet)
+  const useIndexLocking = !!(store.indexAdd && store.index.get)
 
   return new Scheduler({
     store,

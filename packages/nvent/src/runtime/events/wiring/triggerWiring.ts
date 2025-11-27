@@ -61,7 +61,7 @@ export function createTriggerWiring() {
         }
 
         // Append to stream - returns complete event with id and ts
-        const persistedEvent = await store.append(streamName, eventData)
+        const persistedEvent = await store.stream.append(streamName, eventData)
 
         // Republish complete event to bus so other wirings can react
         await eventBus.publish(persistedEvent as any)
@@ -107,8 +107,8 @@ export function createTriggerWiring() {
         if (e.type === 'trigger.registered') {
           const data = e.data as any
 
-          if (store.indexAdd) {
-            await store.indexAdd(indexKey, triggerName, nowTimestamp, {
+          if (store.index.add) {
+            await store.index.add(indexKey, triggerName, nowTimestamp, {
               'name': data.name,
               'type': data.type,
               'scope': data.scope,
@@ -162,8 +162,8 @@ export function createTriggerWiring() {
         if (e.type === 'trigger.updated') {
           const data = e.data as any
 
-          if (store.indexUpdateWithRetry) {
-            await store.indexUpdateWithRetry(indexKey, triggerName, {
+          if (store.index.updateWithRetry) {
+            await store.index.updateWithRetry(indexKey, triggerName, {
               type: data.type,
               scope: data.scope,
               status: data.status,
@@ -208,16 +208,16 @@ export function createTriggerWiring() {
           // Check if subscription already exists to prevent duplicates
           const existingSub = runtime.getSubscription(triggerName, flow)
 
-          if (store.indexUpdateWithRetry) {
-            await store.indexUpdateWithRetry(indexKey, triggerName, {
+          if (store.index.updateWithRetry) {
+            await store.index.updateWithRetry(indexKey, triggerName, {
               [`subscriptions.${flow}.mode`]: mode,
               [`subscriptions.${flow}.subscribedAt`]: existingSub ? (existingSub.registeredAt || now) : now,
               lastActivityAt: now,
             })
 
             // Increment subscriber count only if this is a truly new subscription
-            if (!existingSub && store.indexIncrement) {
-              await store.indexIncrement(indexKey, triggerName, 'stats.activeSubscribers', 1)
+            if (!existingSub && store.index.increment) {
+              await store.index.increment(indexKey, triggerName, 'stats.activeSubscribers', 1)
             }
           }
 
@@ -239,15 +239,15 @@ export function createTriggerWiring() {
           const data = e.data as any
           const { flow } = data
 
-          if (store.indexUpdateWithRetry) {
-            await store.indexUpdateWithRetry(indexKey, triggerName, {
+          if (store.index.updateWithRetry) {
+            await store.index.updateWithRetry(indexKey, triggerName, {
               [`subscriptions.${flow}`]: null, // null removes the field
               lastActivityAt: now,
             })
 
             // Decrement subscriber count
-            if (store.indexIncrement) {
-              await store.indexIncrement(indexKey, triggerName, 'stats.activeSubscribers', -1)
+            if (store.index.increment) {
+              await store.index.increment(indexKey, triggerName, 'stats.activeSubscribers', -1)
             }
           }
 
@@ -263,8 +263,8 @@ export function createTriggerWiring() {
           const flowsStarted = await handleTriggerFired(e as unknown as TriggerFiredEvent)
 
           // Increment totalFlowsStarted directly here where we have the data
-          if (flowsStarted.length > 0 && store.indexIncrement) {
-            await store.indexIncrement(indexKey, triggerName, 'stats.totalFlowsStarted', flowsStarted.length)
+          if (flowsStarted.length > 0 && store.index.increment) {
+            await store.index.increment(indexKey, triggerName, 'stats.totalFlowsStarted', flowsStarted.length)
           }
 
           logger.debug('Trigger fired and processed', { triggerName, flowsStarted: flowsStarted.length })
@@ -277,14 +277,14 @@ export function createTriggerWiring() {
           const wasScheduleTrigger = triggerEntry?.type === 'schedule'
 
           // Remove from index
-          if (store.indexDelete) {
-            await store.indexDelete(indexKey, triggerName)
+          if (store.index.delete) {
+            await store.index.delete(indexKey, triggerName)
           }
 
           // Remove trigger stream (contains event history)
           const triggerStreamKey = StoreSubjects.triggerStream(triggerName)
-          if (store.delete) {
-            await store.delete(triggerStreamKey)
+          if (store.stream.delete) {
+            await store.stream.delete(triggerStreamKey)
           }
 
           // Remove from runtime
@@ -327,16 +327,16 @@ export function createTriggerWiring() {
         // Update trigger index stats based on event type
         if (e.type === 'trigger.fired') {
           // Update statistics in index
-          if (store.indexUpdateWithRetry) {
-            await store.indexUpdateWithRetry(indexKey, triggerName, {
+          if (store.index.updateWithRetry) {
+            await store.index.updateWithRetry(indexKey, triggerName, {
               ['stats.lastFiredAt']: now,
               ['lastActivityAt']: now,
             })
           }
 
           // Increment fire count atomically
-          if (store.indexIncrement) {
-            await store.indexIncrement(indexKey, triggerName, 'stats.totalFires', 1)
+          if (store.index.increment) {
+            await store.index.increment(indexKey, triggerName, 'stats.totalFires', 1)
           }
 
           logger.debug('Updated trigger stats for fire', { triggerName })
@@ -344,8 +344,8 @@ export function createTriggerWiring() {
 
         // Publish stats update event to internal bus so streamWiring can send it to clients
         try {
-          if (store.indexGet) {
-            const indexEntry = await store.indexGet(indexKey, triggerName)
+          if (store.index.get) {
+            const indexEntry = await store.index.get(indexKey, triggerName)
             if (indexEntry) {
               await eventBus.publish({
                 type: 'trigger.stats.updated',

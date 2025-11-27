@@ -51,7 +51,7 @@ export default defineEventHandler(async (event) => {
         // Use flow.id instead of flow.name
         const flowName = flow.id || flow.name
         const runIndexKey = StoreSubjects.flowRunIndex(flowName)
-        const entries = await store.indexRead(runIndexKey, { offset: 0, limit: 5 })
+        const entries = await store.index.read(runIndexKey, { offset: 0, limit: 5 })
 
         // Map to include flow name and details
         const flowRuns = entries.map((entry: any) => ({

@@ -200,6 +200,7 @@ const radioItems = computed(() => {
     
     // Get await config from flow definition for await steps
     let awaitConfig = undefined
+    let webhookUrl = undefined
     if (isAwait && props.flowDef) {
       const parts = step.key.split(':await-')
       const stepName = parts[0]
@@ -216,6 +217,15 @@ const radioItems = computed(() => {
           awaitConfig = position === 'after' ? stepDef.awaitAfter : stepDef.awaitBefore
         }
       }
+      
+      // Construct webhook URL if it's a webhook await
+      if (awaitConfig?.type === 'webhook' && props.flowName && props.runId) {
+        // Get base URL from window location
+        const baseUrl = typeof window !== 'undefined' 
+          ? `${window.location.protocol}//${window.location.host}`
+          : ''
+        webhookUrl = `${baseUrl}/api/_webhook/await/${props.flowName}/${props.runId}/${stepName}`
+      }
     }
     
     const finalStep = {
@@ -223,6 +233,7 @@ const radioItems = computed(() => {
       awaitConfig, // Add await config from flow definition
       // Extract awaitType from config if available
       awaitType: awaitConfig?.type || step.awaitType,
+      webhookUrl, // Add constructed webhook URL
     }
     
     return {

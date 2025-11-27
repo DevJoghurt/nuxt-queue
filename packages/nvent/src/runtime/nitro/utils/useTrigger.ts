@@ -278,8 +278,8 @@ export function useTrigger() {
       logger.info('Initializing trigger runtime from index...')
 
       // Load triggers from index
-      if (store.indexRead) {
-        const entries = await store.indexRead(indexKey, { limit: 1000 })
+      if (store.index.read) {
+        const entries = await store.index.read(indexKey, { limit: 1000 })
 
         let activeCount = 0
         let totalSubscriptions = 0
@@ -425,13 +425,13 @@ export function useTrigger() {
       const { StoreSubjects } = useStreamTopics()
       const indexKey = StoreSubjects.triggerIndex()
 
-      if (!store.indexGet) {
+      if (!store.index.get) {
         // Fallback to runtime data
         const trigger = runtime.getTrigger(name)
         return trigger?.stats
       }
 
-      const entry = await store.indexGet(indexKey, name)
+      const entry = await store.index.get(indexKey, name)
       if (!entry?.metadata) return null
 
       return (entry.metadata as any).stats
@@ -445,7 +445,7 @@ export function useTrigger() {
       const { StoreSubjects } = useStreamTopics()
       const streamName = StoreSubjects.triggerStream(name)
 
-      const events = await store.read(streamName, {
+      const events = await store.stream.read(streamName, {
         limit: opts?.limit || 100,
         types: opts?.types,
         order: 'desc',

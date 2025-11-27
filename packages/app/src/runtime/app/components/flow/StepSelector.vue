@@ -196,6 +196,31 @@
                     <span class="opacity-75">Path:</span>
                     <code class="px-1.5 py-0.5 bg-black/5 dark:bg-white/5 rounded text-[10px] flex-1">{{ item.step.awaitConfig.path }}</code>
                   </div>
+                  <div
+                    v-if="item.step.webhookUrl"
+                    class="flex items-start gap-1.5 pt-1"
+                  >
+                    <UIcon
+                      name="i-lucide-globe"
+                      class="w-3 h-3 opacity-60 mt-1"
+                    />
+                    <span class="opacity-75 mt-0.5">URL:</span>
+                    <div class="flex-1 flex items-start gap-1">
+                      <code class="px-1.5 py-0.5 bg-black/5 dark:bg-white/5 rounded text-[10px] flex-1 break-all">{{ item.step.webhookUrl }}</code>
+                      <button
+                        type="button"
+                        class="flex-shrink-0 p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded transition-colors"
+                        :title="copiedUrl === item.step.webhookUrl ? 'Copied!' : 'Copy URL'"
+                        @click.stop="copyToClipboard(item.step.webhookUrl)"
+                      >
+                        <UIcon
+                          :name="copiedUrl === item.step.webhookUrl ? 'i-lucide-check' : 'i-lucide-copy'"
+                          class="w-3 h-3"
+                          :class="copiedUrl === item.step.webhookUrl ? 'text-emerald-600 dark:text-emerald-400' : 'opacity-60'"
+                        />
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Event specific -->
@@ -265,7 +290,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { tv } from 'tailwind-variants'
 import { twMerge } from 'tailwind-merge'
 import { UIcon, UBadge } from '#components'
@@ -290,6 +315,22 @@ const props = defineProps<{
 defineEmits<{
   'update:modelValue': [value: string]
 }>()
+
+// Copy to clipboard functionality
+const copiedUrl = ref<string | null>(null)
+
+const copyToClipboard = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    copiedUrl.value = text
+    setTimeout(() => {
+      copiedUrl.value = null
+    }, 2000)
+  }
+  catch (err) {
+    console.error('Failed to copy:', err)
+  }
+}
 
 // Default UI configuration
 const defaultUi = {

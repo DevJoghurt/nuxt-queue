@@ -435,8 +435,8 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
 
         // Read recent events from stream to find emits from this step
         let emitEvents: any[] = []
-        if (store.read) {
-          const recentEvents = await store.read(streamName, { limit: 100 })
+        if (store.stream.read) {
+          const recentEvents = await store.stream.read(streamName, { limit: 100 })
           emitEvents = recentEvents.filter((evt: any) =>
             evt.type === 'emit'
             && evt.stepName === job.name

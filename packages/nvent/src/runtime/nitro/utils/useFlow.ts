@@ -33,12 +33,12 @@ export function useFlow() {
       try {
         const indexKey = StoreSubjects.flowIndex()
 
-        if (!store.indexGet) {
+        if (!store.index.get) {
           logger.warn('Store adapter does not support indexGet')
           return null
         }
 
-        const entry = await store.indexGet(indexKey, flowName)
+        const entry = await store.index.get(indexKey, flowName)
 
         if (!entry) {
           return null
@@ -83,12 +83,12 @@ export function useFlow() {
       try {
         const indexKey = StoreSubjects.flowIndex()
 
-        if (!store.indexRead) {
+        if (!store.index.read) {
           logger.warn('Store adapter does not support indexRead')
           return []
         }
 
-        const entries = await store.indexRead(indexKey, {
+        const entries = await store.index.read(indexKey, {
           limit: options?.limit || 1000,
           offset: options?.offset || 0,
         })

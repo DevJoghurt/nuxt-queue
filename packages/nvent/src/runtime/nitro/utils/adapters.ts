@@ -65,8 +65,8 @@ export function useStreamAdapter(): StreamAdapter {
  *
  * @example
  * const store = useStoreAdapter()
- * await store.append('nq:flow:abc-123', { type: 'step.completed', data: {...} })
- * const events = await store.read('nq:flow:abc-123')
+ * await store.stream.append('nq:flow:abc-123', { type: 'step.completed', data: {...} })
+ * const events = await store.stream.read('nq:flow:abc-123')
  */
 export function useStoreAdapter(): StoreAdapter {
   return getAdapters().store

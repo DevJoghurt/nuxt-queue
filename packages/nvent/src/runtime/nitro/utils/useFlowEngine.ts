@@ -98,21 +98,21 @@ export const useFlowEngine = () => {
       const { StoreSubjects } = useStreamTopics()
 
       // Check if indexRead is available
-      if (!store.indexRead) {
+      if (!store.index.read) {
         return false
       }
 
       // If runId is provided, check specific run
       if (runId) {
         const runIndexKey = StoreSubjects.flowRunIndex(flowName)
-        const entries = await store.indexRead(runIndexKey, { limit: 1000 })
+        const entries = await store.index.read(runIndexKey, { limit: 1000 })
         const run = entries.find(e => e.id === runId)
         return run?.metadata?.status === 'running'
       }
 
       // Otherwise, check if ANY run of this flow is running
       const runIndexKey = StoreSubjects.flowRunIndex(flowName)
-      const entries = await store.indexRead(runIndexKey, { limit: 1000 })
+      const entries = await store.index.read(runIndexKey, { limit: 1000 })
       return entries.some(e => e.metadata?.status === 'running')
     }
     catch (err) {
@@ -127,12 +127,12 @@ export const useFlowEngine = () => {
       const { StoreSubjects } = useStreamTopics()
 
       // Check if indexRead is available
-      if (!store.indexRead) {
+      if (!store.index.read) {
         return []
       }
 
       const runIndexKey = StoreSubjects.flowRunIndex(flowName)
-      const entries = await store.indexRead(runIndexKey, { limit: 1000 })
+      const entries = await store.index.read(runIndexKey, { limit: 1000 })
 
       return entries
         .filter(e => e.metadata?.status === 'running')

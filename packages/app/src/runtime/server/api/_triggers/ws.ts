@@ -215,7 +215,7 @@ export default defineWebSocketHandler({
 
       // Send historical events (backfill) from StoreAdapter
       try {
-        const historicalEvents = await store.read(storeSubject, {
+        const historicalEvents = await store.stream.read(storeSubject, {
           limit: 100,
           order: 'asc', // Forward order to match flows
         })

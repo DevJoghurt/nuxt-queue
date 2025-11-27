@@ -37,28 +37,20 @@ export default defineEventHandler(async (event) => {
     // Get all run IDs from the index using the proper naming convention
     const indexKey = StoreSubjects.flowRunIndex(flowName)
 
-    if (store.indexRead) {
-      const runs = await store.indexRead(indexKey, { limit: 10000 })
+    const runs = await store.index.read(indexKey, { limit: 10000 })
 
-      // Delete each run stream and its metadata hash (for Redis adapter)
-      if (store.deleteStream) {
-        for (const run of runs) {
-          const streamName = StoreSubjects.flowRun(run.id)
-          await store.deleteStream(streamName)
-          // Also delete metadata hash if Redis adapter is used
-          if (store.deleteIndex) {
-            // The index key is like nq:flows:<flowName>, meta key is nq:flows:<flowName>:meta:<runId>
-            const metaKey = `${indexKey}:meta:${run.id}`
-            await store.deleteIndex(metaKey)
-          }
-          deletedStreams++
-        }
+    // Delete each run stream
+    if (store.stream.delete) {
+      for (const run of runs) {
+        const streamName = StoreSubjects.flowRun(run.id)
+        await store.stream.delete(streamName)
+        deletedStreams++
       }
     }
 
-    // Delete the index
-    if (store.deleteIndex) {
-      await store.deleteIndex(indexKey)
+    // Delete all entries from the index (this also deletes metadata in Redis adapter)
+    for (const run of runs) {
+      await store.index.delete(indexKey, run.id)
       deletedIndex = true
     }
 

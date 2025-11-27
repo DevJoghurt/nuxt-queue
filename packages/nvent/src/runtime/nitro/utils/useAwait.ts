@@ -65,12 +65,12 @@ export function useAwait() {
     async getAwaitState(flowName: string, runId: string, stepName?: string) {
       const indexKey = StoreSubjects.flowRunIndex(flowName)
 
-      if (!store.indexGet) {
+      if (!store.index.get) {
         logger.warn('Store does not support indexGet')
         return null
       }
 
-      const entry = await store.indexGet(indexKey, runId)
+      const entry = await store.index.get(indexKey, runId)
       if (!entry?.metadata) {
         return null
       }
@@ -115,7 +115,7 @@ export function useAwait() {
       // If flowName specified, scan only that flow's index
       if (flowName) {
         const indexKey = StoreSubjects.flowRunIndex(flowName)
-        const entries = await store.indexRead(indexKey, { limit: 1000 })
+        const entries = await store.index.read(indexKey, { limit: 1000 })
 
         for (const entry of entries) {
           const awaitingSteps = (entry.metadata as any)?.awaitingSteps || {}
@@ -149,7 +149,7 @@ export function useAwait() {
     async getAwaitHistory(runId: string, opts?: { limit?: number, stepName?: string }) {
       const streamName = StoreSubjects.flowRun(runId)
 
-      const events = await store.read(streamName, {
+      const events = await store.stream.read(streamName, {
         limit: opts?.limit || 100,
         types: ['await.registered', 'await.resolved', 'await.timeout'],
         order: 'desc',
@@ -170,8 +170,8 @@ export function useAwait() {
       const indexKey = StoreSubjects.flowRunIndex(flowName)
 
       // Update await status to timeout
-      if (store.indexUpdateWithRetry) {
-        await store.indexUpdateWithRetry(indexKey, runId, {
+      if (store.index.updateWithRetry) {
+        await store.index.updateWithRetry(indexKey, runId, {
           [`awaitingSteps.${stepName}.status`]: 'timeout',
           [`awaitingSteps.${stepName}.timeoutReason`]: reason,
           [`awaitingSteps.${stepName}.timeoutAt`]: new Date().toISOString(),

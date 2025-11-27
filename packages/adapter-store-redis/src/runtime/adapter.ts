@@ -34,6 +34,8 @@ export class RedisStoreAdapter implements StoreAdapter {
   private prefix: string
   private streamOptions: NonNullable<RedisStoreAdapterOptions['streams']>
   public kv: StoreAdapter['kv']
+  public stream: StoreAdapter['stream']
+  public index: StoreAdapter['index']
 
   constructor(private options: RedisStoreAdapterOptions) {
     const conn = options.connection
@@ -49,6 +51,118 @@ export class RedisStoreAdapter implements StoreAdapter {
 
     this.prefix = options.prefix || 'nvent'
     this.streamOptions = options.streams || {}
+
+    // Initialize stream methods
+    this.stream = {
+      append: async (subject: string, event: Omit<import('#nvent/adapters').EventRecord, 'id' | 'ts'>) => {
+        if (!this.redis.status || this.redis.status === 'end') {
+          await this.redis.connect()
+        }
+
+        const ts = Date.now()
+        const data = { ...event, ts }
+        const fields = this.buildFields(data)
+
+        // Use subject directly as stream key (e.g., 'nq:flow:runId')
+        const streamKey = subject
+
+        let id: string
+        const trim = this.streamOptions.trim
+        if (trim?.maxLen && trim.maxLen > 0) {
+          const approx = trim.approx !== false
+          const args = approx ? ['MAXLEN', '~', String(trim.maxLen)] : ['MAXLEN', String(trim.maxLen)]
+          id = await (this.redis as any).xadd(streamKey, ...args, '*', ...fields)
+        }
+        else {
+          id = await (this.redis as any).xadd(streamKey, '*', ...fields)
+        }
+
+        return { ...data, id } as import('#nvent/adapters').EventRecord
+      },
+
+      read: async (subject: string, opts?: import('#nvent/adapters').EventReadOptions) => {
+        if (!this.redis.status || this.redis.status === 'end') {
+          await this.redis.connect()
+        }
+
+        // Use subject directly as stream key (e.g., 'nq:flow:runId')
+        const streamKey = subject
+
+        // Determine start/end based on options
+        let start = '-'
+        let end = '+'
+        const limit = opts?.limit || 1000
+        const order = opts?.order || 'asc'
+
+        if (opts?.after) {
+          start = `(${opts.after}` // Exclusive
+        }
+        else if (opts?.from) {
+          // Convert timestamp to stream ID (timestamp-0)
+          start = `${opts.from}-0`
+        }
+
+        if (opts?.before) {
+          end = `(${opts.before}` // Exclusive
+        }
+        else if (opts?.to) {
+          end = `${opts.to}-0`
+        }
+
+        let resp: any[]
+        if (order === 'desc') {
+          // For descending, swap start and end
+          resp = await (this.redis as any).xrevrange(streamKey, end === '+' ? '+' : end, start === '-' ? '-' : start, 'COUNT', limit)
+        }
+        else {
+          resp = await (this.redis as any).xrange(streamKey, start, end, 'COUNT', limit)
+        }
+
+        const records: import('#nvent/adapters').EventRecord[] = []
+        for (const [id, arr] of resp) {
+          try {
+            const fields = this.parseFields(arr)
+            const record: import('#nvent/adapters').EventRecord = {
+              id,
+              ts: fields.ts || 0,
+              type: fields.type || 'unknown',
+              runId: fields.runId,
+              flowName: fields.flowName,
+              stepName: fields.stepName,
+              stepId: fields.stepId,
+              attempt: fields.attempt,
+              data: fields.data,
+            }
+
+            // Filter by type if specified
+            if (opts?.types && opts.types.length > 0) {
+              if (!opts.types.includes(record.type)) {
+                continue
+              }
+            }
+
+            records.push(record)
+          }
+          catch {
+            // ignore malformed entries
+          }
+        }
+
+        return records
+      },
+
+      delete: async (subject: string) => {
+        if (!this.redis.status || this.redis.status === 'end') {
+          await this.redis.connect()
+        }
+
+        // Delete Redis stream (XDEL removes individual entries, but we want to delete the entire stream)
+        // Use DEL to remove the entire stream key
+        const deleted = await this.redis.del(subject)
+
+        return deleted > 0
+      },
+    }
 
     // Initialize KV store methods
     this.kv = {
@@ -144,6 +258,180 @@ export class RedisStoreAdapter implements StoreAdapter {
         // Fallback to simple INCRBY for non-hash keys
         const fullKey = `${this.prefix}:kv:${key}`
         return await this.redis.incrby(fullKey, by)
+      },
+    }
+
+    // Initialize index methods
+    this.index = {
+      add: async (key: string, id: string, score: number, metadata?: Record<string, any>) => {
+        if (!this.redis.status || this.redis.status === 'end') {
+          await this.redis.connect()
+        }
+
+        // Add to sorted set for time-ordered listing
+        await this.redis.zadd(key, score, id)
+
+        // Store metadata in hash if provided at key:meta:id
+        if (metadata) {
+          const metaKey = `${key}:meta:${id}`
+          // Initialize with version 0 for optimistic locking support
+          const metaToStore = { version: 0, ...metadata }
+          const serialized = this.serializeHashFields(metaToStore)
+          await this.redis.hset(metaKey, serialized)
+        }
+      },
+
+      get: async (key: string, id: string) => {
+        if (!this.redis.status || this.redis.status === 'end') {
+          await this.redis.connect()
+        }
+
+        // Get score from sorted set
+        const score = await this.redis.zscore(key, id)
+        if (!score) return null
+
+        // Fetch metadata from hash at key:meta:id
+        const metaKey = `${key}:meta:${id}`
+        const rawMetadata = await this.redis.hgetall(metaKey)
+
+        if (Object.keys(rawMetadata).length === 0) {
+          return { id, score: Number.parseFloat(score) }
+        }
+
+        // Use generic parser to deserialize all fields
+        const metadata = this.parseHashFields(rawMetadata)
+
+        return {
+          id,
+          score: Number.parseFloat(score),
+          metadata,
+        }
+      },
+
+      read: async (key: string, opts?: { offset?: number, limit?: number }) => {
+        if (!this.redis.status || this.redis.status === 'end') {
+          await this.redis.connect()
+        }
+
+        const offset = opts?.offset || 0
+        const limit = opts?.limit || 50
+        const end = offset + limit - 1
+
+        // Read from sorted set in reverse order (newest first) with scores
+        const results = await this.redis.zrevrange(key, offset, end, 'WITHSCORES')
+
+        // Results alternate between member and score
+        const entries: Array<{ id: string, score: number, metadata?: any }> = []
+        for (let i = 0; i < results.length; i += 2) {
+          const id = results[i]
+          const score = Number.parseInt(results[i + 1])
+
+          // Fetch metadata for each entry at key:meta:id
+          const metaKey = `${key}:meta:${id}`
+          const rawMetadata = await this.redis.hgetall(metaKey)
+
+          let metadata: any = undefined
+          if (Object.keys(rawMetadata).length > 0) {
+            // Use generic parser to deserialize all fields
+            metadata = this.parseHashFields(rawMetadata)
+          }
+
+          entries.push({
+            id,
+            score,
+            metadata,
+          })
+        }
+
+        return entries
+      },
+
+      update: async (key: string, id: string, metadata: Record<string, any>) => {
+        if (!this.redis.status || this.redis.status === 'end') {
+          await this.redis.connect()
+        }
+
+        const metaKey = `${key}:meta:${id}`
+
+        // Get current version
+        const current = await this.redis.hget(metaKey, 'version')
+        const currentVersion = current ? Number.parseInt(current, 10) : 0
+
+        // Optimistic lock: only update if version matches
+        const script = `
+          local current = redis.call('HGET', KEYS[1], 'version')
+          if current == ARGV[1] then
+            for i = 2, #ARGV, 2 do
+              redis.call('HSET', KEYS[1], ARGV[i], ARGV[i + 1])
+            end
+            redis.call('HSET', KEYS[1], 'version', tonumber(ARGV[1]) + 1)
+            return 1
+          else
+            return 0
+          end
+        `
+
+        // Serialize metadata generically
+        const serialized = this.serializeHashFields(metadata)
+
+        // Build arguments: [version, key1, val1, key2, val2, ...]
+        const args = [currentVersion.toString()]
+        for (const [k, v] of Object.entries(serialized)) {
+          args.push(k)
+          args.push(v)
+        }
+
+        const result = await this.redis.eval(script, 1, metaKey, ...args) as number
+        return result === 1
+      },
+
+      updateWithRetry: async (
+        key: string,
+        id: string,
+        metadata: Record<string, any>,
+        maxRetries = 3,
+      ) => {
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          const success = await this.index.update(key, id, metadata)
+
+          if (success) return
+
+          // Version conflict - exponential backoff
+          await new Promise(resolve => setTimeout(resolve, 10 * Math.pow(2, attempt)))
+        }
+
+        throw new Error(`Failed to update index after ${maxRetries} retries`)
+      },
+
+      increment: async (key: string, id: string, field: string, increment = 1) => {
+        if (!this.redis.status || this.redis.status === 'end') {
+          await this.redis.connect()
+        }
+
+        const metaKey = `${key}:meta:${id}`
+
+        // Use Redis HINCRBY for atomic increment
+        const newValue = await this.redis.hincrby(metaKey, field, increment)
+
+        // Also increment version for consistency
+        await this.redis.hincrby(metaKey, 'version', 1)
+
+        return newValue
+      },
+
+      delete: async (key: string, id: string) => {
+        if (!this.redis.status || this.redis.status === 'end') {
+          await this.redis.connect()
+        }
+
+        // Remove from sorted set
+        const removed = await this.redis.zrem(key, id)
+
+        // Delete metadata hash
+        const metaKey = `${key}:meta:${id}`
+        await this.redis.del(metaKey)
+
+        return removed > 0
       },
     }
   }
@@ -325,301 +613,6 @@ export class RedisStoreAdapter implements StoreAdapter {
     }
 
     return serialized
-  }
-
-  // ============================================================
-  // Event Stream Methods
-  // ============================================================
-
-  async append(subject: string, event: Omit<EventRecord, 'id' | 'ts'>): Promise<EventRecord> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    const ts = Date.now()
-    const data = { ...event, ts }
-    const fields = this.buildFields(data)
-
-    // Use subject directly as stream key (e.g., 'nq:flow:runId')
-    const streamKey = subject
-
-    let id: string
-    const trim = this.streamOptions.trim
-    if (trim?.maxLen && trim.maxLen > 0) {
-      const approx = trim.approx !== false
-      const args = approx ? ['MAXLEN', '~', String(trim.maxLen)] : ['MAXLEN', String(trim.maxLen)]
-      id = await (this.redis as any).xadd(streamKey, ...args, '*', ...fields)
-    }
-    else {
-      id = await (this.redis as any).xadd(streamKey, '*', ...fields)
-    }
-
-    return { ...data, id } as EventRecord
-  }
-
-  async read(subject: string, opts?: EventReadOptions): Promise<EventRecord[]> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    // Use subject directly as stream key (e.g., 'nq:flow:runId')
-    const streamKey = subject
-
-    // Determine start/end based on options
-    let start = '-'
-    let end = '+'
-    const limit = opts?.limit || 1000
-    const order = opts?.order || 'asc'
-
-    if (opts?.after) {
-      start = `(${opts.after}` // Exclusive
-    }
-    else if (opts?.from) {
-      // Convert timestamp to stream ID (timestamp-0)
-      start = `${opts.from}-0`
-    }
-
-    if (opts?.before) {
-      end = `(${opts.before}` // Exclusive
-    }
-    else if (opts?.to) {
-      end = `${opts.to}-0`
-    }
-
-    let resp: any[]
-    if (order === 'desc') {
-      // For descending, swap start and end
-      resp = await (this.redis as any).xrevrange(streamKey, end === '+' ? '+' : end, start === '-' ? '-' : start, 'COUNT', limit)
-    }
-    else {
-      resp = await (this.redis as any).xrange(streamKey, start, end, 'COUNT', limit)
-    }
-
-    const records: EventRecord[] = []
-    for (const [id, arr] of resp) {
-      try {
-        const fields = this.parseFields(arr)
-        const record: EventRecord = {
-          id,
-          ts: fields.ts || 0,
-          type: fields.type || 'unknown',
-          runId: fields.runId,
-          flowName: fields.flowName,
-          stepName: fields.stepName,
-          stepId: fields.stepId,
-          attempt: fields.attempt,
-          data: fields.data,
-        }
-
-        // Filter by type if specified
-        if (opts?.types && opts.types.length > 0) {
-          if (!opts.types.includes(record.type)) {
-            continue
-          }
-        }
-
-        records.push(record)
-      }
-      catch {
-        // ignore malformed entries
-      }
-    }
-
-    return records
-  }
-
-  // ============================================================
-  // Sorted Index Methods (optional)
-  // ============================================================
-
-  /**
-   * Add entry to sorted index
-   * @param key - Sorted set key (e.g., 'nq:flows:flowName')
-   * @param id - Entry ID (member in sorted set)
-   * @param score - Sort score (typically timestamp)
-   * @param metadata - Optional metadata stored in hash at key:meta:id
-   */
-  async indexAdd(key: string, id: string, score: number, metadata?: Record<string, any>): Promise<void> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    // Add to sorted set for time-ordered listing
-    await this.redis.zadd(key, score, id)
-
-    // Store metadata in hash if provided at key:meta:id
-    if (metadata) {
-      const metaKey = `${key}:meta:${id}`
-      // Initialize with version 0 for optimistic locking support
-      const metaToStore = { version: 0, ...metadata }
-      const serialized = this.serializeHashFields(metaToStore)
-      await this.redis.hset(metaKey, serialized)
-    }
-  }
-
-  async indexGet(key: string, id: string): Promise<{ id: string, score: number, metadata?: any } | null> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    // Get score from sorted set
-    const score = await this.redis.zscore(key, id)
-    if (!score) return null
-
-    // Fetch metadata from hash at key:meta:id
-    const metaKey = `${key}:meta:${id}`
-    const rawMetadata = await this.redis.hgetall(metaKey)
-
-    if (Object.keys(rawMetadata).length === 0) {
-      return { id, score: Number.parseFloat(score) }
-    }
-
-    // Use generic parser to deserialize all fields
-    const metadata = this.parseHashFields(rawMetadata)
-
-    return {
-      id,
-      score: Number.parseFloat(score),
-      metadata,
-    }
-  }
-
-  async indexRead(key: string, opts?: { offset?: number, limit?: number }): Promise<Array<{ id: string, score: number, metadata?: any }>> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    const offset = opts?.offset || 0
-    const limit = opts?.limit || 50
-    const end = offset + limit - 1
-
-    // Read from sorted set in reverse order (newest first) with scores
-    const results = await this.redis.zrevrange(key, offset, end, 'WITHSCORES')
-
-    // Results alternate between member and score
-    const entries: Array<{ id: string, score: number, metadata?: any }> = []
-    for (let i = 0; i < results.length; i += 2) {
-      const id = results[i]
-      const score = Number.parseInt(results[i + 1])
-
-      // Fetch metadata for each entry at key:meta:id
-      const metaKey = `${key}:meta:${id}`
-      const rawMetadata = await this.redis.hgetall(metaKey)
-
-      let metadata: any = undefined
-      if (Object.keys(rawMetadata).length > 0) {
-        // Use generic parser to deserialize all fields
-        metadata = this.parseHashFields(rawMetadata)
-      }
-
-      entries.push({
-        id,
-        score,
-        metadata,
-      })
-    }
-
-    return entries
-  }
-
-  async indexUpdate(key: string, id: string, metadata: Record<string, any>): Promise<boolean> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    const metaKey = `${key}:meta:${id}`
-
-    // Get current version
-    const current = await this.redis.hget(metaKey, 'version')
-    const currentVersion = current ? Number.parseInt(current, 10) : 0
-
-    // Optimistic lock: only update if version matches
-    const script = `
-      local current = redis.call('HGET', KEYS[1], 'version')
-      if current == ARGV[1] then
-        for i = 2, #ARGV, 2 do
-          redis.call('HSET', KEYS[1], ARGV[i], ARGV[i + 1])
-        end
-        redis.call('HSET', KEYS[1], 'version', tonumber(ARGV[1]) + 1)
-        return 1
-      else
-        return 0
-      end
-    `
-
-    // Serialize metadata generically
-    const serialized = this.serializeHashFields(metadata)
-
-    // Build arguments: [version, key1, val1, key2, val2, ...]
-    const args = [currentVersion.toString()]
-    for (const [k, v] of Object.entries(serialized)) {
-      args.push(k)
-      args.push(v)
-    }
-
-    const result = await this.redis.eval(script, 1, metaKey, ...args) as number
-    return result === 1
-  }
-
-  async indexUpdateWithRetry(
-    key: string,
-    id: string,
-    metadata: Record<string, any>,
-    maxRetries = 3,
-  ): Promise<void> {
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const success = await this.indexUpdate(key, id, metadata)
-
-      if (success) return
-
-      // Version conflict - exponential backoff
-      await new Promise(resolve => setTimeout(resolve, 10 * Math.pow(2, attempt)))
-    }
-
-    throw new Error(`Failed to update index after ${maxRetries} retries`)
-  }
-
-  async indexIncrement(key: string, id: string, field: string, increment = 1): Promise<number> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    const metaKey = `${key}:meta:${id}`
-
-    // Use Redis HINCRBY for atomic increment
-    const newValue = await this.redis.hincrby(metaKey, field, increment)
-
-    // Also increment version for consistency
-    await this.redis.hincrby(metaKey, 'version', 1)
-
-    return newValue
-  }
-
-  async indexDelete(key: string, id: string): Promise<boolean> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    // Remove from sorted set
-    const removed = await this.redis.zrem(key, id)
-
-    // Delete metadata hash
-    const metaKey = `${key}:meta:${id}`
-    await this.redis.del(metaKey)
-
-    return removed > 0
-  }
-
-  async delete(subject: string): Promise<boolean> {
-    if (!this.redis.status || this.redis.status === 'end') {
-      await this.redis.connect()
-    }
-
-    // Delete Redis stream (XDEL removes individual entries, but we want to delete the entire stream)
-    // Use DEL to remove the entire stream key
-    const deleted = await this.redis.del(subject)
-
-    return deleted > 0
   }
 
   // ============================================================

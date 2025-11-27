@@ -56,11 +56,11 @@ export async function checkAndTriggerPendingSteps(
 
     // Get current flow metadata
     const indexKey = StoreSubjects.flowRunIndex(flowName)
-    if (!store.indexGet) {
+    if (!store.index.get) {
       logger.info('No indexGet method on store', { flowName })
       return
     }
-    const flowEntry = await store.indexGet(indexKey, runId)
+    const flowEntry = await store.index.get(indexKey, runId)
     if (!flowEntry?.metadata) {
       logger.info('No flow entry or metadata found', { flowName, runId })
       return
@@ -68,7 +68,7 @@ export async function checkAndTriggerPendingSteps(
 
     // Read all events to get completed steps
     const streamName = StoreSubjects.flowRun(runId)
-    const allEvents = await store.read(streamName)
+    const allEvents = await store.stream.read(streamName)
 
     // Check if flow is canceled - if so, don't trigger any new steps
     const isCanceled = allEvents.some((event: any) => event.type === 'flow.cancel')
@@ -463,9 +463,15 @@ export function analyzeFlowCompletion(
   let status: 'running' | 'completed' | 'failed' | 'canceled' | 'awaiting' = 'running'
 
   // Flow is completed if all steps have reached a terminal state
-  // Since we already checked for blocking failures above, any remaining failures are non-blocking
+  // If there are any final failures (after retries exhausted), flow is failed
+  // Blocking failures are already checked above, but we also fail for any final failures
   if (allStepsTerminal) {
-    status = 'completed'
+    if (finalFailedSteps.size > 0) {
+      status = 'failed'
+    }
+    else {
+      status = 'completed'
+    }
     completedAt = Date.now()
   }
 
@@ -506,10 +512,10 @@ export function createFlowWiring() {
       // Use centralized naming function
       const indexKey = StoreSubjects.flowRunIndex(flowName)
 
-      if (!store.indexAdd) {
+      if (!store.index.add) {
         throw new Error('StoreAdapter does not support indexAdd')
       }
-      await store.indexAdd(indexKey, flowId, timestamp, metadata)
+      await store.index.add(indexKey, flowId, timestamp, metadata)
 
       logger.debug('Indexed run', { flowName, flowId, indexKey, timestamp, metadata })
     }
@@ -527,10 +533,10 @@ export function createFlowWiring() {
     // Get store - must be available after adapters are initialized
     const store = useStoreAdapter()
 
-    if (!store || !store.append) {
+    if (!store || !store.stream.append) {
       logger.error('StoreAdapter not properly initialized or missing append method', {
         hasStore: !!store,
-        hasAppend: !!(store && store.append),
+        hasAppend: !!(store && store.stream.append),
       })
       throw new Error('StoreAdapter not initialized')
     }
@@ -578,7 +584,7 @@ export function createFlowWiring() {
         if ('attempt' in e && (e as any).attempt) eventData.attempt = (e as any).attempt
 
         // Append to stream - returns complete event with id and ts
-        const persistedEvent = await store.append(streamName, eventData)
+        const persistedEvent = await store.stream.append(streamName, eventData)
 
         // Republish complete event to bus so other wirings can react
         // StreamWiring listens for persisted events (id+ts) and publishes to UI
@@ -642,13 +648,13 @@ export function createFlowWiring() {
 
         // Update flow index stats based on event type
         if (e.type === 'flow.start') {
-          if (store.indexIncrement) {
-            await store.indexIncrement(flowIndexKey, flowName, 'stats.total', 1)
-            await store.indexIncrement(flowIndexKey, flowName, 'stats.running', 1)
+          if (store.index.increment) {
+            await store.index.increment(flowIndexKey, flowName, 'stats.total', 1)
+            await store.index.increment(flowIndexKey, flowName, 'stats.running', 1)
           }
 
-          if (store.indexUpdateWithRetry) {
-            await store.indexUpdateWithRetry(flowIndexKey, flowName, {
+          if (store.index.updateWithRetry) {
+            await store.index.updateWithRetry(flowIndexKey, flowName, {
               lastRunAt: new Date().toISOString(),
             })
           }
@@ -656,13 +662,13 @@ export function createFlowWiring() {
           logger.debug('Updated flow stats for start', { flowName })
         }
         else if (e.type === 'flow.completed') {
-          if (store.indexIncrement) {
-            await store.indexIncrement(flowIndexKey, flowName, 'stats.running', -1)
-            await store.indexIncrement(flowIndexKey, flowName, 'stats.success', 1)
+          if (store.index.increment) {
+            await store.index.increment(flowIndexKey, flowName, 'stats.running', -1)
+            await store.index.increment(flowIndexKey, flowName, 'stats.success', 1)
           }
 
-          if (store.indexUpdateWithRetry) {
-            await store.indexUpdateWithRetry(flowIndexKey, flowName, {
+          if (store.index.updateWithRetry) {
+            await store.index.updateWithRetry(flowIndexKey, flowName, {
               lastCompletedAt: new Date().toISOString(),
             })
           }
@@ -670,13 +676,13 @@ export function createFlowWiring() {
           logger.debug('Updated flow stats for completion', { flowName })
         }
         else if (e.type === 'flow.failed') {
-          if (store.indexIncrement) {
-            await store.indexIncrement(flowIndexKey, flowName, 'stats.running', -1)
-            await store.indexIncrement(flowIndexKey, flowName, 'stats.failure', 1)
+          if (store.index.increment) {
+            await store.index.increment(flowIndexKey, flowName, 'stats.running', -1)
+            await store.index.increment(flowIndexKey, flowName, 'stats.failure', 1)
           }
 
-          if (store.indexUpdateWithRetry) {
-            await store.indexUpdateWithRetry(flowIndexKey, flowName, {
+          if (store.index.updateWithRetry) {
+            await store.index.updateWithRetry(flowIndexKey, flowName, {
               lastCompletedAt: new Date().toISOString(),
             })
           }
@@ -684,13 +690,13 @@ export function createFlowWiring() {
           logger.debug('Updated flow stats for failure', { flowName })
         }
         else if (e.type === 'flow.cancel') {
-          if (store.indexIncrement) {
-            await store.indexIncrement(flowIndexKey, flowName, 'stats.running', -1)
-            await store.indexIncrement(flowIndexKey, flowName, 'stats.cancel', 1)
+          if (store.index.increment) {
+            await store.index.increment(flowIndexKey, flowName, 'stats.running', -1)
+            await store.index.increment(flowIndexKey, flowName, 'stats.cancel', 1)
           }
 
-          if (store.indexUpdateWithRetry) {
-            await store.indexUpdateWithRetry(flowIndexKey, flowName, {
+          if (store.index.updateWithRetry) {
+            await store.index.updateWithRetry(flowIndexKey, flowName, {
               lastCompletedAt: new Date().toISOString(),
             })
           }
@@ -699,9 +705,9 @@ export function createFlowWiring() {
         }
         else if (e.type === 'await.registered') {
           // Flow enters awaiting state - decrement running, increment awaiting
-          if (store.indexIncrement) {
-            await store.indexIncrement(flowIndexKey, flowName, 'stats.running', -1)
-            await store.indexIncrement(flowIndexKey, flowName, 'stats.awaiting', 1)
+          if (store.index.increment) {
+            await store.index.increment(flowIndexKey, flowName, 'stats.running', -1)
+            await store.index.increment(flowIndexKey, flowName, 'stats.awaiting', 1)
           }
 
           logger.debug('Updated flow stats for await registered', { flowName })
@@ -709,9 +715,9 @@ export function createFlowWiring() {
         else if (e.type === 'await.resolved' || e.type === 'await.timeout') {
           // Flow leaves awaiting state - decrement awaiting, increment running
           // (timeout will be handled by flow.failed event for terminal stats)
-          if (store.indexIncrement) {
-            await store.indexIncrement(flowIndexKey, flowName, 'stats.awaiting', -1)
-            await store.indexIncrement(flowIndexKey, flowName, 'stats.running', 1)
+          if (store.index.increment) {
+            await store.index.increment(flowIndexKey, flowName, 'stats.awaiting', -1)
+            await store.index.increment(flowIndexKey, flowName, 'stats.running', 1)
           }
 
           logger.debug('Updated flow stats for await resolved/timeout', { flowName, type: e.type })
@@ -719,7 +725,7 @@ export function createFlowWiring() {
 
         // Publish stats update event to internal bus so streamWiring can send it to clients
         try {
-          const indexEntry = await store.indexGet(flowIndexKey, flowName)
+          const indexEntry = await store.index.get(flowIndexKey, flowName)
           if (indexEntry) {
             await bus.publish({
               type: 'flow.stats.updated',
@@ -788,8 +794,8 @@ export function createFlowWiring() {
         // For flow.cancel, update status to canceled
         if (e.type === 'flow.cancel') {
           try {
-            if (store.indexUpdateWithRetry) {
-              await store.indexUpdateWithRetry(indexKey, runId, {
+            if (store.index.updateWithRetry) {
+              await store.index.updateWithRetry(indexKey, runId, {
                 status: 'canceled',
                 completedAt: Date.now(),
               })
@@ -817,8 +823,8 @@ export function createFlowWiring() {
         if (e.type === 'step.completed') {
           try {
             // Use atomic increment to avoid race conditions in parallel steps
-            if (store.indexIncrement) {
-              const newCount = await store.indexIncrement(indexKey, runId, 'completedSteps', 1)
+            if (store.index.increment) {
+              const newCount = await store.index.increment(indexKey, runId, 'completedSteps', 1)
 
               logger.debug('Incremented completedSteps', {
                 flowName,
@@ -843,7 +849,7 @@ export function createFlowWiring() {
           const { stepName, awaitType, position, config } = awaitEvent
 
           try {
-            if (store.indexUpdateWithRetry) {
+            if (store.index.updateWithRetry) {
               const now = Date.now()
 
               // Calculate timeoutAt based on await type and config
@@ -867,7 +873,7 @@ export function createFlowWiring() {
                 timeoutAt = now + (24 * 60 * 60 * 1000) // 24 hours default
               }
 
-              await store.indexUpdateWithRetry(indexKey, runId, {
+              await store.index.updateWithRetry(indexKey, runId, {
                 [`awaitingSteps.${stepName}.status`]: 'awaiting',
                 [`awaitingSteps.${stepName}.awaitType`]: awaitType,
                 [`awaitingSteps.${stepName}.position`]: position,
@@ -900,8 +906,8 @@ export function createFlowWiring() {
           const { stepName, triggerData, position } = awaitEvent
 
           try {
-            if (store.indexUpdateWithRetry) {
-              await store.indexUpdateWithRetry(indexKey, runId, {
+            if (store.index.updateWithRetry) {
+              await store.index.updateWithRetry(indexKey, runId, {
                 [`awaitingSteps.${stepName}.status`]: 'resolved',
                 [`awaitingSteps.${stepName}.triggerData`]: triggerData,
               })
@@ -939,8 +945,8 @@ export function createFlowWiring() {
           try {
             if (action === 'fail') {
               // Mark await as failed and fail the step/flow
-              if (store.indexUpdateWithRetry) {
-                await store.indexUpdateWithRetry(indexKey, runId, {
+              if (store.index.updateWithRetry) {
+                await store.index.updateWithRetry(indexKey, runId, {
                   [`awaitingSteps.${stepName}.status`]: 'timeout',
                   [`awaitingSteps.${stepName}.timedOutAt`]: Date.now(),
                 })
@@ -962,8 +968,8 @@ export function createFlowWiring() {
             }
             else if (action === 'continue') {
               // Mark as resolved with null data and continue
-              if (store.indexUpdateWithRetry) {
-                await store.indexUpdateWithRetry(indexKey, runId, {
+              if (store.index.updateWithRetry) {
+                await store.index.updateWithRetry(indexKey, runId, {
                   [`awaitingSteps.${stepName}.status`]: 'resolved',
                   [`awaitingSteps.${stepName}.triggerData`]: null,
                   [`awaitingSteps.${stepName}.timedOutAt`]: Date.now(),
@@ -997,7 +1003,7 @@ export function createFlowWiring() {
           }
           else {
             try {
-              if (!store.indexUpdateWithRetry) {
+              if (!store.index.updateWithRetry) {
                 logger.warn('StoreAdapter does not support indexUpdateWithRetry')
                 return
               }
@@ -1006,7 +1012,7 @@ export function createFlowWiring() {
               // emittedEvents.eventName: timestamp
               // This allows atomic updates without read-modify-write
               const timestamp = Date.now()
-              await store.indexUpdateWithRetry(indexKey, runId, {
+              await store.index.updateWithRetry(indexKey, runId, {
                 [`emittedEvents.${eventName}`]: timestamp,
               })
 
@@ -1037,7 +1043,7 @@ export function createFlowWiring() {
 
           try {
             // Read all events for this flow to analyze completion
-            const allEvents = await store.read(streamName)
+            const allEvents = await store.stream.read(streamName)
 
             // Get analyzed flow definition from build-time analysis
             const analyzedFlows = $useAnalyzedFlows()
@@ -1061,8 +1067,8 @@ export function createFlowWiring() {
 
               // IMPORTANT: Check if flow has active awaits before updating status
               // If there are awaits, preserve 'awaiting' status
-              if (store.indexGet) {
-                const currentEntry = await store.indexGet(indexKey, runId)
+              if (store.index.get) {
+                const currentEntry = await store.index.get(indexKey, runId)
 
                 // Check for active or timed-out awaits
                 const awaitingStepsObj = (currentEntry?.metadata as any)?.awaitingSteps || {}
@@ -1096,8 +1102,8 @@ export function createFlowWiring() {
               }
 
               // Update metadata with current state
-              if (store.indexUpdateWithRetry) {
-                await store.indexUpdateWithRetry(indexKey, runId, updateMetadata)
+              if (store.index.updateWithRetry) {
+                await store.index.updateWithRetry(indexKey, runId, updateMetadata)
               }
 
               // Use the actual status from updateMetadata (which includes timeout overrides)
@@ -1112,8 +1118,8 @@ export function createFlowWiring() {
                 // Check flow metadata to see if we already published a terminal event
                 // Re-read the index entry after update to get the current status
                 let currentStatus = null
-                if (store.indexGet) {
-                  const currentEntry = await store.indexGet(indexKey, runId)
+                if (store.index.get) {
+                  const currentEntry = await store.index.get(indexKey, runId)
                   currentStatus = currentEntry?.metadata?.status
                 }
 

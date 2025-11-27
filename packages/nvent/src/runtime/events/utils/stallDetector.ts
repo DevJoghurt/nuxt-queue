@@ -82,11 +82,7 @@ export class FlowStallDetector {
     // Run startup recovery first to handle flows left running from previous instance
     await this.runStartupRecovery()
 
-    this.logger.info('Stall detector started', {
-      periodicCheckEnabled: this.config.enablePeriodicCheck,
-      stallTimeout: `${this.config.stallTimeout / 1000}s`,
-      checkInterval: `${this.config.checkInterval / 1000}s`,
-    })
+    this.logger.info(`Stall detector started - periodicCheck: ${this.config.enablePeriodicCheck}, stallTimeout: ${this.config.stallTimeout / 1000}s, checkInterval: ${this.config.checkInterval / 1000}s`)
   }
 
   /**
@@ -120,9 +116,7 @@ export class FlowStallDetector {
         this.logger.info('Stopped periodic stall detector')
       }
       catch (error) {
-        this.logger.error('Failed to stop stall detector', {
-          error: (error as Error).message,
-        })
+        this.logger.error(`Failed to stop stall detector: ${(error as Error).message}`)
       }
     }
     this.started = false
@@ -138,18 +132,12 @@ export class FlowStallDetector {
       const flowMeta = analyzedFlows.find((f: any) => f.id === flowName)
 
       if (flowMeta?.stallTimeout) {
-        this.logger.debug('Using flow-specific stall timeout', {
-          flowName,
-          timeout: `${flowMeta.stallTimeout / 1000}s`,
-        })
+        this.logger.debug(`Using flow-specific stall timeout for '${flowName}': ${flowMeta.stallTimeout / 1000}s`)
         return flowMeta.stallTimeout
       }
     }
     catch (error) {
-      this.logger.warn('Failed to get flow-specific stall timeout', {
-        flowName,
-        error: (error as Error).message,
-      })
+      this.logger.warn(`Failed to get flow-specific stall timeout for '${flowName}': ${(error as Error).message}`)
     }
 
     // Fall back to global config
@@ -166,21 +154,17 @@ export class FlowStallDetector {
 
     try {
       // Update lastActivityAt timestamp in index metadata
-      if (!this.store.indexUpdate) {
+      if (!this.store.index.update) {
         this.logger.warn('Store does not support indexUpdate, cannot update activity')
         return
       }
 
-      await this.store.indexUpdate(indexKey, runId, {
+      await this.store.index.update(indexKey, runId, {
         lastActivityAt: Date.now(),
       })
     }
     catch (error) {
-      this.logger.warn('Failed to update flow activity', {
-        flowName,
-        runId,
-        error: (error as Error).message,
-      })
+      this.logger.warn(`Failed to update flow activity for '${flowName}' runId '${runId}': ${(error as Error).message}`)
     }
   }
 
@@ -194,9 +178,9 @@ export class FlowStallDetector {
     const indexKey = StoreSubjects.flowRunIndex(flowName)
 
     try {
-      if (!this.store.indexGet) return false
+      if (!this.store.index.get) return false
 
-      const flowEntry = await this.store.indexGet(indexKey, runId)
+      const flowEntry = await this.store.index.get(indexKey, runId)
       if (!flowEntry?.metadata) return false
 
       // Only check running flows
@@ -206,11 +190,7 @@ export class FlowStallDetector {
       const awaitingSteps = flowEntry.metadata.awaitingSteps || {}
       const hasActiveAwaits = Object.keys(awaitingSteps).length > 0
       if (hasActiveAwaits) {
-        this.logger.debug('Flow has active awaits, skipping stall check', {
-          flowName,
-          runId,
-          awaitingSteps: Object.keys(awaitingSteps),
-        })
+        this.logger.debug(`Flow '${flowName}' runId '${runId}' has active awaits [${Object.keys(awaitingSteps).join(', ')}], skipping stall check`)
         return false
       }
 
@@ -222,23 +202,14 @@ export class FlowStallDetector {
       const timeSinceActivity = Date.now() - lastActivity
 
       if (timeSinceActivity > stallTimeout) {
-        this.logger.info('Flow detected as stalled (lazy check)', {
-          flowName,
-          runId,
-          timeSinceActivity: `${Math.round(timeSinceActivity / 1000)}s`,
-          stallTimeout: `${stallTimeout / 1000}s`,
-        })
+        this.logger.info(`Flow detected as stalled (lazy check) - '${flowName}' runId '${runId}': ${Math.round(timeSinceActivity / 1000)}s since activity (timeout: ${stallTimeout / 1000}s)`)
         return true
       }
 
       return false
     }
     catch (error) {
-      this.logger.warn('Failed to check if flow is stalled', {
-        flowName,
-        runId,
-        error: (error as Error).message,
-      })
+      this.logger.warn(`Failed to check if flow is stalled for '${flowName}' runId '${runId}': ${(error as Error).message}`)
       return false
     }
   }
@@ -253,20 +224,20 @@ export class FlowStallDetector {
 
     try {
       // Get current flow metadata
-      if (!this.store.indexGet) {
+      if (!this.store.index.get) {
         this.logger.warn('Store does not support indexGet, cannot mark as stalled')
         return
       }
 
-      const flowEntry = await this.store.indexGet(indexKey, runId)
+      const flowEntry = await this.store.index.get(indexKey, runId)
       if (!flowEntry?.metadata) return
 
       // Only mark running flows as stalled
       if (flowEntry.metadata.status !== 'running') return
 
       // Update status to stalled using indexUpdate
-      if (this.store.indexUpdate) {
-        await this.store.indexUpdate(indexKey, runId, {
+      if (this.store.index.update) {
+        await this.store.index.update(indexKey, runId, {
           status: 'stalled',
           stalledAt: Date.now(),
           stallReason: reason,
@@ -275,7 +246,7 @@ export class FlowStallDetector {
 
       // Emit flow.stalled event
       const streamName = StoreSubjects.flowRun(runId)
-      await this.store.append(streamName, {
+      await this.store.stream.append(streamName, {
         type: 'flow.stalled',
         runId,
         flowName,
@@ -284,18 +255,10 @@ export class FlowStallDetector {
         },
       })
 
-      this.logger.info('Marked flow as stalled', {
-        flowName,
-        runId,
-        reason,
-      })
+      this.logger.info(`Marked flow as stalled - '${flowName}' runId '${runId}': ${reason}`)
     }
     catch (error) {
-      this.logger.error('Failed to mark flow as stalled', {
-        flowName,
-        runId,
-        error: (error as Error).message,
-      })
+      this.logger.error(`Failed to mark flow as stalled for '${flowName}' runId '${runId}': ${(error as Error).message}`)
     }
   }
 
@@ -307,10 +270,10 @@ export class FlowStallDetector {
    * For now, we'll need to pass flow names to check, or iterate known flows from registry.
    */
   async checkFlowsForStalls(flowNames: string[]): Promise<void> {
-    this.logger.info('Running periodic stall check', { flows: flowNames.length })
+    this.logger.info(`Running periodic stall check for ${flowNames.length} flows`)
 
     try {
-      if (!this.store.indexGet || !this.store.indexRead) {
+      if (!this.store.index.get || !this.store.index.read) {
         this.logger.warn('Store does not support required index operations')
         return
       }
@@ -327,7 +290,7 @@ export class FlowStallDetector {
         const flowStallTimeout = await this.getFlowStallTimeout(flowName)
 
         // Get all flow runs from the index
-        const entries = await this.store.indexRead(indexKey, { limit: 1000 })
+        const entries = await this.store.index.read(indexKey, { limit: 1000 })
 
         for (const entry of entries) {
           if (!entry.metadata) continue
@@ -370,10 +333,7 @@ export class FlowStallDetector {
 
             // All awaits are valid (or legacy) - skip this flow (legitimately waiting)
             if (hasLegacyAwait) {
-              this.logger.debug('Skipping flow with legacy await (no timeout)', {
-                flowName,
-                runId: entry.id,
-              })
+              this.logger.debug(`Skipping flow with legacy await (no timeout) - '${flowName}' runId '${entry.id}'`)
             }
             continue
           }
@@ -389,10 +349,7 @@ export class FlowStallDetector {
         }
       }
 
-      this.logger.info('Periodic stall check completed', {
-        checked: checkedCount,
-        stalled: stalledCount,
-      })
+      this.logger.info(`Periodic stall check completed - checked: ${checkedCount}, stalled: ${stalledCount}`)
     }
     catch (error) {
       this.logger.error('Failed to run periodic stall check', {
@@ -410,7 +367,7 @@ export class FlowStallDetector {
     this.logger.info('Running startup recovery to check for orphaned flows and validate stats')
 
     try {
-      if (!this.store.indexGet || !this.store.indexRead) {
+      if (!this.store.index.get || !this.store.index.read) {
         this.logger.warn('Store does not support required index operations')
         return
       }
@@ -418,10 +375,7 @@ export class FlowStallDetector {
       const analyzedFlows = $useAnalyzedFlows() as any[]
       const flowNames = analyzedFlows.map((f: any) => f.id).filter(Boolean)
 
-      this.logger.info('Starting flow recovery check', {
-        registeredFlows: flowNames.length,
-        flowNames,
-      })
+      this.logger.info(`Starting flow recovery check for ${flowNames.length} registered flows: [${flowNames.join(', ')}]`)
 
       if (flowNames.length === 0) {
         this.logger.debug('No flows registered, skipping startup recovery')
@@ -439,22 +393,16 @@ export class FlowStallDetector {
         actualCounts[flowName] = { running: 0, awaiting: 0 }
         const indexKey = StoreSubjects.flowRunIndex(flowName)
 
-        this.logger.debug('Reading flow run index', {
-          flowName,
-          indexKey,
-        })
+        this.logger.debug(`Reading flow run index for '${flowName}': ${indexKey}`)
 
-        const entries: any[] = await this.store.indexRead(indexKey, { limit: 1000 })
+        const entries: any[] = await this.store.index.read(indexKey, { limit: 1000 })
 
         // Count statuses for summary and track running/awaiting for stats validation
         const statusCounts: Record<string, number> = {}
 
         for (const entry of entries) {
           if (!entry.metadata) {
-            this.logger.debug('Skipping entry without metadata', {
-              flowName,
-              runId: entry.id,
-            })
+            this.logger.debug(`Skipping entry without metadata - '${flowName}' runId '${entry.id}'`)
             continue
           }
 
@@ -471,22 +419,10 @@ export class FlowStallDetector {
 
           // Check for flows in running or awaiting state
           if (entry.metadata.status === 'running' || entry.metadata.status === 'awaiting') {
-            this.logger.info('Found flow in running/awaiting state', {
-              flowName,
-              runId: entry.id,
-              status: entry.metadata.status,
-              hasAwaitingSteps: !!entry.metadata.awaitingSteps,
-              awaitingStepCount: Object.keys(entry.metadata.awaitingSteps || {}).length,
-            })
             const awaitingSteps = entry.metadata.awaitingSteps || {}
             const awaitingStepNames = Object.keys(awaitingSteps)
-
-            this.logger.debug('Flow is running or awaiting', {
-              flowName,
-              runId: entry.id,
-              status: entry.metadata.status,
-              awaitingStepCount: awaitingStepNames.length,
-            })
+            this.logger.info(`Found flow in ${entry.metadata.status} state - '${flowName}' runId '${entry.id}' with ${awaitingStepNames.length} awaiting steps`)
+            this.logger.debug(`Flow '${flowName}' runId '${entry.id}' status: ${entry.metadata.status}, awaitingSteps: ${awaitingStepNames.length}`)
 
             // If flow has awaitingSteps, check if they should have already resolved
             if (awaitingStepNames.length > 0) {
@@ -497,15 +433,7 @@ export class FlowStallDetector {
               for (const stepName of awaitingStepNames) {
                 const awaitState = awaitingSteps[stepName]
 
-                this.logger.info('Checking await state', {
-                  flowName,
-                  runId: entry.id,
-                  stepName,
-                  awaitStatus: awaitState?.status,
-                  timeoutAt: awaitState?.timeoutAt,
-                  resolveAt: awaitState?.resolveAt,
-                  awaitData: awaitState?.data,
-                })
+                this.logger.info(`Checking await state for '${flowName}' runId '${entry.id}' step '${stepName}': status=${awaitState?.status}, timeoutAt=${awaitState?.timeoutAt}, resolveAt=${awaitState?.resolveAt}`)
 
                 if (awaitState?.status === 'awaiting') {
                   // Check if await is overdue (should have resolved by now)
@@ -515,43 +443,24 @@ export class FlowStallDetector {
                     // Legacy data without timeout - treat as valid but unknown
                     // This is safer than marking as stalled
                     hasActiveValidAwaits = true
-                    this.logger.warn('Found await without timeout (legacy data)', {
-                      flowName,
-                      runId: entry.id,
-                      stepName,
-                      message: 'Treating as valid - timeout tracking was added later',
-                    })
+                    this.logger.warn(`Found await without timeout (legacy data) - '${flowName}' runId '${entry.id}' step '${stepName}' - treating as valid (timeout tracking was added later)`)
                   }
                   else if (Date.now() > timeoutAt) {
                     // Await is overdue - the scheduler job likely failed or wasn't recovered properly
                     hasOverdueAwaits = true
-                    this.logger.warn('Found overdue await pattern', {
-                      flowName,
-                      runId: entry.id,
-                      stepName,
-                      timeoutAt: new Date(timeoutAt).toISOString(),
-                      overdueBy: `${Math.round((Date.now() - timeoutAt) / 1000)}s`,
-                    })
+                    this.logger.warn(`Found overdue await pattern - '${flowName}' runId '${entry.id}' step '${stepName}': timeoutAt=${new Date(timeoutAt).toISOString()}, overdueBy=${Math.round((Date.now() - timeoutAt) / 1000)}s`)
                   }
                   else {
                     // Await is still valid and waiting
                     hasActiveValidAwaits = true
-                    this.logger.debug('Found active valid await', {
-                      flowName,
-                      runId: entry.id,
-                      stepName,
-                      remainingTime: `${Math.round((timeoutAt - Date.now()) / 1000)}s`,
-                    })
+                    this.logger.debug(`Found active valid await - '${flowName}' runId '${entry.id}' step '${stepName}': remaining=${Math.round((timeoutAt - Date.now()) / 1000)}s`)
                   }
                 }
               }
 
               if (hasOverdueAwaits) {
                 // Await patterns are overdue - mark flow as stalled since await resolution failed
-                this.logger.info('Marking flow as stalled (overdue awaits)', {
-                  flowName,
-                  runId: entry.id,
-                })
+                this.logger.info(`Marking flow as stalled (overdue awaits) - '${flowName}' runId '${entry.id}'`)
                 await this.markAsStalled(flowName, entry.id, 'Await pattern resolution failed or expired')
                 recoveredCount++
                 continue
@@ -561,63 +470,45 @@ export class FlowStallDetector {
                 // Flow has valid active awaits
                 if (entry.metadata.status === 'running') {
                   // Update status to 'awaiting' to reflect correct state
-                  if (this.store.indexUpdate) {
-                    await this.store.indexUpdate(indexKey, entry.id, {
+                  if (this.store.index.update) {
+                    await this.store.index.update(indexKey, entry.id, {
                       status: 'awaiting',
                     })
-                    this.logger.info('Updated flow status to awaiting (has active awaits)', {
-                      flowName,
-                      runId: entry.id,
-                      awaitingSteps: awaitingStepNames,
-                    })
+                    this.logger.info(`Updated flow status to awaiting (has active awaits) - '${flowName}' runId '${entry.id}' steps: [${awaitingStepNames.join(', ')}]`)
                   }
                 }
                 else {
                   // Already has status 'awaiting', which is correct
-                  this.logger.debug('Flow already has awaiting status', {
-                    flowName,
-                    runId: entry.id,
-                  })
+                  this.logger.debug(`Flow already has awaiting status - '${flowName}' runId '${entry.id}'`)
                 }
                 continue
               }
             }
 
             // No active awaits - mark as stalled
-            this.logger.info('Marking flow as stalled (no active awaits)', {
-              flowName,
-              runId: entry.id,
-            })
+            this.logger.info(`Marking flow as stalled (no active awaits) - '${flowName}' runId '${entry.id}'`)
             await this.markAsStalled(flowName, entry.id, 'Server restart - flow state lost')
             recoveredCount++
           }
         }
 
         // Log status summary for this flow
-        this.logger.info('Flow recovery summary', {
-          flowName,
-          totalEntries: entries.length,
-          statusCounts,
-        })
+        const statusSummary = Object.entries(statusCounts).map(([status, count]) => `${status}:${count}`).join(', ')
+        this.logger.info(`Flow recovery summary for '${flowName}' - total: ${entries.length}, statuses: {${statusSummary}}`)
       }
 
       // 2. Validate and clean up flow stats index (with actual counts)
       await this.validateFlowStats(flowNames, actualCounts)
 
       if (recoveredCount > 0) {
-        this.logger.info('Startup recovery completed', {
-          recovered: recoveredCount,
-          message: `Marked ${recoveredCount} orphaned flow(s) as stalled`,
-        })
+        this.logger.info(`Startup recovery completed - marked ${recoveredCount} orphaned flow(s) as stalled`)
       }
       else {
         this.logger.debug('Startup recovery completed - no orphaned flows found')
       }
     }
     catch (error) {
-      this.logger.error('Failed to run startup recovery', {
-        error: (error as Error).message,
-      })
+      this.logger.error(`Failed to run startup recovery: ${(error as Error).message}`)
     }
   }
 
@@ -642,7 +533,7 @@ export class FlowStallDetector {
     this.logger.debug('Validating flow stats index')
 
     try {
-      if (!this.store.indexRead || !this.store.indexDelete || !this.store.indexUpdate) {
+      if (!this.store.index.read || !this.store.index.delete || !this.store.index.update) {
         this.logger.debug('Store does not support stats validation operations')
         return
       }
@@ -651,7 +542,7 @@ export class FlowStallDetector {
       const statsIndexKey = StoreSubjects.flowIndex()
 
       // Read all flow stats entries
-      const statsEntries = await this.store.indexRead(statsIndexKey, { limit: 10000 })
+      const statsEntries = await this.store.index.read(statsIndexKey, { limit: 10000 })
 
       let removedCount = 0
       let correctedCount = 0
@@ -661,15 +552,15 @@ export class FlowStallDetector {
 
         // Check if this flow still exists in the registry
         if (!validFlowNames.includes(flowName)) {
-          this.logger.info('Removing stats for non-existent flow', { flowName })
-          await this.store.indexDelete(statsIndexKey, flowName)
+          this.logger.info(`Removing stats for non-existent flow '${flowName}'`)
+          await this.store.index.delete(statsIndexKey, flowName)
           removedCount++
           continue
         }
 
         // Validate stats structure
         if (!entry.metadata?.stats) {
-          this.logger.warn('Flow stats entry missing stats object', { flowName })
+          this.logger.warn(`Flow stats entry missing stats object for '${flowName}'`)
           continue
         }
 
@@ -681,14 +572,10 @@ export class FlowStallDetector {
         const awaitingMismatch = stats.awaiting !== actual.awaiting
 
         if (runningMismatch || awaitingMismatch) {
-          this.logger.warn('Flow stats mismatch detected - correcting', {
-            flowName,
-            stored: { running: stats.running, awaiting: stats.awaiting },
-            actual: { running: actual.running, awaiting: actual.awaiting },
-          })
+          this.logger.warn(`Flow stats mismatch detected for '${flowName}' - stored: running=${stats.running} awaiting=${stats.awaiting}, actual: running=${actual.running} awaiting=${actual.awaiting} - correcting`)
 
           // Update stats to match actual scanned values
-          await this.store.indexUpdate(statsIndexKey, flowName, {
+          await this.store.index.update(statsIndexKey, flowName, {
             'stats.running': actual.running,
             'stats.awaiting': actual.awaiting,
           })
@@ -698,20 +585,14 @@ export class FlowStallDetector {
       }
 
       if (removedCount > 0 || correctedCount > 0) {
-        this.logger.info('Flow stats validation completed', {
-          removed: removedCount,
-          corrected: correctedCount,
-          message: `Removed ${removedCount} orphaned stats, corrected ${correctedCount} running/awaiting counts`,
-        })
+        this.logger.info(`Flow stats validation completed - removed ${removedCount} orphaned stats, corrected ${correctedCount} running/awaiting counts`)
       }
       else {
         this.logger.debug('Flow stats validation completed - all stats accurate')
       }
     }
     catch (error) {
-      this.logger.error('Failed to validate flow stats', {
-        error: (error as Error).message,
-      })
+      this.logger.error(`Failed to validate flow stats: ${(error as Error).message}`)
     }
   }
 
@@ -733,9 +614,7 @@ export class FlowStallDetector {
       await this.checkFlowsForStalls(flowNames)
     }
     catch (error) {
-      this.logger.error('Failed to run periodic stall check', {
-        error: (error as Error).message,
-      })
+      this.logger.error(`Failed to run periodic stall check: ${(error as Error).message}`)
     }
   }
 

@@ -57,7 +57,7 @@ export default defineEventHandler(async (event) => {
     try {
       // For now, we'll fetch a large limit to get the count
       // This can be optimized by adding a `indexCount` method to the adapter
-      const allEntries = await store.indexRead(runIndexKey, { limit: 10000 })
+      const allEntries = await store.index.read(runIndexKey, { limit: 10000 })
       totalCount = allEntries.length
     }
     catch {
@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Read paginated results from the sorted set index
-    const entries = await store.indexRead(runIndexKey, { offset, limit })
+    const entries = await store.index.read(runIndexKey, { offset, limit })
 
     // Filter by status if provided (using metadata)
     const filteredEntries = status

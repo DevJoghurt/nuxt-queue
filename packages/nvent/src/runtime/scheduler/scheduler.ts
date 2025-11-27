@@ -220,12 +220,12 @@ export class Scheduler implements SchedulerAdapter {
     const now = Date.now()
     const expiresAt = now + this.lockTTL
 
-    if (this.useIndexLocking && this.store.indexAdd) {
+    if (this.useIndexLocking && this.store.index.add) {
       // Use index-based locking (more robust, supports version control)
       try {
         const lockIndex = `${this.keyPrefix}:locks`
 
-        await this.store.indexAdd(lockIndex, jobId, expiresAt, {
+        await this.store.index.add(lockIndex, jobId, expiresAt, {
           instanceId: this.instanceId,
           acquiredAt: now,
           expiresAt,
@@ -235,13 +235,13 @@ export class Scheduler implements SchedulerAdapter {
       }
       catch {
         // Lock already exists, check if expired
-        if (this.store.indexGet) {
-          const existing = await this.store.indexGet(`${this.keyPrefix}:locks`, jobId)
+        if (this.store.index.get) {
+          const existing = await this.store.index.get(`${this.keyPrefix}:locks`, jobId)
 
           if (existing && existing.score < now) {
             // Lock expired, delete and retry
-            if (this.store.indexDelete) {
-              await this.store.indexDelete(`${this.keyPrefix}:locks`, jobId)
+            if (this.store.index.delete) {
+              await this.store.index.delete(`${this.keyPrefix}:locks`, jobId)
               return this.acquireLock(jobId)
             }
           }
@@ -295,9 +295,9 @@ export class Scheduler implements SchedulerAdapter {
    * Release distributed lock
    */
   private async releaseLock(jobId: string): Promise<void> {
-    if (this.useIndexLocking && this.store.indexDelete) {
+    if (this.useIndexLocking && this.store.index.delete) {
       const lockIndex = `${this.keyPrefix}:locks`
-      await this.store.indexDelete(lockIndex, jobId)
+      await this.store.index.delete(lockIndex, jobId)
     }
     else {
       const lockKey = `${this.keyPrefix}:lock:${jobId}`
@@ -314,11 +314,11 @@ export class Scheduler implements SchedulerAdapter {
 
     const timer = setInterval(async () => {
       try {
-        if (this.useIndexLocking && this.store.indexUpdate) {
+        if (this.useIndexLocking && this.store.index.update) {
           const lockIndex = `${this.keyPrefix}:locks`
           const expiresAt = Date.now() + this.lockTTL
 
-          await this.store.indexUpdate(lockIndex, jobId, {
+          await this.store.index.update(lockIndex, jobId, {
             expiresAt,
           })
         }
@@ -376,17 +376,17 @@ export class Scheduler implements SchedulerAdapter {
     await this.store.kv.set(jobKey, jobData)
 
     // Also store in index for efficient recovery
-    if (this.store.indexAdd) {
+    if (this.store.index.add) {
       try {
         const jobIndex = `${this.keyPrefix}:jobs-index`
-        await this.store.indexAdd(jobIndex, job.id, now, jobData)
+        await this.store.index.add(jobIndex, job.id, now, jobData)
       }
       catch {
         // If job already exists in index, update it instead
-        if (this.store.indexUpdate) {
+        if (this.store.index.update) {
           try {
             const jobIndex = `${this.keyPrefix}:jobs-index`
-            await this.store.indexUpdate(jobIndex, job.id, jobData)
+            await this.store.index.update(jobIndex, job.id, jobData)
           }
           catch (updateError) {
             this.logger.error('Failed to persist job to index', { jobId: job.id, error: (updateError as Error).message })
@@ -437,9 +437,9 @@ export class Scheduler implements SchedulerAdapter {
     await this.store.kv.delete(`${this.keyPrefix}:stats:${jobId}`)
 
     // Remove from index if available
-    if (this.store.indexDelete) {
+    if (this.store.index.delete) {
       try {
-        await this.store.indexDelete(`${this.keyPrefix}:jobs-index`, jobId)
+        await this.store.index.delete(`${this.keyPrefix}:jobs-index`, jobId)
       }
       catch {
         // Ignore - might not exist in index
@@ -464,9 +464,9 @@ export class Scheduler implements SchedulerAdapter {
 
     try {
       // Try to use index scan if available (more efficient)
-      if (this.store.indexRead) {
+      if (this.store.index.read) {
         const jobIndex = `${this.keyPrefix}:jobs-index`
-        const jobEntries = await this.store.indexRead(jobIndex, { limit: 10000 })
+        const jobEntries = await this.store.index.read(jobIndex, { limit: 10000 })
 
         this.logger.info('Found jobs in index', { count: jobEntries.length })
 
@@ -721,9 +721,9 @@ export class Scheduler implements SchedulerAdapter {
     this.lockRenewalTimers.clear()
 
     // Release all locks held by this instance
-    if (this.useIndexLocking && this.store.indexRead) {
+    if (this.useIndexLocking && this.store.index.read) {
       const lockIndex = `${this.keyPrefix}:locks`
-      const locks = await this.store.indexRead(lockIndex, { limit: 1000 })
+      const locks = await this.store.index.read(lockIndex, { limit: 1000 })
 
       for (const lock of locks) {
         if (lock.metadata?.instanceId === this.instanceId) {
@@ -748,9 +748,9 @@ export class Scheduler implements SchedulerAdapter {
     const jobs: ScheduledJob[] = []
 
     try {
-      if (this.store.indexRead) {
+      if (this.store.index.read) {
         const jobIndex = `${this.keyPrefix}:jobs-index`
-        const entries = await this.store.indexRead(jobIndex, { limit: 10000 })
+        const entries = await this.store.index.read(jobIndex, { limit: 10000 })
 
         for (const entry of entries) {
           if (entry.metadata) {

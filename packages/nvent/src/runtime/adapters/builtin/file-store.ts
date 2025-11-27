@@ -38,34 +38,22 @@ async function ensureDir(path: string) {
  */
 export class FileStoreAdapter extends MemoryStoreAdapter {
   private options: FileStoreAdapterOptions
-  private parentKvGet: (key: string) => Promise<any>
-  private parentKvSet: (key: string, value: any, ttl?: number) => Promise<void>
-  private parentKvDelete: (key: string) => Promise<void>
-  private parentKvClear: (pattern: string) => Promise<number>
-  private parentKvIncrement: (key: string, by?: number) => Promise<number>
 
   constructor(options: FileStoreAdapterOptions) {
     super()
     this.options = options
 
-    // CRITICAL: Save references to parent methods BEFORE overriding kv
-    // Must save each method separately to break circular reference
-    const tempKv = this.kv
-    this.parentKvGet = tempKv.get
-    this.parentKvSet = tempKv.set
-    this.parentKvDelete = tempKv.delete
-    this.parentKvClear = tempKv.clear!
-    this.parentKvIncrement = tempKv.increment!
+    // Save references to parent methods to wrap them with persistence
+    const parentKv = this.kv
+    const parentStream = this.stream
+    const parentIndex = this.index
 
-    // Now override kv with persistence wrapper IN CONSTRUCTOR
-    // This must happen here, not as a class field, to ensure parent methods are saved first
+    // Override kv methods with persistence wrappers
     this.kv = {
-      get: async (key: string) => {
-        return this.parentKvGet(key)
-      },
+      get: parentKv.get,
 
       set: async <T = any>(key: string, value: T, ttl?: number) => {
-        await this.parentKvSet(key, value, ttl)
+        await parentKv.set(key, value, ttl)
 
         // Persist to individual JSON file
         const path = this.kvPath(key)
@@ -74,7 +62,7 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
       },
 
       delete: async (key: string) => {
-        await this.parentKvDelete(key)
+        await parentKv.delete(key)
 
         // Delete KV file
         const path = this.kvPath(key)
@@ -87,7 +75,7 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
       },
 
       clear: async (pattern: string) => {
-        const count = await this.parentKvClear(pattern)
+        const count = await parentKv.clear!(pattern)
 
         // Delete matching KV files
         try {
@@ -111,7 +99,7 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
       },
 
       increment: async (key: string, by: number = 1) => {
-        const result = await this.parentKvIncrement(key, by)
+        const result = await parentKv.increment!(key, by)
 
         // Persist updated value
         const path = this.kvPath(key)
@@ -119,6 +107,125 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
         await fs.writeFile(path, JSON.stringify(result), 'utf-8')
 
         return result
+      },
+    }
+
+    // Override stream methods with persistence
+    this.stream = {
+      append: async (subject: string, event: Omit<import('../interfaces/store').EventRecord, 'id' | 'ts'>) => {
+        const result = await parentStream.append(subject, event)
+
+        // Append to NDJSON file
+        const path = this.streamPath(subject)
+        await ensureDir(dirname(path))
+        await fs.appendFile(path, JSON.stringify(result) + '\n', 'utf-8')
+
+        return result
+      },
+
+      read: parentStream.read,
+      subscribe: parentStream.subscribe,
+
+      delete: async (subject: string) => {
+        // Use parent's delete if available
+        const deleted = parentStream.delete ? await parentStream.delete(subject) : false
+
+        if (deleted) {
+          // Delete stream file
+          const path = this.streamPath(subject)
+          try {
+            await fs.unlink(path)
+          }
+          catch {
+            // File might not exist
+          }
+        }
+
+        return deleted
+      },
+    }
+
+    // Override index methods with persistence
+    this.index = {
+      add: async (key: string, id: string, score: number, metadata?: Record<string, any>) => {
+        await parentIndex.add(key, id, score, metadata)
+
+        // Persist index to JSON file
+        const self = this as any
+        const index = self.sortedIndices?.get(key)
+        if (index) {
+          const path = this.indexPath(key)
+          await ensureDir(dirname(path))
+          await fs.writeFile(path, JSON.stringify(index, null, 2), 'utf-8')
+        }
+      },
+
+      get: parentIndex.get,
+      read: parentIndex.read,
+
+      update: async (key: string, id: string, metadata: Record<string, any>) => {
+        const result = await parentIndex.update(key, id, metadata)
+
+        // Persist updated index
+        const self = this as any
+        const index = self.sortedIndices?.get(key)
+        if (index) {
+          const path = this.indexPath(key)
+          await ensureDir(dirname(path))
+          await fs.writeFile(path, JSON.stringify(index, null, 2), 'utf-8')
+        }
+
+        return result
+      },
+
+      updateWithRetry: async (
+        key: string,
+        id: string,
+        metadata: Record<string, any>,
+        maxRetries?: number,
+      ) => {
+        await parentIndex.updateWithRetry(key, id, metadata, maxRetries)
+
+        // Persist updated index
+        const self = this as any
+        const index = self.sortedIndices?.get(key)
+        if (index) {
+          const path = this.indexPath(key)
+          await ensureDir(dirname(path))
+          await fs.writeFile(path, JSON.stringify(index, null, 2), 'utf-8')
+        }
+      },
+
+      increment: async (key: string, id: string, field: string, increment?: number) => {
+        const result = await parentIndex.increment(key, id, field, increment)
+
+        // Persist updated index
+        const self = this as any
+        const index = self.sortedIndices?.get(key)
+        if (index) {
+          const path = this.indexPath(key)
+          await ensureDir(dirname(path))
+          await fs.writeFile(path, JSON.stringify(index, null, 2), 'utf-8')
+        }
+
+        return result
+      },
+
+      delete: async (key: string, id: string): Promise<boolean> => {
+        const deleted = await parentIndex.delete(key, id)
+
+        if (deleted) {
+          // Persist updated index
+          const self = this as any
+          const index = self.sortedIndices?.get(key)
+          if (index) {
+            const path = this.indexPath(key)
+            await ensureDir(dirname(path))
+            await fs.writeFile(path, JSON.stringify(index, null, 2), 'utf-8')
+          }
+        }
+
+        return deleted
       },
     }
   }
@@ -207,129 +314,6 @@ export class FileStoreAdapter extends MemoryStoreAdapter {
     }
     catch {
       // No KV data yet
-    }
-  }
-
-  // Override methods to add persistence
-
-  async append(subject: string, event: Omit<import('../interfaces/store').EventRecord, 'id' | 'ts'>) {
-    const result = await super.append(subject, event)
-
-    // Append to NDJSON file (like existing file adapter)
-    const path = this.streamPath(subject)
-    await ensureDir(dirname(path))
-    await fs.appendFile(path, JSON.stringify(result) + '\n', 'utf-8')
-
-    return result
-  }
-
-  // Override index operations
-
-  async indexAdd(key: string, id: string, score: number, metadata?: Record<string, any>) {
-    await super.indexAdd!(key, id, score, metadata)
-
-    // Persist index to JSON file (like existing file adapter)
-    const self = this as any
-    const index = self.sortedIndices?.get(key)
-    if (index) {
-      const path = this.indexPath(key)
-      await ensureDir(dirname(path))
-      await fs.writeFile(path, JSON.stringify(index, null, 2), 'utf-8')
-    }
-  }
-
-  async indexUpdate(key: string, id: string, metadata: Record<string, any>) {
-    // Call parent which handles locking internally
-    const result = await super.indexUpdate!(key, id, metadata)
-
-    // Persist updated index
-    const self = this as any
-    const index = self.sortedIndices?.get(key)
-    if (index) {
-      const path = this.indexPath(key)
-      await ensureDir(dirname(path))
-      await fs.writeFile(path, JSON.stringify(index, null, 2), 'utf-8')
-    }
-
-    return result
-  }
-
-  async indexUpdateWithRetry(
-    key: string,
-    id: string,
-    metadata: Record<string, any>,
-    maxRetries?: number,
-  ) {
-    await super.indexUpdateWithRetry!(key, id, metadata, maxRetries)
-
-    // Persist updated index
-    const self = this as any
-    const index = self.sortedIndices?.get(key)
-    if (index) {
-      const path = this.indexPath(key)
-      await ensureDir(dirname(path))
-      await fs.writeFile(path, JSON.stringify(index, null, 2), 'utf-8')
-    }
-  }
-
-  async indexIncrement(key: string, id: string, field: string, increment?: number) {
-    // Call parent which handles locking internally
-    const result = await super.indexIncrement!(key, id, field, increment)
-
-    // Persist updated index
-    const self = this as any
-    const index = self.sortedIndices?.get(key)
-    if (index) {
-      const path = this.indexPath(key)
-      await ensureDir(dirname(path))
-      await fs.writeFile(path, JSON.stringify(index, null, 2), 'utf-8')
-    }
-
-    return result
-  }
-
-  async indexDelete(key: string, id: string): Promise<boolean> {
-    // Remove from memory
-    const self = this as any
-    const index = self.sortedIndices?.get(key)
-    if (!index) return false
-
-    const initialLength = index.length
-    const filtered = index.filter((entry: any) => entry.id !== id)
-
-    if (filtered.length === initialLength) {
-      return false // Entry not found
-    }
-
-    self.sortedIndices.set(key, filtered)
-
-    // Persist updated index
-    const path = this.indexPath(key)
-    await ensureDir(dirname(path))
-    await fs.writeFile(path, JSON.stringify(filtered, null, 2), 'utf-8')
-
-    return true
-  }
-
-  async delete(subject: string): Promise<boolean> {
-    // Remove from memory
-    const self = this as any
-    const eventStreams = self.eventStreams as Map<string, any[]>
-    if (!eventStreams || !eventStreams.has(subject)) {
-      return false
-    }
-
-    eventStreams.delete(subject)
-
-    // Delete stream file
-    const path = this.streamPath(subject)
-    try {
-      await fs.unlink(path)
-      return true
-    }
-    catch {
-      // File might not exist
-      return false
     }
   }
 

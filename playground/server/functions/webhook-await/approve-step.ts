@@ -17,8 +17,8 @@ export const config = defineFunctionConfig({
     emits: ['approval.processed'],
     awaitBefore: {
       type: 'webhook',
-      method: 'POST',
-      timeout: 10000, // 10 seconds for testing
+      method: 'GET',
+      timeout: 20000, // 20 seconds for testing
       timeoutAction: 'fail',
     },
   },

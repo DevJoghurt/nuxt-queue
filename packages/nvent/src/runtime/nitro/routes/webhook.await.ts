@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
 
   // Look up flow in store index to verify it exists and is awaiting
   const indexKey = StoreSubjects.flowRunIndex(flowName)
-  const flowEntry = await store.indexGet?.(indexKey, runId)
+  const flowEntry = await store.index.get?.(indexKey, runId)
 
   if (!flowEntry) {
     logger.warn(`Flow not found`, { flowName, runId, stepName })
