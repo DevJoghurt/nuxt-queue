@@ -8,7 +8,7 @@
  * - Single instance only (no distributed lock)
  *
  * Storage format:
- * - {dataDir}/queues/{queueName}/jobs/{jobId}.json - Individual job files
+ * - {dataDir}/{queueName}/jobs/{jobId}.json - Individual job files
  * - Jobs are loaded on init and kept in memory with fastq
  */
 
@@ -84,7 +84,7 @@ export class FileQueueAdapter implements QueueAdapter {
     if (this.initialized) return
 
     // Create data directory
-    await fs.mkdir(join(this.options.dataDir, 'queues'), { recursive: true })
+    await fs.mkdir(this.options.dataDir, { recursive: true })
 
     // Load existing jobs from disk
     await this.loadJobsFromDisk()
@@ -93,7 +93,7 @@ export class FileQueueAdapter implements QueueAdapter {
   }
 
   private async loadJobsFromDisk(): Promise<void> {
-    const queuesDir = join(this.options.dataDir, 'queues')
+    const queuesDir = this.options.dataDir
 
     try {
       const queueNames = await fs.readdir(queuesDir)
@@ -125,7 +125,7 @@ export class FileQueueAdapter implements QueueAdapter {
   }
 
   private async persistJob(queueName: string, job: Job): Promise<void> {
-    const jobsDir = join(this.options.dataDir, 'queues', queueName, 'jobs')
+    const jobsDir = join(this.options.dataDir, queueName, 'jobs')
     await fs.mkdir(jobsDir, { recursive: true })
 
     const jobPath = join(jobsDir, `${job.id}.json`)
@@ -133,7 +133,7 @@ export class FileQueueAdapter implements QueueAdapter {
   }
 
   private async deleteJobFile(queueName: string, jobId: string): Promise<void> {
-    const jobPath = join(this.options.dataDir, 'queues', queueName, 'jobs', `${jobId}.json`)
+    const jobPath = join(this.options.dataDir, queueName, 'jobs', `${jobId}.json`)
 
     try {
       await fs.unlink(jobPath)

@@ -41,7 +41,7 @@ export default defineNuxtConfig({
       password: process.env.REDIS_PASSWORD,
       db: 0
     },
-    prefix: 'nq',
+    prefix: 'nvent',
     streams: {
       trim: {
         maxLen: 10000,
@@ -64,7 +64,7 @@ export default defineNuxtConfig({
 
 ### Adapter Options
 
-- `prefix` - Prefix for Redis keys (default: 'nq')
+- `prefix` - Prefix for Redis keys (default: 'nvent')
 - `streams.trim.maxLen` - Maximum stream length (default: 10000)
 - `streams.trim.approx` - Use approximate trimming (default: true)
 
@@ -72,24 +72,26 @@ export default defineNuxtConfig({
 
 ### Event Streams
 ```
-nq:stream:{name} - Redis Stream for events
+{prefix}:stream:{name} - Redis Stream for events
 ```
 
 ### Documents
 ```
-nq:doc:{collection}:{id} - JSON document storage
+{prefix}:doc:{collection}:{id} - JSON document storage
 ```
 
 ### Key-Value
 ```
-nq:kv:{key} - Simple key-value pairs
+{prefix}:kv:{key} - Simple key-value pairs
 ```
 
 ### Indexes
 ```
-nq:idx:{key} - Sorted set for indexed entries
-nq:idx:{key}:meta:{id} - Hash for entry metadata
+{prefix}:idx:{key} - Sorted set for indexed entries
+{prefix}:idx:{key}:meta:{id} - Hash for entry metadata
 ```
+
+With the default prefix `nvent`, keys look like: `nvent:stream:myevent`, `nvent:kv:mykey`, etc.
 
 ## License
 

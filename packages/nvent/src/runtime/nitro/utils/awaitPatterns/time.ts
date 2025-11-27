@@ -1,5 +1,5 @@
 import type { AwaitConfig } from '../../../../registry/types'
-import { useNventLogger } from '#imports'
+import { useNventLogger, useScheduler } from '#imports'
 import { getEventBus } from '../../../events/eventBus'
 
 /**
@@ -17,6 +17,7 @@ export async function registerTimeAwait(
 ) {
   const logger = useNventLogger('await-time')
   const eventBus = getEventBus()
+  const scheduler = useScheduler()
 
   if (!config.delay) {
     throw new Error('Time await requires delay configuration (in milliseconds)')
@@ -26,10 +27,26 @@ export async function registerTimeAwait(
 
   const resolveAt = Date.now() + config.delay
 
-  // Schedule the resolution
-  setTimeout(async () => {
-    await resolveTimeAwait(runId, stepName, flowName, position, { delayCompleted: true })
-  }, config.delay)
+  // Schedule the resolution using the scheduler
+  const jobId = `await-time-${runId}-${stepName}-${position}`
+  await scheduler.schedule({
+    id: jobId,
+    name: `Time Await: ${flowName} - ${stepName}`,
+    type: 'one-time',
+    executeAt: resolveAt,
+    handler: async () => {
+      await resolveTimeAwait(runId, stepName, flowName, position, { delayCompleted: true })
+    },
+    metadata: {
+      component: 'await-pattern',
+      awaitType: 'time',
+      runId,
+      stepName,
+      flowName,
+      position,
+      delay: config.delay,
+    },
+  })
 
   // Emit await.registered event (wiring will handle storage)
   eventBus.publish({

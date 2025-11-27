@@ -1,6 +1,7 @@
 import type { AwaitConfig } from '../../../../registry/types'
-import { useNventLogger } from '#imports'
+import { useNventLogger, useScheduler } from '#imports'
 import { getEventBus } from '../../../events/eventBus'
+import { CronJob } from 'cron'
 
 /**
  * Await Pattern: Schedule
@@ -17,6 +18,7 @@ export async function registerScheduleAwait(
 ) {
   const logger = useNventLogger('await-schedule')
   const eventBus = getEventBus()
+  const scheduler = useScheduler()
 
   if (!config.cron) {
     throw new Error('Schedule await requires cron expression configuration')
@@ -24,21 +26,34 @@ export async function registerScheduleAwait(
 
   logger.info(`Registering schedule await: ${config.cron}`, { runId, stepName })
 
-  // Calculate next occurrence
-  const nextOccurrence = calculateNextCronOccurrence(
-    config.cron,
-    config.nextAfterHours,
-    config.timezone,
-  )
+  // Calculate next occurrence using cron library
+  const cronJob = new CronJob(config.cron, () => {}, null, false, config.timezone || 'UTC')
+  const nextDate = cronJob.nextDate()
+  const nextOccurrence = nextDate ? nextDate.toMillis() : Date.now() + 60000 // Fallback to 1 minute
 
   const timeUntilNext = nextOccurrence - Date.now()
 
-  // Schedule the resolution
-  // Note: In production, this should be handled by a dedicated scheduler service
-  // For now, we'll use a simple setTimeout
-  setTimeout(async () => {
-    await resolveScheduleAwait(runId, stepName, flowName, position, { scheduledAt: nextOccurrence })
-  }, timeUntilNext)
+  // Schedule the resolution using scheduler
+  const jobId = `await-schedule-${runId}-${stepName}-${position}`
+  await scheduler.schedule({
+    id: jobId,
+    name: `Schedule Await: ${flowName} - ${stepName}`,
+    type: 'one-time',
+    executeAt: nextOccurrence,
+    handler: async () => {
+      await resolveScheduleAwait(runId, stepName, flowName, position, { scheduledAt: nextOccurrence })
+    },
+    metadata: {
+      component: 'await-pattern',
+      awaitType: 'schedule',
+      runId,
+      stepName,
+      flowName,
+      position,
+      cron: config.cron,
+      timezone: config.timezone,
+    },
+  })
 
   // Emit await.registered event (wiring will handle storage)
   eventBus.publish({
@@ -67,23 +82,6 @@ export async function registerScheduleAwait(
     nextOccurrence,
     timeUntilNext,
   }
-}
-
-/**
- * Calculate next cron occurrence
- */
-function calculateNextCronOccurrence(
-  cron: string,
-  nextAfterHours?: number,
-  timezone?: string,
-): number {
-  // Simple cron parser - in production, use a proper library like 'cron-parser'
-  // For now, return a fixed future time
-  const baseTime = Date.now() + (nextAfterHours || 0) * 3600 * 1000
-
-  // TODO: Implement proper cron parsing with timezone support
-  // For now, add 24 hours as a placeholder
-  return baseTime + 24 * 3600 * 1000
 }
 
 /**

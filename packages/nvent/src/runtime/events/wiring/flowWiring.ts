@@ -1,7 +1,7 @@
 import type { EventRecord } from '../../adapters/interfaces/store'
 import type { AwaitRegisteredEvent, AwaitResolvedEvent } from '../types'
 import { getEventBus } from '../eventBus'
-import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useFunctionRegistry, useStreamTopics, useRuntimeConfig } from '#imports'
+import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useFunctionRegistry, useStreamTopics, useRuntimeConfig, useScheduler } from '#imports'
 import { createStallDetector } from '../utils/stallDetector'
 
 /**
@@ -518,7 +518,7 @@ export function createFlowWiring() {
     }
   }
 
-  function start() {
+  async function start() {
     if (wired) return
     wired = true
     const logger = useNventLogger('flow-wiring')
@@ -844,14 +844,45 @@ export function createFlowWiring() {
 
           try {
             if (store.indexUpdateWithRetry) {
+              const now = Date.now()
+
+              // Calculate timeoutAt based on await type and config
+              let timeoutAt: number | undefined
+
+              if (awaitType === 'time' && config.delay) {
+                // For time awaits: current time + delay
+                timeoutAt = now + config.delay
+              }
+              else if (awaitType === 'schedule' && config.nextOccurrence) {
+                // For schedule awaits: next cron occurrence
+                timeoutAt = config.nextOccurrence
+              }
+              else if (config.timeout) {
+                // Generic timeout config
+                timeoutAt = now + config.timeout
+              }
+
+              // If no specific timeout, use a default max await time (e.g., 24 hours)
+              if (!timeoutAt) {
+                timeoutAt = now + (24 * 60 * 60 * 1000) // 24 hours default
+              }
+
               await store.indexUpdateWithRetry(indexKey, runId, {
                 [`awaitingSteps.${stepName}.status`]: 'awaiting',
                 [`awaitingSteps.${stepName}.awaitType`]: awaitType,
                 [`awaitingSteps.${stepName}.position`]: position,
                 [`awaitingSteps.${stepName}.config`]: config,
+                [`awaitingSteps.${stepName}.registeredAt`]: now,
+                [`awaitingSteps.${stepName}.timeoutAt`]: timeoutAt,
               })
 
-              logger.info('Await registered in index', { runId, stepName, awaitType, position })
+              logger.info('Await registered in index', {
+                runId,
+                stepName,
+                awaitType,
+                position,
+                timeoutAt: new Date(timeoutAt).toISOString(),
+              })
             }
           }
           catch (err) {
@@ -1069,10 +1100,14 @@ export function createFlowWiring() {
                 await store.indexUpdateWithRetry(indexKey, runId, updateMetadata)
               }
 
+              // Use the actual status from updateMetadata (which includes timeout overrides)
+              // instead of analysis.status (which doesn't consider awaits)
+              const finalStatus = updateMetadata.status || analysis.status
+
               // If flow reached terminal state, publish terminal event to bus
               // The persistence handler will store it, and other plugins can react to it
-              if (analysis.status === 'completed' || analysis.status === 'failed') {
-                const eventType = analysis.status === 'completed' ? 'flow.completed' : 'flow.failed'
+              if (finalStatus === 'completed' || finalStatus === 'failed') {
+                const eventType = finalStatus === 'completed' ? 'flow.completed' : 'flow.failed'
 
                 // Check flow metadata to see if we already published a terminal event
                 // Re-read the index entry after update to get the current status
@@ -1173,26 +1208,93 @@ export function createFlowWiring() {
       unsubs.push(bus.onType(type, handleFlowStats))
     }
 
-    // Note: Await cleanup removed - await state is now stored in flow index metadata
-    // for historical tracking and doesn't need active cleanup
-
     // Initialize and start stall detector
     const config = useRuntimeConfig()
-    const flowConfig = (config as any).nvent.flows
+    const flowConfig = (config as any).nvent.flow || {}
     stallDetector = createStallDetector(store, flowConfig.stallDetection)
-    if (flowConfig.stallDetection.enabled) {
-      stallDetector.start()
-      logger.info('Stall detector started')
+    if (flowConfig.stallDetection?.enabled) {
+      await stallDetector.start()
+
+      // Schedule the periodic check job HERE in flowWiring (not in the class)
+      // This ensures the handler closure has the correct context
+      const scheduleConfig = stallDetector.getScheduleConfig()
+      if (scheduleConfig.enabled) {
+        try {
+          const scheduler = useScheduler()
+
+          logger.info('Scheduling periodic stall detector from flowWiring', {
+            checkInterval: `${scheduleConfig.interval / 1000}s`,
+          })
+
+          const jobId = await scheduler.schedule({
+            id: 'stall-detection',
+            name: 'Flow Stall Detection',
+            type: 'interval',
+            interval: scheduleConfig.interval,
+            handler: async () => {
+              // Guard: Check if detector still exists (shutdown scenario)
+              if (!stallDetector || !wired) {
+                logger.debug('Stall detector handler called but wiring stopped')
+                return
+              }
+
+              try {
+                logger.info('Stall detector running periodic check')
+                // Get flow names and call the detector's check method
+                const analyzedFlows = $useAnalyzedFlows() as any[]
+                const flowNames = analyzedFlows.map((f: any) => f.id).filter(Boolean)
+
+                if (flowNames.length > 0) {
+                  await stallDetector.checkFlowsForStalls(flowNames)
+                }
+              }
+              catch (error) {
+                logger.error('Stall detector periodic check failed', {
+                  error: (error as Error).message,
+                  stack: (error as Error).stack,
+                })
+                // Don't rethrow - let scheduler continue on next interval
+              }
+            },
+            metadata: {
+              component: 'stall-detector',
+              stallTimeout: scheduleConfig.stallTimeout,
+              checkInterval: scheduleConfig.interval,
+            },
+          })
+
+          stallDetector.setSchedulerJobId(jobId)
+          logger.info('Stall detector started and scheduled', { jobId })
+        }
+        catch (error) {
+          logger.error('Failed to schedule stall detector - periodic checks disabled', {
+            error: (error as Error).message,
+            stack: (error as Error).stack,
+          })
+          // Detector still runs startup recovery and lazy detection
+        }
+      }
+      else {
+        logger.info('Stall detector started (periodic check disabled)')
+      }
     }
   }
 
-  function stop() {
+  async function stop() {
     const logger = useNventLogger('flow-wiring')
 
-    // Stop stall detector first
+    // Stop stall detector first (async to properly unschedule)
     if (stallDetector) {
-      stallDetector.stop()
-      stallDetector = undefined
+      try {
+        await stallDetector.stop()
+        stallDetector = undefined
+        logger.debug('Stall detector stopped')
+      }
+      catch (error) {
+        logger.error('Error stopping stall detector', {
+          error: (error as Error).message,
+        })
+      }
     }
 
     for (const u of unsubs.splice(0)) {

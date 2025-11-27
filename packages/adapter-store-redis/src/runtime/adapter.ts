@@ -47,7 +47,7 @@ export class RedisStoreAdapter implements StoreAdapter {
       enableReadyCheck: false,
     })
 
-    this.prefix = options.prefix || 'nq'
+    this.prefix = options.prefix || 'nvent'
     this.streamOptions = options.streams || {}
 
     // Initialize KV store methods
@@ -654,7 +654,7 @@ export default defineNitroPlugin(async (nitroApp) => {
 
     const config = defu(moduleOptions, {
       connection,
-      prefix: nventConfig.store?.prefix || 'nq',
+      prefix: nventConfig.store?.prefix || 'nvent',
       streams: {
         trim: {
           maxLen: 10000,

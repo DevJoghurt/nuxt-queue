@@ -388,6 +388,7 @@ function updateTriggerStats(data: any) {
   triggers.value[triggerIndex] = {
     ...triggers.value[triggerIndex],
     stats,
+    status: metadata.status ?? triggers.value[triggerIndex].status,
     lastActivityAt: metadata.lastActivityAt ?? triggers.value[triggerIndex].lastActivityAt,
   }
 }

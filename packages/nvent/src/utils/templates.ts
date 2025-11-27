@@ -121,6 +121,8 @@ export function generateAnalyzedFlowsTemplate(registry: any): string {
       analyzed: {
         levels: analyzed.levels,
         maxLevel: analyzed.maxLevel,
+        stallTimeout: analyzed.stallTimeout,
+        awaitPatterns: analyzed.awaitPatterns,
         steps: analyzed.steps,
       },
     }

@@ -21,7 +21,7 @@ export default defineNuxtModule<ModuleOptions>({
       host: 'localhost',
       port: 6379,
     },
-    prefix: 'nq',
+    prefix: 'nvent',
   },
   setup(options, nuxt) {
     const { resolve } = createResolver(import.meta.url)

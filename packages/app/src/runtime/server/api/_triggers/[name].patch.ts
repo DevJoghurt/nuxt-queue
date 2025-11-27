@@ -76,7 +76,6 @@ export default defineEventHandler(async (event) => {
       updateOpts.schedule = {
         cron: body.config.cron !== undefined ? body.config.cron : existing.schedule?.cron,
         timezone: body.config.timezone !== undefined ? body.config.timezone : existing.schedule?.timezone,
-        enabled: body.config.enabled !== undefined ? body.config.enabled : existing.schedule?.enabled,
       }
       // Only add interval if it exists (it's not in the type definition but may be supported)
       if (body.config.interval !== undefined || (existing.schedule as any)?.interval !== undefined) {

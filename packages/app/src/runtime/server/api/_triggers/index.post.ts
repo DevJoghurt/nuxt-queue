@@ -101,7 +101,7 @@ export default defineEventHandler(async (event) => {
       triggerOpts.schedule = {
         cron: body.config.cron || undefined,
         interval: body.config.interval || undefined,
-        enabled: true,
+        timezone: body.config.timezone || 'UTC',
       }
       if (body.config.runImmediately) {
         triggerOpts.config = { runImmediately: true }

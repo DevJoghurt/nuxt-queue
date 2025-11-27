@@ -10,7 +10,7 @@ describe('memory store adapter', async () => {
 
   describe('event storage', () => {
     it('appends and reads events', async () => {
-      const subject = 'nq:test:events'
+      const subject = 'nvent:test:events'
       const event = {
         type: 'test.event',
         data: { message: 'hello' },

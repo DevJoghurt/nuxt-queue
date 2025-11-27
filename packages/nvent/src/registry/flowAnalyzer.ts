@@ -246,33 +246,58 @@ function findTriggeredSteps(
 }
 
 /**
- * Calculate flow-level stall timeout based on await patterns (additive)
+ * Calculate total timeout for a single step (awaitBefore + awaitAfter)
  */
-function calculateFlowStallTimeout(steps: Record<string, AnalyzedStep>): number {
+function getStepAwaitTimeout(step: AnalyzedStep): number {
+  let timeout = 0
+  if (step.awaitBefore?.timeout) timeout += step.awaitBefore.timeout
+  if (step.awaitAfter?.timeout) timeout += step.awaitAfter.timeout
+  return timeout
+}
+
+/**
+ * Calculate flow-level stall timeout based on await patterns
+ *
+ * Strategy:
+ * - Within same level (parallel): use MAX timeout
+ * - Across different levels (sequential): SUM timeouts
+ * - Add buffer for processing time
+ */
+function calculateFlowStallTimeout(steps: Record<string, AnalyzedStep>, levels: string[][]): number {
   const DEFAULT_STALL_TIMEOUT = 30 * 60 * 1000 // 30 minutes
   const MIN_BUFFER = 5 * 60 * 1000 // 5 minutes
   const BUFFER_PERCENTAGE = 0.1 // 10%
 
-  let totalAwaitTimeout = 0
+  // Calculate max await timeout per level
+  const levelTimeouts: number[] = []
   let awaitCount = 0
 
-  // Sum ALL await timeouts (additive)
-  // A flow may wait multiple times during execution
-  for (const step of Object.values(steps)) {
-    if (step.awaitBefore?.timeout) {
-      totalAwaitTimeout += step.awaitBefore.timeout
-      awaitCount++
+  for (const levelSteps of levels) {
+    let maxLevelTimeout = 0
+
+    for (const stepName of levelSteps) {
+      const step = steps[stepName]
+      if (!step) continue
+
+      const stepTimeout = getStepAwaitTimeout(step)
+      if (stepTimeout > 0) {
+        awaitCount++
+        maxLevelTimeout = Math.max(maxLevelTimeout, stepTimeout)
+      }
     }
-    if (step.awaitAfter?.timeout) {
-      totalAwaitTimeout += step.awaitAfter.timeout
-      awaitCount++
+
+    if (maxLevelTimeout > 0) {
+      levelTimeouts.push(maxLevelTimeout)
     }
   }
 
   // No awaits? Use default
-  if (totalAwaitTimeout === 0) {
+  if (levelTimeouts.length === 0) {
     return DEFAULT_STALL_TIMEOUT
   }
+
+  // Sum across levels (sequential execution)
+  const totalAwaitTimeout = levelTimeouts.reduce((sum, timeout) => sum + timeout, 0)
 
   // Calculate timeout with buffer
   // Add 10% buffer or 5 minutes (whichever is larger) for processing time
@@ -282,9 +307,9 @@ function calculateFlowStallTimeout(steps: Record<string, AnalyzedStep>): number 
   // Log if significantly different from default
   if (calculatedTimeout > DEFAULT_STALL_TIMEOUT * 2) {
     console.log(
-      `[flow-analyzer] Flow has ${awaitCount} await patterns, `
+      `[flow-analyzer] Flow has ${awaitCount} await patterns across ${levelTimeouts.length} levels, `
       + `calculated stall timeout: ${calculatedTimeout / 1000}s `
-      + `(total await time: ${totalAwaitTimeout / 1000}s)`,
+      + `(total await time: ${totalAwaitTimeout / 1000}s, level timeouts: [${levelTimeouts.map(t => `${t / 1000}s`).join(', ')}])`,
     )
   }
 
@@ -329,8 +354,8 @@ export function analyzeFlow(flow: FlowMeta): AnalyzedFlow {
     }
   }
 
-  // Calculate stall timeout based on await patterns
-  const stallTimeout = calculateFlowStallTimeout(analyzedSteps)
+  // Calculate stall timeout based on await patterns (needs levelGroups)
+  const stallTimeout = calculateFlowStallTimeout(analyzedSteps, levelGroups)
 
   // Generate flow-level await summary
   const awaitSteps = Object.values(analyzedSteps).filter(s => s.hasAwaitPattern)

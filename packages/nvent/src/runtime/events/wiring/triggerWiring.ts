@@ -4,6 +4,7 @@ import type { TriggerEntry, TriggerSubscription } from '../../../registry/types'
 import { getEventBus } from '../eventBus'
 import { useTrigger, useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useFunctionRegistry, useStreamTopics } from '#imports'
 import { getTriggerRuntime } from '../utils/triggerRuntime'
+import { scheduleTrigger, unscheduleTrigger } from '../utils/scheduleTrigger'
 
 /**
  * Create trigger event wiring
@@ -150,6 +151,11 @@ export function createTriggerWiring() {
           runtime.addTrigger(triggerName, entry)
 
           logger.info('Registered trigger in index', { triggerName })
+
+          // If this is a schedule trigger, create the scheduler job
+          if (data.type === 'schedule' && data.schedule) {
+            await scheduleTrigger(triggerName, data.schedule, data.status || 'active')
+          }
         }
 
         // For trigger.updated, update index AND runtime
@@ -184,6 +190,11 @@ export function createTriggerWiring() {
               lastActivityAt: now,
             }
             runtime.addTrigger(triggerName, updated)
+
+            // If schedule trigger, update the scheduler job (config or status change)
+            if (updated.type === 'schedule' && updated.schedule) {
+              await scheduleTrigger(triggerName, updated.schedule, updated.status)
+            }
           }
 
           logger.info('Updated trigger in index and runtime', { triggerName, status: data.status })
@@ -261,6 +272,10 @@ export function createTriggerWiring() {
 
         // For trigger.deleted, remove all data
         if (e.type === 'trigger.deleted') {
+          // Check if this was a schedule trigger BEFORE removing from runtime
+          const triggerEntry = runtime.getTrigger(triggerName)
+          const wasScheduleTrigger = triggerEntry?.type === 'schedule'
+
           // Remove from index
           if (store.indexDelete) {
             await store.indexDelete(indexKey, triggerName)
@@ -274,6 +289,11 @@ export function createTriggerWiring() {
 
           // Remove from runtime
           runtime.removeTrigger(triggerName)
+
+          // If this was a schedule trigger, unschedule it
+          if (wasScheduleTrigger) {
+            await unscheduleTrigger(triggerName)
+          }
 
           logger.info('Trigger deleted completely', { triggerName })
         }
@@ -324,16 +344,18 @@ export function createTriggerWiring() {
 
         // Publish stats update event to internal bus so streamWiring can send it to clients
         try {
-          const indexEntry = await store.indexGet(indexKey, triggerName)
-          if (indexEntry) {
-            await eventBus.publish({
-              type: 'trigger.stats.updated',
-              triggerName,
-              id: indexEntry.id,
-              metadata: indexEntry.metadata,
-              ts: Date.now(),
-            } as any)
-            logger.debug('Published trigger stats update event to bus', { triggerName })
+          if (store.indexGet) {
+            const indexEntry = await store.indexGet(indexKey, triggerName)
+            if (indexEntry) {
+              await eventBus.publish({
+                type: 'trigger.stats.updated',
+                triggerName,
+                id: indexEntry.id,
+                metadata: indexEntry.metadata,
+                ts: Date.now(),
+              } as any)
+              logger.debug('Published trigger stats update event to bus', { triggerName })
+            }
           }
         }
         catch (err) {

@@ -54,6 +54,7 @@
             <USelectMenu
               v-model="intervalUnit"
               :items="intervalUnitOptions"
+              value-key="value"
               class="w-32"
             />
           </div>
@@ -173,18 +174,7 @@
         </USelectMenu>
       </UFormField>
 
-      <!-- Enabled Toggle -->
-      <UFormField
-        label="Status"
-        name="enabled"
-      >
-        <ClientOnly>
-          <UCheckbox
-            v-model="config.enabled"
-            label="Schedule is enabled"
-          />
-        </ClientOnly>
-      </UFormField>
+
     </UForm>
   </component>
 </template>
@@ -203,7 +193,6 @@ const config = defineModel<{
   cron?: string
   interval?: number
   timezone: string
-  enabled: boolean
 }>({ required: true })
 
 // Schedule type (interval, preset, or cron)
@@ -300,6 +289,36 @@ else if (config.value.interval) {
     intervalUnit.value = 'seconds'
   }
 }
+else {
+  // Initialize with default interval (5 minutes = 300 seconds)
+  scheduleType.value = 'interval'
+  intervalValue.value = 5
+  intervalUnit.value = 'minutes'
+  config.value.interval = 300
+  config.value.cron = undefined
+}
+
+// Watch unit changes to convert the displayed value
+watch(intervalUnit, (newUnit, oldUnit) => {
+  if (scheduleType.value === 'interval' && oldUnit && newUnit !== oldUnit) {
+    const multipliers = {
+      seconds: 1,
+      minutes: 60,
+      hours: 3600,
+      days: 86400,
+    }
+    
+    const oldMultiplier = multipliers[oldUnit as keyof typeof multipliers] || 1
+    const newMultiplier = multipliers[newUnit as keyof typeof multipliers] || 1
+
+    // Convert the current value to the new unit
+    const currentSeconds = Number(intervalValue.value) * oldMultiplier
+    const newValue = currentSeconds / newMultiplier
+    
+    // Round to 2 decimal places for display, but ensure minimum of 1
+    intervalValue.value = Math.max(1, Math.round(newValue * 100) / 100)
+  }
+})
 
 // Update config when interval changes
 watch([intervalValue, intervalUnit], () => {
@@ -311,10 +330,12 @@ watch([intervalValue, intervalUnit], () => {
       days: 86400,
     }[intervalUnit.value] || 1
 
-    config.value.interval = intervalValue.value * multiplier
+    // Ensure intervalValue is a number
+    const numValue = Number(intervalValue.value) || 1
+    config.value.interval = numValue * multiplier
     config.value.cron = undefined
   }
-})
+}, { immediate: false })
 
 // Update config when preset changes
 watch(selectedPreset, (newPreset) => {
@@ -410,7 +431,6 @@ const schema = z.object({
   cron: z.string().optional(),
   interval: z.number().min(1, 'Interval must be at least 1 second').optional(),
   timezone: z.string().min(1, 'Timezone is required'),
-  enabled: z.boolean(),
   scheduleType: z.enum(['interval', 'preset', 'cron']).optional(),
   preset: z.string().optional(),
 }).refine(

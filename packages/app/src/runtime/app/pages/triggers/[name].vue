@@ -408,25 +408,26 @@
                 Schedule Configuration
               </h3>
               <div class="space-y-2 text-sm">
-                <div class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
-                  <span class="text-gray-500 dark:text-gray-400">Cron</span>
+                <div
+                  v-if="trigger.schedule.cron"
+                  class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
+                >
+                  <span class="text-gray-500 dark:text-gray-400">Cron Expression</span>
                   <span class="font-mono text-gray-900 dark:text-gray-100">{{ trigger.schedule.cron }}</span>
                 </div>
                 <div
-                  v-if="trigger.schedule.timezone"
+                  v-if="trigger.schedule.interval"
                   class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
+                >
+                  <span class="text-gray-500 dark:text-gray-400">Interval</span>
+                  <span class="text-gray-900 dark:text-gray-100">{{ formatInterval(trigger.schedule.interval) }}</span>
+                </div>
+                <div
+                  v-if="trigger.schedule.timezone"
+                  class="flex items-center justify-between py-2"
                 >
                   <span class="text-gray-500 dark:text-gray-400">Timezone</span>
                   <span class="text-gray-900 dark:text-gray-100">{{ trigger.schedule.timezone }}</span>
-                </div>
-                <div class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
-                  <span class="text-gray-500 dark:text-gray-400">Enabled</span>
-                  <UBadge
-                    :label="trigger.schedule.enabled ? 'Yes' : 'No'"
-                    :color="trigger.schedule.enabled ? 'success' : 'neutral'"
-                    variant="subtle"
-                    size="xs"
-                  />
                 </div>
               </div>
             </div>
@@ -542,7 +543,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted, watch } from '#imports'
+import { ref, computed, onUnmounted, watch, onMounted } from '#imports'
 import { UButton, UIcon, UBadge, USelectMenu, UTabs } from '#components'
 import { useTrigger, useTriggerEvents, type TriggerEvent } from '../../composables/useTrigger'
 import { useComponentRouter } from '../../composables/useComponentRouter'
@@ -554,10 +555,10 @@ const componentRouter = useComponentRouter()
 const router = useRouter()
 const route = useRoute()
 
+// Use component router's route params - already decoded
 const triggerName = computed(() => {
-  const path = componentRouter.route.value?.path || ''
-  const match = path.match(/\/triggers\/([^/]+)/)
-  return match && match[1] ? decodeURIComponent(match[1]) : null
+  const name = componentRouter.route.value?.params?.name
+  return name || null
 })
 
 // Fetch trigger data (initial load only, WebSocket handles updates)
@@ -621,21 +622,34 @@ const { events: fetchedEvents, refresh: refreshEvents, status: eventsStatus } = 
 const liveEvents = ref<TriggerEvent[]>([])
 const { connected: isConnected, reconnecting: isReconnecting, subscribe, unsubscribe, subscribeStats, unsubscribeStats } = useTriggerWebSocket()
 
-// Subscribe to trigger events when triggerName changes (client-side only)
-watch([triggerName], () => {
-  // Skip on server
-  if (import.meta.server) return
-  
-  if (!triggerName.value) {
-    unsubscribe()
-    unsubscribeStats()
-    liveEvents.value = []
-    return
-  }
+// Store pending stats updates to apply when trigger loads
+const pendingStatsUpdate = ref<any>(null)
 
+// Watch for trigger to load and apply pending stats
+watch(trigger, (newTrigger) => {
+  if (newTrigger && pendingStatsUpdate.value) {
+    const metadata = pendingStatsUpdate.value.metadata
+    if (metadata) {
+      trigger.value = {
+        ...newTrigger,
+        stats: {
+          totalFires: metadata.stats?.totalFires || metadata.totalFires || metadata['stats.totalFires'] || newTrigger.stats.totalFires || 0,
+          totalFlowsStarted: metadata.stats?.totalFlowsStarted || metadata.totalFlowsStarted || metadata['stats.totalFlowsStarted'] || newTrigger.stats.totalFlowsStarted || 0,
+          activeSubscribers: metadata.stats?.activeSubscribers || metadata.activeSubscribers || metadata['stats.activeSubscribers'] || newTrigger.stats.activeSubscribers || 0,
+          lastFiredAt: metadata.stats?.lastFiredAt || metadata.lastFiredAt || metadata['stats.lastFiredAt'] || newTrigger.stats.lastFiredAt,
+        },
+        lastActivityAt: metadata.lastActivityAt || newTrigger.lastActivityAt,
+      }
+      pendingStatsUpdate.value = null
+    }
+  }
+})
+
+// Helper function to setup subscriptions for a trigger
+function setupSubscriptions(newName: string) {
   // Subscribe to trigger events
   subscribe({
-    triggerName: triggerName.value,
+    triggerName: newName,
     onEvent: (event: any) => {
       // Add new event to the beginning of the array
       liveEvents.value = [event, ...liveEvents.value].slice(0, 50) // Keep last 50 live events
@@ -649,8 +663,8 @@ watch([triggerName], () => {
   // Subscribe to trigger stats updates
   subscribeStats({
     onInitial: (data: any) => {
-      // Initial stats load
-      if (!trigger.value || data.id !== triggerName.value) {
+      // Initial stats load - check trigger name match first
+      if (data.id !== newName) {
         return
       }
       
@@ -659,6 +673,13 @@ watch([triggerName], () => {
         return
       }
 
+      // If trigger not loaded yet, store for later
+      if (!trigger.value) {
+        pendingStatsUpdate.value = data
+        return
+      }
+
+      // Update trigger with initial stats
       // Update trigger with initial stats - create new object for Vue reactivity
       trigger.value = {
         ...trigger.value,
@@ -672,21 +693,23 @@ watch([triggerName], () => {
       }
     },
     onUpdate: (data: any) => {
-      // Update trigger stats in real-time
-      if (!trigger.value) {
+      // Check trigger name match first
+      if (data.id !== newName) {
         return
       }
       
-      if (data.id !== triggerName.value) {
+      // Wait for trigger to load if not yet available
+      if (!trigger.value) {
+        pendingStatsUpdate.value = data
         return
       }
       
       const metadata = data?.metadata
       if (!metadata) {
-        console.warn('[Trigger Detail] No metadata in stats update')
         return
       }
 
+      // Update trigger stats
       // Update trigger stats - must create new object for Vue reactivity
       trigger.value = {
         ...trigger.value,
@@ -700,7 +723,17 @@ watch([triggerName], () => {
       }
     },
   })
-}, { immediate: true })
+}
+
+// Subscribe to trigger events when component mounts (client-side only)
+// Component remounts on navigation, so we only need to subscribe once per mount
+onMounted(() => {
+  if (import.meta.server) return
+  
+  if (triggerName.value) {
+    setupSubscriptions(triggerName.value)
+  }
+})
 
 // Cleanup on unmount
 onUnmounted(() => {
@@ -905,5 +938,34 @@ const copyToClipboard = async (text: string) => {
   catch (err) {
     console.error('Failed to copy:', err)
   }
+}
+
+const formatInterval = (seconds: number): string => {
+  const units = [
+    { value: 86400, label: 'day', pluralLabel: 'days' },
+    { value: 3600, label: 'hour', pluralLabel: 'hours' },
+    { value: 60, label: 'minute', pluralLabel: 'minutes' },
+    { value: 1, label: 'second', pluralLabel: 'seconds' },
+  ]
+
+  for (const unit of units) {
+    if (seconds >= unit.value && seconds % unit.value === 0) {
+      const count = seconds / unit.value
+      const label = count === 1 ? unit.label : unit.pluralLabel
+      return `Every ${count} ${label}`
+    }
+  }
+
+  // Fallback for non-exact matches (e.g., 90 seconds)
+  if (seconds >= 60) {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    if (remainingSeconds === 0) {
+      return `Every ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
+    }
+    return `Every ${minutes}m ${remainingSeconds}s`
+  }
+
+  return `Every ${seconds} ${seconds === 1 ? 'second' : 'seconds'}`
 }
 </script>

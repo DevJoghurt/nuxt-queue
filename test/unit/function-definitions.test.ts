@@ -17,7 +17,7 @@ describe('defineFunctionConfig', () => {
     const config = defineFunctionConfig({
       queue: {
         name: 'test-queue',
-        prefix: 'nq',
+        prefix: 'nvent',
         defaultJobOptions: {
           attempts: 3,
           delay: 1000,
@@ -26,7 +26,7 @@ describe('defineFunctionConfig', () => {
     })
 
     expect(config.queue?.name).toBe('test-queue')
-    expect(config.queue?.prefix).toBe('nq')
+    expect(config.queue?.prefix).toBe('nvent')
     expect(config.queue?.defaultJobOptions?.attempts).toBe(3)
     expect(config.queue?.defaultJobOptions?.delay).toBe(1000)
   })

@@ -154,8 +154,9 @@ export class RedisStreamAdapter implements StreamAdapter {
   }
 
   private getChannelName(topic: string): string {
-    const prefix = this.options.prefix || 'nq'
-    return `${prefix}:stream:${topic}`
+    // Topic already includes full prefix from useStreamTopics
+    // e.g., 'nvent:stream:flow:events:123'
+    return topic
   }
 
   async init(): Promise<void> {
@@ -203,16 +204,13 @@ export class RedisStreamAdapter implements StreamAdapter {
       await this.redis.connect()
     }
 
-    const prefix = this.options.prefix || 'nq'
+    const prefix = this.options.prefix || 'nvent'
     const pattern = `${prefix}:stream:*`
 
     // Use PUBSUB CHANNELS to list active channels
     const channels = await this.redis.pubsub('CHANNELS', pattern) as string[]
-    // Strip prefix to get topic names
-    const topicPrefix = `${prefix}:stream:`
-    return channels
-      .filter(ch => ch.startsWith(topicPrefix))
-      .map(ch => ch.substring(topicPrefix.length))
+    // Return full channel names (topics include prefix from useStreamTopics)
+    return channels.filter(ch => ch.startsWith(`${prefix}:stream:`))
   }
 
   async getSubscriptionCount(topic: string): Promise<number> {
@@ -262,7 +260,7 @@ export default defineNitroPlugin(async (nitroApp) => {
 
     const config = defu(moduleOptions, {
       connection,
-      prefix: nventConfig.stream?.prefix || 'nq',
+      prefix: nventConfig.stream?.prefix || 'nvent',
     })
 
     // Create and register adapter

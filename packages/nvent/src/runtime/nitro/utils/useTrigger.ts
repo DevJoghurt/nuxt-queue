@@ -287,44 +287,44 @@ export function useTrigger() {
         for (const entry of entries) {
           const metadata = entry.metadata as any
 
-          // Only load active triggers into runtime
+          // Load all triggers into runtime (active and inactive for visibility)
+          const triggerEntry: TriggerEntry = {
+            name: metadata.name,
+            type: metadata.type,
+            scope: metadata.scope,
+            status: metadata.status || 'active',
+            displayName: metadata.displayName,
+            description: metadata.description,
+            source: metadata.source,
+            registeredAt: metadata.registeredAt,
+            registeredBy: metadata.registeredBy,
+            lastActivityAt: metadata.lastActivityAt,
+            subscriptions: metadata.subscriptions || {},
+            stats: metadata.stats || { totalFires: 0, activeSubscribers: 0 },
+            webhook: metadata.webhook,
+            schedule: metadata.schedule,
+            config: metadata.config,
+            version: metadata.version || 1,
+          }
+
+          runtime.addTrigger(entry.id, triggerEntry)
           if (metadata.status === 'active') {
-            const triggerEntry: TriggerEntry = {
-              name: metadata.name,
-              type: metadata.type,
-              scope: metadata.scope,
-              status: metadata.status,
-              displayName: metadata.displayName,
-              description: metadata.description,
-              source: metadata.source,
-              registeredAt: metadata.registeredAt,
-              registeredBy: metadata.registeredBy,
-              lastActivityAt: metadata.lastActivityAt,
-              subscriptions: metadata.subscriptions || {},
-              stats: metadata.stats || { totalFires: 0, activeSubscribers: 0 },
-              webhook: metadata.webhook,
-              schedule: metadata.schedule,
-              config: metadata.config,
-              version: metadata.version || 1,
-            }
-
-            runtime.addTrigger(entry.id, triggerEntry)
             activeCount++
+          }
 
-            // Load embedded subscriptions
-            if (metadata.subscriptions) {
-              for (const [flowName, subData] of Object.entries(metadata.subscriptions)) {
-                const subscription: TriggerSubscription = {
-                  triggerName: entry.id,
-                  flowName,
-                  mode: (subData as any).mode || 'auto',
-                  source: 'programmatic',
-                  registeredAt: (subData as any).subscribedAt,
-                }
-
-                runtime.addSubscription(entry.id, flowName, subscription)
-                totalSubscriptions++
+          // Load embedded subscriptions
+          if (metadata.subscriptions) {
+            for (const [flowName, subData] of Object.entries(metadata.subscriptions)) {
+              const subscription: TriggerSubscription = {
+                triggerName: entry.id,
+                flowName,
+                mode: (subData as any).mode || 'auto',
+                source: 'programmatic',
+                registeredAt: (subData as any).subscribedAt,
               }
+
+              runtime.addSubscription(entry.id, flowName, subscription)
+              totalSubscriptions++
             }
           }
         }

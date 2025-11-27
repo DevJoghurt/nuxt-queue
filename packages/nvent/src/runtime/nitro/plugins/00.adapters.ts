@@ -11,7 +11,7 @@
  * External adapters can register themselves via the nvent:registerAdapter Nitro hook
  */
 
-import { defineNitroPlugin, useRuntimeConfig, useNventLogger, setAdapters } from '#imports'
+import { defineNitroPlugin, useRuntimeConfig, useNventLogger, setAdapters, initializeScheduler, shutdownScheduler } from '#imports'
 import { createAdapters, shutdownAdapters } from '../../adapters/factory'
 import { useAdapterRegistry } from '../../adapters/registry'
 import type { ModuleConfig } from '../../config/types'
@@ -63,6 +63,10 @@ export default defineNitroPlugin(async (nitroApp) => {
       storeAdapter: config.store.adapter,
     })
 
+    // Initialize scheduler with store adapter
+    await initializeScheduler(adapters.store)
+    logger.info('Scheduler initialized')
+
     // Initialize flow wiring BEFORE notifying other plugins
     // This ensures wirings are listening when plugins publish events
     const wiring = createWiringRegistry({
@@ -74,7 +78,7 @@ export default defineNitroPlugin(async (nitroApp) => {
         // Can be overridden here if needed
       },
     })
-    wiring.start()
+    await wiring.start()
     logger.info('Flow wiring started')
 
     // Notify other plugins that adapters (and wirings) are ready
@@ -85,9 +89,13 @@ export default defineNitroPlugin(async (nitroApp) => {
         close: async () => {
           logger.info('Shutting down')
           try {
-            // Stop wiring first
-            wiring.stop()
+            // Stop wiring first (async to properly cleanup stall detector)
+            await wiring.stop()
             logger.info('Flow wiring stopped')
+
+            // Shutdown scheduler
+            await shutdownScheduler()
+            logger.info('Scheduler shut down')
 
             // Then shutdown adapters
             await shutdownAdapters(adapters)

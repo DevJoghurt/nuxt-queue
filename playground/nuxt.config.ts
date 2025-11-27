@@ -44,7 +44,7 @@ export default defineNuxtConfig({
     queue: {
       adapter: 'file', // Use file for development (change to 'redis' for production)
       // redis connection inherited from connections.redis
-      prefix: 'nq',
+      prefix: 'nvent',
       defaultJobOptions: {
         attempts: 3,
         backoff: {
@@ -67,14 +67,14 @@ export default defineNuxtConfig({
     // Stream adapter configuration
     stream: {
       adapter: 'memory', // Use memory for single-instance dev
-      prefix: 'nq',
+      prefix: 'nvent',
     },
 
     // Store adapter configuration
     store: {
       adapter: 'file', // Use file for development (change to 'redis' for production)
       // file.dataDir inherited from connections.file → becomes '.data/store'
-      prefix: 'nq',
+      prefix: 'nvent',
       state: {
         autoScope: 'always',
         cleanup: {
@@ -83,6 +83,13 @@ export default defineNuxtConfig({
       },
       eventTTL: 604800, // 7 days
       metadataTTL: 2592000, // 30 days
+    },
+    flow: {
+      stallDetection: {
+        enabled: true,
+        checkInterval: 15 * 60 * 1000, // 15 minutes
+        enablePeriodicCheck: true,
+      },
     },
   },
 })

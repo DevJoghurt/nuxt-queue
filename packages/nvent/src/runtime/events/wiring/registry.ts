@@ -4,8 +4,8 @@ import { createStateWiring } from './stateWiring'
 import { createTriggerWiring } from './triggerWiring'
 
 export interface Wiring {
-  start(): void
-  stop(): void
+  start(): void | Promise<void>
+  stop(): void | Promise<void>
 }
 
 export interface WiringRegistryOptions {
@@ -42,15 +42,15 @@ export function createWiringRegistry(opts?: WiringRegistryOptions): Wiring {
   ]
   let started = false
   return {
-    start() {
+    async start() {
       if (started) return
       started = true
-      for (const w of wirings) w.start()
+      for (const w of wirings) await w.start()
     },
-    stop() {
+    async stop() {
       for (const w of wirings) {
         try {
-          w.stop()
+          await w.stop()
         }
         catch {
           // ignore

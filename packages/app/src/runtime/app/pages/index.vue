@@ -5,7 +5,7 @@
     base="p"
     mode="query"
   >
-    <NventComponentShell
+      <NventComponentShell
       orientation="horizontal"
       :items="navItems"
     >
@@ -26,15 +26,30 @@ import Triggers from './triggers/index.vue'
 import TriggerDetail from './triggers/[name].vue'
 import TriggerNew from './triggers/new.vue'
 import TriggerEdit from './triggers/[name]/edit.vue'
+import SettingsScheduler from './settings/scheduler.vue'
 
-const navItems = [
+const navItems: NavigationMenuItem[][] = [
   [
-    { label: 'Dashboard', icon: 'i-lucide-layout-dashboard', path: '/' },
-    { label: 'Queues', icon: 'i-lucide-app-window', path: '/queues' },
-    { label: 'Flows', icon: 'i-lucide-git-branch', path: '/flows' },
-    { label: 'Triggers', icon: 'i-lucide-zap', path: '/triggers' },
+    { label: 'Dashboard', icon: 'i-lucide-layout-dashboard', path: '/' } as any,
+    { label: 'Queues', icon: 'i-lucide-app-window', path: '/queues' } as any,
+    { label: 'Flows', icon: 'i-lucide-git-branch', path: '/flows' } as any,
+    { label: 'Triggers', icon: 'i-lucide-zap', path: '/triggers' } as any,
   ],
-] as (NavigationMenuItem & { path?: string })[][]
+  [
+    {
+      label: 'Settings',
+      icon: 'i-lucide-settings',
+      children: [
+        {
+          label: 'Scheduler',
+          description: 'Monitor scheduled jobs and their execution',
+          icon: 'i-lucide-clock',
+          path: '/settings/scheduler',
+        } as any,
+      ],
+    } as any,
+  ],
+]
 
 const routes = {
   '/': Dashboard,
@@ -47,6 +62,7 @@ const routes = {
   '/triggers/new': TriggerNew,
   '/triggers/:name/edit': TriggerEdit,
   '/triggers/:name': TriggerDetail,
+  '/settings/scheduler': SettingsScheduler,
 }
 
 // Consumer mode: read the current router context from inside this page

@@ -113,6 +113,19 @@ export function getServerImports(resolverFn: (path: string) => string, buildDir:
       name: 'useFlow',
       from: resolverFn('./runtime/nitro/utils/useFlow'),
     },
+    // Scheduler
+    {
+      name: 'useScheduler',
+      from: resolverFn('./runtime/scheduler'),
+    },
+    {
+      name: 'initializeScheduler',
+      from: resolverFn('./runtime/scheduler'),
+    },
+    {
+      name: 'shutdownScheduler',
+      from: resolverFn('./runtime/scheduler'),
+    },
     // Adapter registration utilities for external modules
     {
       name: 'registerQueueAdapter',

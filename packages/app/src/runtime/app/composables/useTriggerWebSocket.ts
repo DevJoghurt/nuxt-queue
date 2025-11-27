@@ -457,6 +457,7 @@ export function useTriggerWebSocket() {
       })
     }
     currentStatsSubscription = null
+    isStatsSubscribed = false // Reset subscription state immediately
   }
 
   onBeforeUnmount(() => {

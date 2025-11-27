@@ -406,7 +406,7 @@ export interface ModuleOptions {
    * Flow-specific configuration
    * @since v0.4.1
    */
-  flows?: FlowConfig
+  flow?: FlowConfig
 
   /**
    * Webhooks configuration
@@ -430,7 +430,7 @@ export interface ModuleConfig {
   queue: Required<QueueConfig>
   stream: Required<StreamConfig>
   store: Required<StoreConfig>
-  flows: Required<FlowConfig>
+  flow: Required<FlowConfig>
   webhooks: Required<WebhooksConfig>
   connections: Required<ConnectionsConfig>
   rootDir?: string

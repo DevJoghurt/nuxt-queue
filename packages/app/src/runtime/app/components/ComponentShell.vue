@@ -3,66 +3,29 @@
     <!-- Layout container switches between column (horizontal nav top) and row (vertical nav left) -->
     <div
       :class="
-        orientation === 'vertical' ? 'flex h-full' : 'flex flex-col'"
+        orientation === 'vertical' ? 'flex h-full' : 'flex flex-col w-full'"
       style="height: calc(100vh - 4rem)"
     >
-      <!-- Navigation area -->
+      <!-- Navigation using UNavigationMenu -->
       <div
         :class="[
           'border-gray-200',
           orientation === 'vertical'
             ? 'min-w-[256px] border-r'
-            : 'border-b px-4 py-2',
+            : 'border-b',
         ]"
       >
-        <!-- Custom navigation wired via composable router -->
-        <nav
-          :class="
-            orientation === 'vertical'
-              ? 'flex flex-col gap-1'
-              : 'flex items-center gap-4'
-          "
-        >
-          <template
-            v-for="(group, gi) in items"
-            :key="gi"
-          >
-            <div
-              :class="
-                orientation === 'vertical'
-                  ? 'flex flex-col gap-1 px-2 py-2'
-                  : 'flex flex-1 items-center gap-2'
-              "
-            >
-              <button
-                v-for="(it, ii) in group"
-                :key="ii"
-                type="button"
-                :class="[
-                  'cursor-pointer rounded-md hover:bg-gray-100',
-                  orientation === 'vertical'
-                    ? 'px-2 py-1 text-left'
-                    : 'px-1 py-1',
-                  isActive(it) ? 'text-primary-600' : 'hover:text-gray-900',
-                ]"
-                @click="onItemClick(it)"
-              >
-                <span class="inline-flex items-center gap-2">
-                  <UIcon
-                    v-if="it.icon"
-                    :name="it.icon"
-                  />
-                  <span>{{ it.label }}</span>
-                </span>
-              </button>
-            </div>
-          </template>
-        </nav>
+        <UNavigationMenu
+          :items="navigationItems"
+          :orientation="orientation"
+          content-orientation="vertical"
+          :class="orientation === 'horizontal' ? 'px-4' : ''"
+        />
       </div>
 
       <!-- Main Content -->
       <div
-        :class="orientation === 'vertical' ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-hidden'"
+        class="flex-1 min-h-0 overflow-hidden"
       >
         <slot />
       </div>
@@ -71,13 +34,14 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useComponentRouter } from '#imports'
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 const props = withDefaults(
   defineProps<{
     orientation?: 'horizontal' | 'vertical'
-    items?: (NavigationMenuItem & { path?: string })[][]
+    items?: NavigationMenuItem[][]
     activeMatch?: 'exact' | 'prefix'
   }>(),
   {
@@ -88,17 +52,54 @@ const props = withDefaults(
 
 const router = useComponentRouter()
 
-function onItemClick(it: NavigationMenuItem & { path?: string }) {
-  if (it.path) {
-    router.push(it.path)
-  }
-}
+// Transform items to include onSelect handlers for routing and active state
+const navigationItems = computed(() => {
+  if (!props.items) return []
 
-function isActive(it: NavigationMenuItem & { path?: string }) {
-  if (!it.path) return false
+  const transformItem = (item: any): any => {
+    const path = (item as any).path
+    const transformed: any = {
+      ...item,
+      onSelect: (e: Event) => {
+        e.preventDefault()
+        if (path) {
+          router.push(path)
+        }
+        // Call original onSelect if provided
+        if (item.onSelect) {
+          item.onSelect(e)
+        }
+      },
+      active: path ? isActive(path) : item.active,
+    }
+
+    // Handle children recursively
+    if (item.children) {
+      // Check if children is an array of arrays or a flat array
+      if (Array.isArray(item.children[0]) && Array.isArray(item.children[0][0])) {
+        // Children is array of arrays
+        transformed.children = item.children.map((childGroup: any[]) =>
+          childGroup.map(transformItem),
+        )
+      } else {
+        // Children is a flat array
+        transformed.children = item.children.map(transformItem)
+      }
+    }
+
+    return transformed
+  }
+
+  return props.items.map(group =>
+    group.map(transformItem),
+  )
+})
+
+function isActive(path: string) {
+  if (!path) return false
   const current = router.route?.value?.path || ''
-  if (props.activeMatch === 'prefix') return isPrefixActive(current, it.path)
-  return current === it.path
+  if (props.activeMatch === 'prefix') return isPrefixActive(current, path)
+  return current === path
 }
 
 function isPrefixActive(current: string, base: string) {

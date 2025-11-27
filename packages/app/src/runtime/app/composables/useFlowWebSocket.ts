@@ -470,6 +470,7 @@ export function useFlowWebSocket() {
       })
     }
     currentStatsSubscription = null
+    isStatsSubscribed = false // Reset subscription state immediately
   }
 
   onBeforeUnmount(() => {

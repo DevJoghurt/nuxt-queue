@@ -15,7 +15,7 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
     connections: {},
     queue: {
       adapter: 'file',
-      prefix: 'nq',
+      prefix: 'nvent',
       defaultJobOptions: {},
       worker: {
         concurrency: 2,
@@ -25,11 +25,11 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
     },
     stream: {
       adapter: 'memory',
-      prefix: 'nq',
+      prefix: 'nvent',
     },
     store: {
       adapter: 'file',
-      prefix: 'nq',
+      prefix: 'nvent',
       state: {
         autoScope: 'always',
         cleanup: {
@@ -40,7 +40,7 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
       eventTTL: 604800, // 7 days
       metadataTTL: 2592000, // 30 days
     },
-    flows: {
+    flow: {
       stallDetection: {
         enabled: true,
         stallTimeout: 30 * 60 * 1000, // 30 minutes
@@ -196,7 +196,7 @@ export function toRuntimeConfig(normalizedOptions: Required<ModuleOptions>): Mod
     stream: normalizedOptions.stream as Required<typeof normalizedOptions.stream>,
     store: normalizedOptions.store as Required<typeof normalizedOptions.store>,
     connections: normalizedOptions.connections as Required<typeof normalizedOptions.connections>,
-    flows: normalizedOptions.flows as Required<typeof normalizedOptions.flows>,
+    flow: normalizedOptions.flow as Required<typeof normalizedOptions.flow>,
     webhooks: normalizedOptions.webhooks as Required<typeof normalizedOptions.webhooks>,
   }
 }

@@ -29,7 +29,7 @@ export default defineNuxtModule<ModuleOptions>({
       host: 'localhost',
       port: 6379,
     },
-    prefix: 'nq',
+    prefix: 'nvent',
     streams: {
       trim: {
         maxLen: 10000,

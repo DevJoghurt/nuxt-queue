@@ -39,7 +39,7 @@ Event-sourced queue and flow orchestration for Nuxt. Zero dependencies to get st
 
 ## 🗃️ Event Schema & Storage
 
-All flow operations are event-sourced and stored in streams (`nq:flow:<runId>`). Events are immutable, type-safe, and provide a complete audit trail.
+All flow operations are event-sourced and stored in streams (`{prefix}:flow:<runId>`, default prefix: `nvent`). Events are immutable, type-safe, and provide a complete audit trail.
 
 **Event types:**
 
@@ -378,7 +378,7 @@ Nvent uses a three-tier adapter system:
 Every flow operation is stored as an event in streams:
 
 ```
-nq:flow:<runId>
+{prefix}:flow:<runId>  (default: nvent:flow:<runId>)
 ├─ flow.start
 ├─ step.started
 ├─ log

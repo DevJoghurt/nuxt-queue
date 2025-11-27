@@ -354,7 +354,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from '#imports'
+import { ref, computed, useToast } from '#imports'
 import { useComponentRouter } from '../../composables/useComponentRouter'
 import { useAnalyzedFlows } from '../../composables/useAnalyzedFlows'
 import { z } from 'zod'
@@ -366,6 +366,7 @@ import FlowSubscriptions from '../../components/trigger/FlowSubscriptions.vue'
 
 const router = useComponentRouter()
 const flows = useAnalyzedFlows()
+const toast = useToast()
 
 // Stepper state
 const currentStep = ref(1)
@@ -398,7 +399,6 @@ const formState = ref({
     cron: '',
     interval: undefined as number | undefined,
     timezone: 'UTC',
-    enabled: true,
   },
   config: {
     event: '',
@@ -508,6 +508,7 @@ const getReviewConfig = () => {
     }
   }
   else if (formState.value.type === 'schedule') {
+    // Schedule config goes at top level
     if (formState.value.schedule.cron) {
       config.cron = formState.value.schedule.cron
     }
@@ -515,7 +516,6 @@ const getReviewConfig = () => {
       config.interval = formState.value.schedule.interval
     }
     config.timezone = formState.value.schedule.timezone
-    config.enabled = formState.value.schedule.enabled
   }
 
   return config
@@ -525,6 +525,21 @@ const createTrigger = async () => {
   try {
     creating.value = true
 
+    const config = getReviewConfig()
+    
+    // Additional validation for schedule triggers
+    if (formState.value.type === 'schedule') {
+      if (!config.cron && !config.interval) {
+        toast.add({
+          title: 'Validation Error',
+          description: 'Schedule triggers require either a cron expression or an interval',
+          color: 'error',
+          icon: 'i-lucide-alert-circle',
+        })
+        return
+      }
+    }
+
     const payload = {
       name: formState.value.name,
       displayName: formState.value.displayName || formState.value.name,
@@ -532,13 +547,32 @@ const createTrigger = async () => {
       type: formState.value.type,
       scope: formState.value.scope,
       status: formState.value.status,
-      config: getReviewConfig(),
+      config,
       subscriptions: formState.value.subscriptions,
     }
 
-    await $fetch('/api/_triggers', {
+    const response = await $fetch('/api/_triggers', {
       method: 'POST',
       body: payload,
+    })
+
+    // Check if response contains an error
+    if (response && typeof response === 'object' && 'error' in response) {
+      toast.add({
+        title: 'Failed to create trigger',
+        description: response.error as string,
+        color: 'error',
+        icon: 'i-lucide-alert-circle',
+      })
+      return
+    }
+
+    // Success
+    toast.add({
+      title: 'Trigger created',
+      description: `Successfully created trigger '${formState.value.displayName || formState.value.name}'`,
+      color: 'success',
+      icon: 'i-lucide-check-circle',
     })
 
     // Navigate back to triggers list
@@ -546,7 +580,29 @@ const createTrigger = async () => {
   }
   catch (err) {
     console.error('Failed to create trigger:', err)
-    alert('Failed to create trigger: ' + (err instanceof Error ? err.message : String(err)))
+    
+    // Extract error message
+    let errorMessage = 'An unexpected error occurred'
+    if (err && typeof err === 'object') {
+      if ('data' in err && err.data && typeof err.data === 'object') {
+        if ('error' in err.data) {
+          errorMessage = err.data.error as string
+        }
+        else if ('message' in err.data) {
+          errorMessage = err.data.message as string
+        }
+      }
+      else if ('message' in err) {
+        errorMessage = err.message as string
+      }
+    }
+    
+    toast.add({
+      title: 'Failed to create trigger',
+      description: errorMessage,
+      color: 'error',
+      icon: 'i-lucide-alert-circle',
+    })
   }
   finally {
     creating.value = false
