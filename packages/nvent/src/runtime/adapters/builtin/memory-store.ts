@@ -11,12 +11,12 @@
  */
 
 import { defu } from 'defu'
+import { createStoreValidator } from '../base/store-validator'
 import type {
   StoreAdapter,
   EventRecord,
   EventReadOptions,
   EventSubscription,
-  ListOptions,
 } from '../interfaces/store'
 
 export class MemoryStoreAdapter implements StoreAdapter {
@@ -30,6 +30,9 @@ export class MemoryStoreAdapter implements StoreAdapter {
 
   // Sorted index storage: key -> sorted array of {id, score, metadata}
   private sortedIndices = new Map<string, Array<{ id: string, score: number, metadata?: any }>>()
+
+  // Validator for update operations
+  protected validator = createStoreValidator('MemoryStoreAdapter')
 
   // Lock mechanism for atomic index operations
   private indexLocks = new Map<string, Promise<void>>()
@@ -264,6 +267,9 @@ export class MemoryStoreAdapter implements StoreAdapter {
     },
 
     update: async (key: string, id: string, metadata: Record<string, any>): Promise<boolean> => {
+      // Validate update payload
+      this.validator.validateUpdatePayload(metadata, 'index.update')
+
       // Acquire lock for this index key to prevent concurrent modifications
       const lockKey = `${key}:${id}`
       const release = await this.acquireIndexLock(lockKey)
@@ -321,6 +327,9 @@ export class MemoryStoreAdapter implements StoreAdapter {
       metadata: Record<string, any>,
       maxRetries: number = 3,
     ): Promise<void> => {
+      // Validate once before retries
+      this.validator.validateUpdatePayload(metadata, 'index.updateWithRetry')
+
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         const success = await this.index.update(key, id, metadata)
         if (success) return

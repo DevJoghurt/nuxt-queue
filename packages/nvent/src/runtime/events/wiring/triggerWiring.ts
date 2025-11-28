@@ -210,8 +210,12 @@ export function createTriggerWiring() {
 
           if (store.index.updateWithRetry) {
             await store.index.updateWithRetry(indexKey, triggerName, {
-              [`subscriptions.${flow}.mode`]: mode,
-              [`subscriptions.${flow}.subscribedAt`]: existingSub ? (existingSub.registeredAt || now) : now,
+              subscriptions: {
+                [flow]: {
+                  mode,
+                  subscribedAt: existingSub ? (existingSub.registeredAt || now) : now,
+                },
+              },
               lastActivityAt: now,
             })
 
@@ -241,7 +245,9 @@ export function createTriggerWiring() {
 
           if (store.index.updateWithRetry) {
             await store.index.updateWithRetry(indexKey, triggerName, {
-              [`subscriptions.${flow}`]: null, // null removes the field
+              subscriptions: {
+                [flow]: null, // null removes the field
+              },
               lastActivityAt: now,
             })
 
@@ -329,8 +335,10 @@ export function createTriggerWiring() {
           // Update statistics in index
           if (store.index.updateWithRetry) {
             await store.index.updateWithRetry(indexKey, triggerName, {
-              ['stats.lastFiredAt']: now,
-              ['lastActivityAt']: now,
+              stats: {
+                lastFiredAt: now,
+              },
+              lastActivityAt: now,
             })
           }
 

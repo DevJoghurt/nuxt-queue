@@ -1,5 +1,5 @@
-import type { StoreAdapter, EventRecord, EventReadOptions, ListOptions } from '#nvent/adapters'
-import { useRuntimeConfig, registerStoreAdapter, defineNitroPlugin } from '#imports'
+import type { StoreAdapter, EventRecord, EventReadOptions } from '#nvent/adapters'
+import { useRuntimeConfig, registerStoreAdapter, defineNitroPlugin, createStoreValidator } from '#imports'
 import { defu } from 'defu'
 import IORedis from 'ioredis'
 
@@ -33,6 +33,7 @@ export class RedisStoreAdapter implements StoreAdapter {
   private redis: IORedis
   private prefix: string
   private streamOptions: NonNullable<RedisStoreAdapterOptions['streams']>
+  private validator: ReturnType<typeof createStoreValidator>
   public kv: StoreAdapter['kv']
   public stream: StoreAdapter['stream']
   public index: StoreAdapter['index']
@@ -51,10 +52,11 @@ export class RedisStoreAdapter implements StoreAdapter {
 
     this.prefix = options.prefix || 'nvent'
     this.streamOptions = options.streams || {}
+    this.validator = createStoreValidator('RedisStoreAdapter')
 
     // Initialize stream methods
     this.stream = {
-      append: async (subject: string, event: Omit<import('#nvent/adapters').EventRecord, 'id' | 'ts'>) => {
+      append: async (subject: string, event: Omit<EventRecord, 'id' | 'ts'>) => {
         if (!this.redis.status || this.redis.status === 'end') {
           await this.redis.connect()
         }
@@ -77,10 +79,10 @@ export class RedisStoreAdapter implements StoreAdapter {
           id = await (this.redis as any).xadd(streamKey, '*', ...fields)
         }
 
-        return { ...data, id } as import('#nvent/adapters').EventRecord
+        return { ...data, id } as EventRecord
       },
 
-      read: async (subject: string, opts?: import('#nvent/adapters').EventReadOptions) => {
+      read: async (subject: string, opts?: EventReadOptions) => {
         if (!this.redis.status || this.redis.status === 'end') {
           await this.redis.connect()
         }
@@ -118,11 +120,11 @@ export class RedisStoreAdapter implements StoreAdapter {
           resp = await (this.redis as any).xrange(streamKey, start, end, 'COUNT', limit)
         }
 
-        const records: import('#nvent/adapters').EventRecord[] = []
+        const records: EventRecord[] = []
         for (const [id, arr] of resp) {
           try {
             const fields = this.parseFields(arr)
-            const record: import('#nvent/adapters').EventRecord = {
+            const record: EventRecord = {
               id,
               ts: fields.ts || 0,
               type: fields.type || 'unknown',
@@ -165,14 +167,15 @@ export class RedisStoreAdapter implements StoreAdapter {
     }
 
     // Initialize KV store methods
+    // Note: Keys are used as-is without additional prefixing
+    // Callers should include the full key path (e.g., 'nvent:scheduler:lock:xyz')
     this.kv = {
       get: async <T = any>(key: string): Promise<T | null> => {
         if (!this.redis.status || this.redis.status === 'end') {
           await this.redis.connect()
         }
 
-        const fullKey = `${this.prefix}:kv:${key}`
-        const data = await this.redis.get(fullKey)
+        const data = await this.redis.get(key)
         if (!data) return null
 
         try {
@@ -188,14 +191,13 @@ export class RedisStoreAdapter implements StoreAdapter {
           await this.redis.connect()
         }
 
-        const fullKey = `${this.prefix}:kv:${key}`
         const serialized = typeof value === 'string' ? value : JSON.stringify(value)
 
         if (ttl) {
-          await this.redis.setex(fullKey, ttl, serialized)
+          await this.redis.setex(key, ttl, serialized)
         }
         else {
-          await this.redis.set(fullKey, serialized)
+          await this.redis.set(key, serialized)
         }
       },
 
@@ -204,8 +206,7 @@ export class RedisStoreAdapter implements StoreAdapter {
           await this.redis.connect()
         }
 
-        const fullKey = `${this.prefix}:kv:${key}`
-        await this.redis.del(fullKey)
+        await this.redis.del(key)
       },
 
       clear: async (pattern: string): Promise<number> => {
@@ -213,12 +214,11 @@ export class RedisStoreAdapter implements StoreAdapter {
           await this.redis.connect()
         }
 
-        const fullPattern = `${this.prefix}:kv:${pattern}`
         let cursor = '0'
         const keysToDelete: string[] = []
 
         do {
-          const result = await this.redis.scan(cursor, 'MATCH', fullPattern, 'COUNT', 100)
+          const result = await this.redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100)
           cursor = result[0]
           const keys = result[1]
           if (keys.length > 0) {
@@ -255,9 +255,8 @@ export class RedisStoreAdapter implements StoreAdapter {
           return newValue
         }
 
-        // Fallback to simple INCRBY for non-hash keys
-        const fullKey = `${this.prefix}:kv:${key}`
-        return await this.redis.incrby(fullKey, by)
+        // Fallback to simple INCRBY for string keys
+        return await this.redis.incrby(key, by)
       },
     }
 
@@ -351,6 +350,9 @@ export class RedisStoreAdapter implements StoreAdapter {
           await this.redis.connect()
         }
 
+        // Validate update payload
+        this.validator.validateUpdatePayload(metadata, 'index.update')
+
         const metaKey = `${key}:meta:${id}`
 
         // Get current version
@@ -391,6 +393,9 @@ export class RedisStoreAdapter implements StoreAdapter {
         metadata: Record<string, any>,
         maxRetries = 3,
       ) => {
+        // Validate once before retries
+        this.validator.validateUpdatePayload(metadata, 'index.updateWithRetry')
+
         for (let attempt = 0; attempt < maxRetries; attempt++) {
           const success = await this.index.update(key, id, metadata)
 
@@ -533,6 +538,7 @@ export class RedisStoreAdapter implements StoreAdapter {
   /**
    * Expand dot notation to nested objects before serialization
    * e.g., { 'stats.totalFires': 5 } -> { stats: { totalFires: 5 } }
+   * Also handles already-nested objects by recursively processing them
    */
   private expandDotNotation(obj: Record<string, any>): Record<string, any> {
     const result: Record<string, any> = {}
@@ -555,10 +561,22 @@ export class RedisStoreAdapter implements StoreAdapter {
           current = current[k]
         }
 
-        current[keys[keys.length - 1]] = value
+        // If value is an object, recursively expand it
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          current[keys[keys.length - 1]] = this.expandDotNotation(value)
+        }
+        else {
+          current[keys[keys.length - 1]] = value
+        }
       }
       else {
-        result[key] = value
+        // If value is an object, recursively expand it
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          result[key] = this.expandDotNotation(value)
+        }
+        else {
+          result[key] = value
+        }
       }
     }
 

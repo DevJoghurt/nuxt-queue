@@ -135,5 +135,10 @@ export function getServerImports(resolverFn: (path: string) => string, buildDir:
       name: 'registerStoreAdapter',
       from: resolverFn('./runtime/nitro/utils/registerAdapter'),
     },
+    // Adapter base utilities for external adapter packages
+    {
+      name: 'createStoreValidator',
+      from: resolverFn('./runtime/adapters/base/store-validator'),
+    },
   ]
 }

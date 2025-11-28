@@ -17,49 +17,67 @@ import { useRuntimeConfig } from '#imports'
 /**
  * Get store subjects for persistent event streams and indexes
  * These are used with StoreAdapter (append/read operations)
+ * 
+ * Naming Convention:
+ * - Streams (event logs): singular + ID -> {prefix}:flow:run:{runId}, {prefix}:trigger:event:{triggerName}
+ * - Indexes (sorted sets): plural -> {prefix}:flows, {prefix}:triggers
+ * - KV stores: descriptive path -> {prefix}:scheduler:job:{id}
  */
 function getStoreSubjects(prefix: string) {
   return {
     /**
      * Flow run event stream
-     * Pattern: {prefix}:flow:{runId}
+     * Pattern: {prefix}:flow:run:{runId}
+     * Type: Redis Stream (XADD/XRANGE)
      * Contains: All events for a specific flow run
      */
-    flowRun: (runId: string) => `${prefix}:flow:${runId}`,
+    flowRun: (runId: string) => `${prefix}:flow:run:${runId}`,
 
     /**
-     * Flow run index (sorted set)
-     * Pattern: {prefix}:flows:{flowName}
+     * Flow runs index (sorted set)
+     * Pattern: {prefix}:flow:runs:{flowName}
+     * Type: Sorted Set + Hash metadata
      * Contains: List of run IDs for a flow, sorted by timestamp
      */
-    flowRunIndex: (flowName: string) => `${prefix}:flows:${flowName}`,
+    flowRunIndex: (flowName: string) => `${prefix}:flow:runs:${flowName}`,
 
     /**
-     * Flow index (sorted set)
+     * Flows index (sorted set)
      * Pattern: {prefix}:flows
+     * Type: Sorted Set + Hash metadata
      * Contains: Flow metadata and statistics
      */
     flowIndex: () => `${prefix}:flows`,
 
     /**
      * Trigger event stream
-     * Pattern: {prefix}:trigger:{triggerName}
+     * Pattern: {prefix}:trigger:event:{triggerName}
+     * Type: Redis Stream (XADD/XRANGE)
      * Contains: All events for a specific trigger
      */
-    triggerStream: (triggerName: string) => `${prefix}:trigger:${triggerName}`,
+    triggerStream: (triggerName: string) => `${prefix}:trigger:event:${triggerName}`,
 
     /**
-     * Trigger index (sorted set)
+     * Triggers index (sorted set)
      * Pattern: {prefix}:triggers
+     * Type: Sorted Set + Hash metadata
      * Contains: Trigger metadata, subscriptions, and statistics
      */
     triggerIndex: () => `${prefix}:triggers`,
 
     /**
-     * Scheduler locks index (sorted set)
+     * Scheduler job index
+     * Pattern: {prefix}:scheduler:jobs
+     * Type: Sorted Set + Hash metadata
+     * Contains: Scheduled job metadata
+     */
+    schedulerJobs: () => `${prefix}:scheduler:jobs`,
+
+    /**
+     * Scheduler lock index
      * Pattern: {prefix}:scheduler:locks
+     * Type: Sorted Set + Hash metadata
      * Contains: Distributed scheduler lock metadata
-     * Used by Scheduler for horizontal scaling
      */
     schedulerLocks: () => `${prefix}:scheduler:locks`,
   } as const

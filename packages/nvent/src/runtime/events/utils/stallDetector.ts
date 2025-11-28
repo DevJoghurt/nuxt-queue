@@ -232,19 +232,22 @@ export class FlowStallDetector {
       const flowEntry = await this.store.index.get(indexKey, runId)
       if (!flowEntry?.metadata) return
 
-      // Only mark running flows as stalled
-      if (flowEntry.metadata.status !== 'running') return
+      const previousStatus = flowEntry.metadata.status
+
+      // Only mark running or awaiting flows as stalled
+      if (previousStatus !== 'running' && previousStatus !== 'awaiting') return
 
       // Update status to stalled using indexUpdate
       if (this.store.index.update) {
         await this.store.index.update(indexKey, runId, {
           status: 'stalled',
+          previousStatus, // Track what state it was in before stalling
           stalledAt: Date.now(),
           stallReason: reason,
         })
       }
 
-      // Emit flow.stalled event
+      // Emit flow.stalled event with previous status for stats tracking
       const streamName = StoreSubjects.flowRun(runId)
       await this.store.stream.append(streamName, {
         type: 'flow.stalled',
@@ -252,6 +255,7 @@ export class FlowStallDetector {
         flowName,
         data: {
           reason,
+          previousStatus, // Include previous status so stats handler knows which counter to decrement
         },
       })
 
@@ -576,8 +580,10 @@ export class FlowStallDetector {
 
           // Update stats to match actual scanned values
           await this.store.index.update(statsIndexKey, flowName, {
-            'stats.running': actual.running,
-            'stats.awaiting': actual.awaiting,
+            stats: {
+              running: actual.running,
+              awaiting: actual.awaiting,
+            },
           })
 
           correctedCount++

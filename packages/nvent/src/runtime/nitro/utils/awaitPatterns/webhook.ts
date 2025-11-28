@@ -1,9 +1,6 @@
 import type { AwaitConfig } from '../../../../registry/types'
-import { useNventLogger, useRuntimeConfig } from '#imports'
+import { useNventLogger, useRuntimeConfig, useScheduler } from '#imports'
 import { getEventBus } from '../../../events/eventBus'
-
-// Track active timeouts for webhook awaits
-const activeTimeouts = new Map<string, NodeJS.Timeout>()
 
 /**
  * Await Pattern: Webhook
@@ -74,44 +71,50 @@ export async function registerWebhookAwait(
 
   // Schedule timeout if configured
   if (config.timeout && config.timeout > 0) {
-    const timeoutKey = `${runId}:${stepName}`
+    const scheduler = useScheduler()
+    const timeoutAt = Date.now() + config.timeout
+    const jobId = `await-webhook-timeout-${runId}-${stepName}-${position}`
 
-    // Clear any existing timeout for this await
-    const existingTimeout = activeTimeouts.get(timeoutKey)
-    if (existingTimeout) {
-      clearTimeout(existingTimeout)
-    }
-
-    const timeoutId = setTimeout(() => {
-      logger.warn('Webhook await timeout', {
-        runId,
-        stepName,
-        flowName,
-        timeout: config.timeout,
-        timeoutAction: config.timeoutAction || 'fail',
-      })
-
-      // Remove from active timeouts
-      activeTimeouts.delete(timeoutKey)
-
-      // Emit timeout event
-      eventBus.publish({
-        type: 'await.timeout',
-        flowName,
-        runId,
-        stepName,
-        position,
-        awaitType: 'webhook',
-        timeoutAction: config.timeoutAction || 'fail',
-        data: {
+    await scheduler.schedule({
+      id: jobId,
+      name: `Webhook Timeout: ${flowName} - ${stepName}`,
+      type: 'one-time',
+      executeAt: timeoutAt,
+      handler: async () => {
+        logger.warn('Webhook await timeout', {
+          runId,
+          stepName,
+          flowName,
           timeout: config.timeout,
-          registeredAt: Date.now() - (config.timeout || 0),
-          timedOutAt: Date.now(),
-        },
-      } as any)
-    }, config.timeout)
+          timeoutAction: config.timeoutAction || 'fail',
+        })
 
-    activeTimeouts.set(timeoutKey, timeoutId)
+        // Emit timeout event
+        eventBus.publish({
+          type: 'await.timeout',
+          flowName,
+          runId,
+          stepName,
+          position,
+          awaitType: 'webhook',
+          timeoutAction: config.timeoutAction || 'fail',
+          data: {
+            timeout: config.timeout,
+            registeredAt: Date.now() - (config.timeout || 0),
+            timedOutAt: Date.now(),
+          },
+        } as any)
+      },
+      metadata: {
+        component: 'await-pattern',
+        awaitType: 'webhook',
+        runId,
+        stepName,
+        flowName,
+        position,
+        timeout: config.timeout,
+      },
+    })
 
     logger.debug(`Webhook timeout scheduled`, {
       runId,
@@ -141,16 +144,19 @@ export async function resolveWebhookAwait(
 ) {
   const logger = useNventLogger('await-webhook')
   const eventBus = getEventBus()
+  const scheduler = useScheduler()
 
   logger.info(`Resolving webhook await`, { runId, stepName })
 
-  // Clear timeout if exists
-  const timeoutKey = `${runId}:${stepName}`
-  const existingTimeout = activeTimeouts.get(timeoutKey)
-  if (existingTimeout) {
-    clearTimeout(existingTimeout)
-    activeTimeouts.delete(timeoutKey)
-    logger.debug('Cleared webhook timeout', { runId, stepName })
+  // Unschedule timeout job if exists
+  const jobId = `await-webhook-timeout-${runId}-${stepName}-${position}`
+  try {
+    await scheduler.unschedule(jobId)
+    logger.debug('Unscheduled webhook timeout job', { runId, stepName, jobId })
+  }
+  catch (err) {
+    // Job might not exist or already executed, that's fine
+    logger.debug('Could not unschedule timeout job (may not exist)', { runId, stepName, jobId })
   }
 
   // Emit await.resolved event (wiring will handle flow state updates and processing)

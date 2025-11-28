@@ -43,7 +43,7 @@ export default defineNuxtConfig({
 
     // Queue adapter configuration
     queue: {
-      adapter: 'redis', // Use file for development (change to 'redis' for production)
+      adapter: 'file', // Use file for development (change to 'redis' for production)
       // redis connection inherited from connections.redis
       prefix: 'nvent',
       defaultJobOptions: {
@@ -67,7 +67,7 @@ export default defineNuxtConfig({
 
     // Stream adapter configuration
     stream: {
-      adapter: 'memory', // Use memory for single-instance dev
+      adapter: 'redis', // Use memory for single-instance dev
       prefix: 'nvent',
     },
 

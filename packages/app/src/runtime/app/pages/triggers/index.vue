@@ -259,32 +259,6 @@
 
               <!-- Right: Stats & Status -->
               <div class="flex items-center gap-3">
-                <!-- Total Fires -->
-                <div
-                  v-if="trigger.stats.totalFires > 0"
-                  class="text-center"
-                >
-                  <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-                    Total Fires
-                  </div>
-                  <div class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                    {{ formatNumber(trigger.stats.totalFires) }}
-                  </div>
-                </div>
-
-                <!-- Active Subscribers -->
-                <div
-                  v-if="trigger.stats.activeSubscribers > 0"
-                  class="text-center"
-                >
-                  <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-                    Subscribers
-                  </div>
-                  <div class="text-sm font-semibold text-blue-600 dark:text-blue-400">
-                    {{ trigger.stats.activeSubscribers }}
-                  </div>
-                </div>
-
                 <!-- Status Badge -->
                 <UBadge
                   :label="trigger.status"

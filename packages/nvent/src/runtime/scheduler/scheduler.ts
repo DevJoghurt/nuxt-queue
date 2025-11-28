@@ -9,7 +9,7 @@ import { CronJob } from 'cron'
 import type { ScheduledJob, SchedulerAdapter, SchedulerLock } from './types'
 import type { StoreAdapter } from '../adapters/interfaces/store'
 import { getEventBus } from '../events/eventBus'
-import { useNventLogger } from '#imports'
+import { useNventLogger, useStreamTopics } from '#imports'
 
 export interface SchedulerOptions {
   /**
@@ -378,14 +378,14 @@ export class Scheduler implements SchedulerAdapter {
     // Also store in index for efficient recovery
     if (this.store.index.add) {
       try {
-        const jobIndex = `${this.keyPrefix}:jobs-index`
+        const jobIndex = `${this.keyPrefix}:jobs`
         await this.store.index.add(jobIndex, job.id, now, jobData)
       }
       catch {
         // If job already exists in index, update it instead
         if (this.store.index.update) {
           try {
-            const jobIndex = `${this.keyPrefix}:jobs-index`
+            const jobIndex = `${this.keyPrefix}:jobs`
             await this.store.index.update(jobIndex, job.id, jobData)
           }
           catch (updateError) {
@@ -439,7 +439,7 @@ export class Scheduler implements SchedulerAdapter {
     // Remove from index if available
     if (this.store.index.delete) {
       try {
-        await this.store.index.delete(`${this.keyPrefix}:jobs-index`, jobId)
+        await this.store.index.delete(`${this.keyPrefix}:jobs`, jobId)
       }
       catch {
         // Ignore - might not exist in index
@@ -465,7 +465,7 @@ export class Scheduler implements SchedulerAdapter {
     try {
       // Try to use index scan if available (more efficient)
       if (this.store.index.read) {
-        const jobIndex = `${this.keyPrefix}:jobs-index`
+        const jobIndex = `${this.keyPrefix}:jobs`
         const jobEntries = await this.store.index.read(jobIndex, { limit: 10000 })
 
         this.logger.info('Found jobs in index', { count: jobEntries.length })
@@ -749,7 +749,7 @@ export class Scheduler implements SchedulerAdapter {
 
     try {
       if (this.store.index.read) {
-        const jobIndex = `${this.keyPrefix}:jobs-index`
+        const jobIndex = `${this.keyPrefix}:jobs`
         const entries = await this.store.index.read(jobIndex, { limit: 10000 })
 
         for (const entry of entries) {

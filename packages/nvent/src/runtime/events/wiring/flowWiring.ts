@@ -3,6 +3,7 @@ import type { AwaitRegisteredEvent, AwaitResolvedEvent } from '../types'
 import { getEventBus } from '../eventBus'
 import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useFunctionRegistry, useStreamTopics, useRuntimeConfig, useScheduler } from '#imports'
 import { createStallDetector } from '../utils/stallDetector'
+import { getInstanceId } from '../utils/instanceId'
 
 /**
  * Check if all dependencies for a step are met
@@ -277,12 +278,6 @@ export async function checkAndTriggerPendingSteps(
 
           try {
             await queue.enqueue(stepMeta.queue, { name: stepName, data: payload, opts })
-
-            logger.debug('Enqueued pending step', {
-              flowName,
-              runId,
-              step: stepName,
-            })
           }
           catch {
             // Already enqueued - idempotency working correctly
@@ -568,19 +563,44 @@ export function createFlowWiring() {
         throw new Error('StoreAdapter does not support indexAdd')
       }
       await store.index.add(indexKey, flowId, timestamp, metadata)
-
-      logger.debug('Indexed run', { flowName, flowId, indexKey, timestamp, metadata })
     }
     catch (err) {
       logger.error('Failed to index run', { error: err })
     }
   }
 
+  // Sequential event processing per flow run
+  // Ensures emit tracking completes before orchestration reads the index
+  // Each flow's events are processed in order, while different flows run in parallel
+  const flowProcessingChain = new Map<string, Promise<void>>()
+
+  // Track cleanup timers for graceful shutdown
+  const cleanupTimers = new Map<string, NodeJS.Timeout>()
+
   async function start() {
     if (wired) return
     wired = true
     const logger = useNventLogger('flow-wiring')
     const { StoreSubjects } = useStreamTopics()
+    const instanceId = getInstanceId()
+
+    logger.info('Flow wiring starting', { instanceId })
+
+    // ============================================================================
+    // HORIZONTAL SCALING NOTES:
+    // ============================================================================
+    // The current implementation processes events sequentially within each instance.
+    // For production horizontal scaling, use STICKY SESSIONS to route all events
+    // for a given runId to the same instance that started the flow.
+    //
+    // Future distributed implementation will use StreamAdapter to:
+    // - Broadcast events across instances via Redis Pub/Sub
+    // - Coordinate orchestration using distributed locks
+    // - Enable any instance to handle any flow
+    //
+    // The instanceId tracking prepares for this by identifying which instance
+    // owns each flow, enabling proper routing and debugging.
+    // ============================================================================
 
     // Get store - must be available after adapters are initialized
     const store = useStoreAdapter()
@@ -755,6 +775,20 @@ export function createFlowWiring() {
 
           logger.debug('Updated flow stats for cancellation', { flowName })
         }
+        else if (e.type === 'flow.stalled') {
+          // Flow detected as stalled - decrement the correct counter based on previous status
+          // Note: We don't increment failure count as this is a detection event, not a terminal state
+          if (store.index.increment && e.data?.previousStatus) {
+            if (e.data.previousStatus === 'awaiting') {
+              await store.index.increment(flowIndexKey, flowName, 'stats.awaiting', -1)
+              logger.debug('Updated flow stats for stalled detection (was awaiting)', { flowName })
+            }
+            else if (e.data.previousStatus === 'running') {
+              await store.index.increment(flowIndexKey, flowName, 'stats.running', -1)
+              logger.debug('Updated flow stats for stalled detection (was running)', { flowName })
+            }
+          }
+        }
         else if (e.type === 'await.registered') {
           // Flow enters awaiting state - decrement running, increment awaiting
           if (store.index.increment) {
@@ -840,6 +874,7 @@ export function createFlowWiring() {
             stepCount: 0,
             completedSteps: 0,
             emittedEvents: {}, // Object for atomic updates
+            instanceId, // Track which instance started this flow
           })
         }
 
@@ -925,14 +960,20 @@ export function createFlowWiring() {
                 timeoutAt = now + (24 * 60 * 60 * 1000) // 24 hours default
               }
 
-              await store.index.updateWithRetry(indexKey, runId, {
-                [`awaitingSteps.${stepName}.status`]: 'awaiting',
-                [`awaitingSteps.${stepName}.awaitType`]: awaitType,
-                [`awaitingSteps.${stepName}.position`]: position,
-                [`awaitingSteps.${stepName}.config`]: config,
-                [`awaitingSteps.${stepName}.registeredAt`]: now,
-                [`awaitingSteps.${stepName}.timeoutAt`]: timeoutAt,
-              })
+              const updatePayload = {
+                awaitingSteps: {
+                  [stepName]: {
+                    status: 'awaiting',
+                    awaitType,
+                    position,
+                    config,
+                    registeredAt: now,
+                    timeoutAt,
+                  },
+                },
+              }
+
+              await store.index.updateWithRetry(indexKey, runId, updatePayload)
 
               logger.info('Await registered in index', {
                 runId,
@@ -955,16 +996,18 @@ export function createFlowWiring() {
         // For await.resolved events, update status and resume step
         if (e.type === 'await.resolved') {
           const awaitEvent = e as unknown as AwaitResolvedEvent
-          const { stepName, triggerData, position } = awaitEvent
+          const { stepName, triggerData } = awaitEvent
 
           try {
             if (store.index.updateWithRetry) {
               await store.index.updateWithRetry(indexKey, runId, {
-                [`awaitingSteps.${stepName}.status`]: 'resolved',
-                [`awaitingSteps.${stepName}.triggerData`]: triggerData,
+                awaitingSteps: {
+                  [stepName]: {
+                    status: 'resolved',
+                    triggerData,
+                  },
+                },
               })
-
-              logger.debug('Await resolved in index', { runId, stepName, position })
             }
 
             // Resume the step by checking pending steps
@@ -999,8 +1042,12 @@ export function createFlowWiring() {
               // Mark await as failed and fail the step/flow
               if (store.index.updateWithRetry) {
                 await store.index.updateWithRetry(indexKey, runId, {
-                  [`awaitingSteps.${stepName}.status`]: 'timeout',
-                  [`awaitingSteps.${stepName}.timedOutAt`]: Date.now(),
+                  awaitingSteps: {
+                    [stepName]: {
+                      status: 'timeout',
+                      timedOutAt: Date.now(),
+                    },
+                  },
                 })
               }
 
@@ -1022,9 +1069,13 @@ export function createFlowWiring() {
               // Mark as resolved with null data and continue
               if (store.index.updateWithRetry) {
                 await store.index.updateWithRetry(indexKey, runId, {
-                  [`awaitingSteps.${stepName}.status`]: 'resolved',
-                  [`awaitingSteps.${stepName}.triggerData`]: null,
-                  [`awaitingSteps.${stepName}.timedOutAt`]: Date.now(),
+                  awaitingSteps: {
+                    [stepName]: {
+                      status: 'resolved',
+                      triggerData: null,
+                      timedOutAt: Date.now(),
+                    },
+                  },
                 })
               }
 
@@ -1045,7 +1096,6 @@ export function createFlowWiring() {
         }
 
         // For emit events, track emitted events in metadata
-        // Use Set-like structure with dot notation for atomic updates
         if (e.type === 'emit') {
           // Emit events use 'name' field, not 'topic' - extract from data
           const eventName = (e.data as any)?.name || e.data?.topic
@@ -1060,13 +1110,27 @@ export function createFlowWiring() {
                 return
               }
 
-              // Use dot notation to store emitted events as a set-like structure
-              // emittedEvents.eventName: timestamp
-              // This allows atomic updates without read-modify-write
+              // Store emitted events as a nested object structure
+              // Split event name by dots to create proper nesting
+              // e.g., 'approval.requested' → { approval: { requested: timestamp } }
               const timestamp = Date.now()
-              await store.index.updateWithRetry(indexKey, runId, {
-                [`emittedEvents.${eventName}`]: timestamp,
-              })
+
+              // Build nested structure from dot-notated event name
+              const eventParts = eventName.split('.')
+              const emittedEventsUpdate: any = {}
+              let current = emittedEventsUpdate
+
+              for (let i = 0; i < eventParts.length - 1; i++) {
+                current[eventParts[i]] = {}
+                current = current[eventParts[i]]
+              }
+              current[eventParts[eventParts.length - 1]] = timestamp
+
+              const updatePayload = {
+                emittedEvents: emittedEventsUpdate,
+              }
+
+              await store.index.updateWithRetry(indexKey, runId, updatePayload)
 
               logger.debug('Tracked emit event', {
                 flowName,
@@ -1088,10 +1152,29 @@ export function createFlowWiring() {
 
         // For step.completed or step.failed, check if flow is complete
         // IMPORTANT: Do this AFTER incrementing completedSteps to avoid race condition
+        // Sequential processing ensures emit tracking completes before orchestration
         if (e.type === 'step.completed' || e.type === 'step.failed') {
+          logger.debug('Step completed/failed, checking pending steps', {
+            flowName,
+            runId,
+            stepName: e.stepName,
+            eventType: e.type,
+            instanceId,
+          })
+
           // ORCHESTRATION: Check if any steps can now be triggered
           // This handles both emit events and step completions, so we only need to call it here
-          await checkAndTriggerPendingSteps(flowName, runId, store)
+          try {
+            await checkAndTriggerPendingSteps(flowName, runId, store)
+          }
+          catch (err) {
+            logger.error('Error checking pending steps', {
+              flowName,
+              runId,
+              error: (err as Error).message,
+            })
+            throw err
+          }
 
           try {
             // Read all events for this flow to analyze completion
@@ -1128,14 +1211,12 @@ export function createFlowWiring() {
                 let hasActiveAwaits = false
                 let hasTimedOutAwaits = false
 
-                for (const [stepName, awaitState] of Object.entries(awaitingStepsObj)) {
+                for (const [_stepName, awaitState] of Object.entries(awaitingStepsObj)) {
                   if ((awaitState as any)?.status === 'awaiting') {
                     hasActiveAwaits = true
-                    logger.debug('Found active await', { stepName, awaitState })
                   }
                   else if ((awaitState as any)?.status === 'timeout') {
                     hasTimedOutAwaits = true
-                    logger.debug('Found timed-out await', { stepName, awaitState })
                   }
                 }
 
@@ -1241,7 +1322,60 @@ export function createFlowWiring() {
     }
 
     // v0.4: Subscribe to event types with handlers
-    // Order matters: Persistence runs first, then orchestration (creates indexes), then stats
+    // Sequential processing wrapper: Ensures events for the same flow are processed in order
+    // Different flows process in parallel, preventing cross-flow blocking
+    const processEventSequentially = async (event: EventRecord) => {
+      const runId = event.runId
+      if (!runId) {
+        // No runId - process immediately (shouldn't happen for flow events)
+        await handlePersistence(event)
+        await handleOrchestration(event)
+        await handleFlowStats(event)
+        return
+      }
+
+      // Chain this event after the previous event for this flow
+      const previousProcessing = flowProcessingChain.get(runId) || Promise.resolve()
+
+      const currentProcessing = previousProcessing.then(async () => {
+        try {
+          // Process handlers in order: Persistence → Orchestration → Stats
+          await handlePersistence(event)
+          await handleOrchestration(event)
+          await handleFlowStats(event)
+        }
+        catch (err) {
+          logger.error('Error in sequential event processing', {
+            runId,
+            type: event.type,
+            error: (err as Error).message,
+            stack: (err as Error).stack,
+          })
+          // Don't rethrow - allow other events to process
+        }
+        finally {
+          // Clean up completed chains after a delay to prevent memory leak
+          // Cancel any existing cleanup timer for this flow
+          const existingTimer = cleanupTimers.get(runId)
+          if (existingTimer) {
+            clearTimeout(existingTimer)
+          }
+
+          // Schedule new cleanup after 60s of inactivity
+          const timer = setTimeout(() => {
+            if (flowProcessingChain.get(runId) === currentProcessing) {
+              flowProcessingChain.delete(runId)
+              cleanupTimers.delete(runId)
+            }
+          }, 60000)
+          cleanupTimers.set(runId, timer)
+        }
+      })
+
+      flowProcessingChain.set(runId, currentProcessing)
+      return currentProcessing
+    }
+
     const eventTypes = [
       'flow.start', 'flow.completed', 'flow.failed', 'flow.cancel',
       'step.started', 'step.completed', 'step.failed', 'step.retry',
@@ -1249,21 +1383,9 @@ export function createFlowWiring() {
       'log', 'emit', 'state',
     ]
 
-    const flowStatsEventTypes = ['flow.start', 'flow.completed', 'flow.failed', 'flow.cancel', 'await.registered', 'await.resolved', 'await.timeout']
-
-    // Register persistence handler first (stores events)
+    // Register sequential processing wrapper for all flow event types
     for (const type of eventTypes) {
-      unsubs.push(bus.onType(type, handlePersistence))
-    }
-
-    // Register orchestration handler second (creates indexes, triggers new events)
-    for (const type of eventTypes) {
-      unsubs.push(bus.onType(type, handleOrchestration))
-    }
-
-    // Register flow stats handler third (updates flow-level stats after indexes exist)
-    for (const type of flowStatsEventTypes) {
-      unsubs.push(bus.onType(type, handleFlowStats))
+      unsubs.push(bus.onType(type, processEventSequentially))
     }
 
     // Initialize and start stall detector
@@ -1346,7 +1468,6 @@ export function createFlowWiring() {
       try {
         await stallDetector.stop()
         stallDetector = undefined
-        logger.debug('Stall detector stopped')
       }
       catch (error) {
         logger.error('Error stopping stall detector', {
@@ -1367,9 +1488,16 @@ export function createFlowWiring() {
     // Clear the terminal event tracking set to prevent memory leaks
     publishingTerminalEvents.clear()
 
-    wired = false
+    // Clear cleanup timers
+    for (const timer of cleanupTimers.values()) {
+      clearTimeout(timer)
+    }
+    cleanupTimers.clear()
 
-    logger.debug('Flow wiring stopped')
+    // Clear flow processing chains
+    flowProcessingChain.clear()
+
+    wired = false
   }
 
   return { start, stop }
