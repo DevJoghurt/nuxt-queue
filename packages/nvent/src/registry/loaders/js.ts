@@ -50,7 +50,7 @@ export async function loadJsConfig(absPath: string): Promise<ConfigMeta> {
 
   const hasDefaultExport = !!(mod && mod.default)
 
-  // v0.5: Check for lifecycle hooks
+  // Check for lifecycle hooks
   // Hooks can be plain functions or wrapped with defineAwaitRegisterHook/defineAwaitResolveHook
   const hasHooks = !!(
     (mod && typeof mod.onAwaitRegister === 'function')

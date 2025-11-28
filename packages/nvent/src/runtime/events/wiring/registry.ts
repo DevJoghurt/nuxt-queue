@@ -24,7 +24,7 @@ export interface WiringRegistryOptions {
 }
 
 export function createWiringRegistry(opts?: WiringRegistryOptions): Wiring {
-  // v0.4.1: Multiple wirings
+  // Multiple wirings
   const wirings: Wiring[] = [
     // 1. Flow orchestration (persistence, completion tracking, step triggering)
     createFlowWiring(),

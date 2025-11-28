@@ -61,7 +61,7 @@ export async function loadTsConfig(absPath: string): Promise<ConfigMeta> {
       ? { ...cfg.worker }
       : undefined
 
-    // v0.5: Check for lifecycle hooks exports
+    // Check for lifecycle hooks exports
     // We can detect these by looking for exported functions with these names
     // They can be plain functions or wrapped with defineAwaitRegisterHook/defineAwaitResolveHook
     const hasHooks = !!(

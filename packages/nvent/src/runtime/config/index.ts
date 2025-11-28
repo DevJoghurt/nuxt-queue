@@ -2,7 +2,7 @@ import type { ModuleOptions, ModuleConfig } from './types'
 import defu from 'defu'
 
 /**
- * Merge and normalize module options with defaults (v0.4.1).
+ * Merge and normalize module options with defaults.
  * Applies connection fallback: adapter-specific connections override connections.redis/postgres.
  * Only includes connection defaults for adapters that are actually used.
  */
@@ -186,7 +186,7 @@ function applyConnectionFallback(config: Required<ModuleOptions>): void {
 }
 
 /**
- * Convert normalized module options to runtime config format (v0.4.1).
+ * Convert normalized module options to runtime config format.
  */
 export function toRuntimeConfig(normalizedOptions: Required<ModuleOptions>): ModuleConfig {
   return {

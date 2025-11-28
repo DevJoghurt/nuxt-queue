@@ -30,7 +30,7 @@ export interface AdapterSet {
 }
 
 /**
- * Create a complete set of adapters (v0.4.1)
+ * Create a complete set of adapters
  * All adapters are independent - wiring layer handles coordination
  */
 export async function createAdapters(config: {

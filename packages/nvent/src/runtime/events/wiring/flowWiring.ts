@@ -3,7 +3,6 @@ import type { AwaitRegisteredEvent, AwaitResolvedEvent } from '../types'
 import { getEventBus } from '../eventBus'
 import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useFunctionRegistry, useStreamTopics, useRuntimeConfig, useScheduler } from '#imports'
 import { createStallDetector } from '../utils/stallDetector'
-import { getInstanceId } from '../utils/instanceId'
 
 /**
  * Check if all dependencies for a step are met
@@ -125,7 +124,7 @@ export async function checkAndTriggerPendingSteps(
       // Skip if step doesn't have dependencies or already completed
       if (!step.subscribes || completedSteps.has(stepName)) continue
 
-      // v0.5: Check await state - skip if step is currently awaiting (not resolved)
+      // Check await state - skip if step is currently awaiting (not resolved)
       const awaitState = flowEntry?.metadata?.awaitingSteps?.[stepName]
       if (awaitState && awaitState.status === 'awaiting') {
         logger.debug('Step is awaiting, skipping trigger', {
@@ -161,7 +160,7 @@ export async function checkAndTriggerPendingSteps(
         })
       }
 
-      // v0.5: Check if any dependency steps are currently awaiting (awaitAfter pattern)
+      // Check if any dependency steps are currently awaiting (awaitAfter pattern)
       // If a step has awaitAfter, its emits should be blocked until await is resolved
       const isDependencyAwaiting = step.subscribes.some((sub: string) => {
         // Find which step emitted this event by looking through all events
@@ -532,7 +531,7 @@ export function analyzeFlowCompletion(
 }
 
 /**
- * v0.4 Lean Flow Wiring
+ * Lean Flow Wiring
  *
  * 1. Persists flow events to streams using runId
  * 2. Maintains a sorted set index using projection names for listing runs
@@ -582,24 +581,24 @@ export function createFlowWiring() {
     wired = true
     const logger = useNventLogger('flow-wiring')
     const { StoreSubjects } = useStreamTopics()
-    const instanceId = getInstanceId()
 
-    logger.info('Flow wiring starting', { instanceId })
+    logger.info('Flow wiring starting')
 
     // ============================================================================
     // HORIZONTAL SCALING NOTES:
     // ============================================================================
     // The current implementation processes events sequentially within each instance.
-    // For production horizontal scaling, use STICKY SESSIONS to route all events
-    // for a given runId to the same instance that started the flow.
+    // BullMQ naturally distributes flows across instances - workers on any instance
+    // can pick up jobs. Each instance processes events locally and sequentially
+    // per flow, while different flows run in parallel.
     //
-    // Future distributed implementation will use StreamAdapter to:
-    // - Broadcast events across instances via Redis Pub/Sub
-    // - Coordinate orchestration using distributed locks
-    // - Enable any instance to handle any flow
+    // Sequential processing per flow ensures:
+    // - Emit tracking completes before orchestration reads metadata
+    // - No race conditions in Redis optimistic locking retries
+    // - Proper ordering of events within each flow
     //
-    // The instanceId tracking prepares for this by identifying which instance
-    // owns each flow, enabling proper routing and debugging.
+    // No sticky sessions or distributed coordination needed - BullMQ handles
+    // work distribution, and Redis provides shared state persistence.
     // ============================================================================
 
     // Get store - must be available after adapters are initialized
@@ -874,7 +873,6 @@ export function createFlowWiring() {
             stepCount: 0,
             completedSteps: 0,
             emittedEvents: {}, // Object for atomic updates
-            instanceId, // Track which instance started this flow
           })
         }
 
@@ -1159,7 +1157,6 @@ export function createFlowWiring() {
             runId,
             stepName: e.stepName,
             eventType: e.type,
-            instanceId,
           })
 
           // ORCHESTRATION: Check if any steps can now be triggered
@@ -1321,7 +1318,7 @@ export function createFlowWiring() {
       }
     }
 
-    // v0.4: Subscribe to event types with handlers
+    // Subscribe to event types with handlers
     // Sequential processing wrapper: Ensures events for the same flow are processed in order
     // Different flows process in parallel, preventing cross-flow blocking
     const processEventSequentially = async (event: EventRecord) => {

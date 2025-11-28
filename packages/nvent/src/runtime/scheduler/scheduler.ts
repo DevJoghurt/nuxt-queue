@@ -11,7 +11,7 @@ import type { StoreAdapter } from '../adapters/interfaces/store'
 import { getEventBus } from '../events/eventBus'
 import { resolveTimeAwait } from '../nitro/utils/awaitPatterns/time'
 import { resolveScheduleAwait } from '../nitro/utils/awaitPatterns/schedule'
-import { useNventLogger, useStreamTopics } from '#imports'
+import { useNventLogger } from '#imports'
 
 export interface SchedulerOptions {
   /**
