@@ -18,7 +18,7 @@ export const config = defineFunctionConfig({
     awaitBefore: {
       type: 'event',
       event: 'payment.completed',
-      timeout: 600000, // 10 minutes
+      timeout: 50000, // 50 seconds
       timeoutAction: 'fail',
     },
   },

@@ -9,6 +9,8 @@ import { CronJob } from 'cron'
 import type { ScheduledJob, SchedulerAdapter, SchedulerLock } from './types'
 import type { StoreAdapter } from '../adapters/interfaces/store'
 import { getEventBus } from '../events/eventBus'
+import { resolveTimeAwait } from '../nitro/utils/awaitPatterns/time'
+import { resolveScheduleAwait } from '../nitro/utils/awaitPatterns/schedule'
 import { useNventLogger, useStreamTopics } from '#imports'
 
 export interface SchedulerOptions {
@@ -541,17 +543,80 @@ export class Scheduler implements SchedulerAdapter {
         const { awaitType, runId, stepName, flowName, position } = jobData.metadata
 
         if (awaitType === 'time') {
-          // Import time await resolver dynamically
+          // Time await resolver
           jobData.handler = async () => {
-            const { resolveTimeAwait } = await import('../nitro/utils/awaitPatterns/time')
             await resolveTimeAwait(runId, stepName, flowName, position, { delayCompleted: true })
           }
         }
         else if (awaitType === 'schedule') {
-          // Import schedule await resolver dynamically
+          // Schedule await resolver
           jobData.handler = async () => {
-            const { resolveScheduleAwait } = await import('../nitro/utils/awaitPatterns/schedule')
             await resolveScheduleAwait(runId, stepName, flowName, position, { scheduledAt: Date.now() })
+          }
+        }
+        else if (awaitType === 'webhook') {
+          // Webhook timeout handler
+          jobData.handler = async () => {
+            const eventBus = getEventBus()
+            const timeout = jobData.metadata?.timeout
+            const timeoutAction = jobData.metadata?.timeoutAction || 'fail'
+
+            this.logger.warn('Webhook await timeout', {
+              runId,
+              stepName,
+              flowName,
+              timeout,
+              timeoutAction,
+            })
+
+            eventBus.publish({
+              type: 'await.timeout',
+              flowName,
+              runId,
+              stepName,
+              position,
+              awaitType: 'webhook',
+              timeoutAction,
+              data: {
+                timeout,
+                registeredAt: Date.now() - (timeout || 0),
+                timedOutAt: Date.now(),
+              },
+            } as any)
+          }
+        }
+        else if (awaitType === 'event') {
+          // Event await timeout handler
+          jobData.handler = async () => {
+            const eventBus = getEventBus()
+            const timeout = jobData.metadata?.timeout
+            const timeoutAction = jobData.metadata?.timeoutAction || 'fail'
+            const eventName = jobData.metadata?.eventName
+
+            this.logger.warn('Event await timeout', {
+              runId,
+              stepName,
+              flowName,
+              eventName,
+              timeout,
+              timeoutAction,
+            })
+
+            eventBus.publish({
+              type: 'await.timeout',
+              flowName,
+              runId,
+              stepName,
+              position,
+              awaitType: 'event',
+              timeoutAction,
+              data: {
+                eventName,
+                timeout,
+                registeredAt: Date.now() - (timeout || 0),
+                timedOutAt: Date.now(),
+              },
+            } as any)
           }
         }
         else {
