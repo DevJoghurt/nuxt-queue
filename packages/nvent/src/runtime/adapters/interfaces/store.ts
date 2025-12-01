@@ -5,6 +5,83 @@
  * 1. Event Stream - Append-only event log
  * 2. Sorted Index - Time-ordered metadata storage
  * 3. Key-Value Store - Fast lookups (for state, caching)
+ *
+ * ## Critical Implementation Requirements
+ *
+ * ### 1. Index Operations - add() vs update()
+ *
+ * **index.add()** - MUST completely REPLACE metadata when entry exists:
+ * ```typescript
+ * // First call
+ * await index.add('flows', 'my-flow', 123, { name: 'Flow', stats: {...} })
+ * // Second call - REPLACES entire metadata
+ * await index.add('flows', 'my-flow', 456, { lastRunAt: 789 })
+ * // Result: { lastRunAt: 789 } ← stats are LOST!
+ * ```
+ *
+ * **index.update()** - MUST perform DEEP MERGE of metadata:
+ * ```typescript
+ * // Initial state: { status: 'running', emittedEvents: { test: { completed: 1 } } }
+ * await index.update('runs', 'run-id', { emittedEvents: { another: { fired: 2 } } })
+ * // Result: { status: 'running', emittedEvents: { test: { completed: 1 }, another: { fired: 2 } } }
+ * ```
+ *
+ * ⚠️ **CRITICAL**: update() must perform DEEP merge at ALL nesting levels, not just top-level!
+ * - PostgreSQL `||` operator: Only shallow merge (top-level keys)
+ * - Redis HSET loop: Field-level merge (simulates deep merge for flat structures)
+ * - Memory defu(): True deep merge
+ *
+ * ### 2. Nested Metadata Structure
+ *
+ * Flow orchestration stores deeply nested metadata:
+ * ```typescript
+ * {
+ *   emittedEvents: {
+ *     'step1': {
+ *       'completed': 1234567890,
+ *       'custom_event': 1234567891
+ *     },
+ *     'step2': {
+ *       'completed': 1234567892
+ *     }
+ *   },
+ *   awaitingSteps: {
+ *     'step_name': {
+ *       status: 'awaiting',
+ *       position: 'after',
+ *       awaitType: 'event'
+ *     }
+ *   }
+ * }
+ * ```
+ *
+ * Multiple updates add to nested structures incrementally. If deep merge fails,
+ * flow orchestration will miss events and steps won't trigger.
+ *
+ * ### 3. Concurrent Updates
+ *
+ * Flow steps run in parallel and update metadata concurrently:
+ * - Multiple steps emit events simultaneously
+ * - Each emits triggers index.updateWithRetry() with partial metadata
+ * - Updates must NOT overwrite each other
+ * - Use optimistic locking (version field) + retries
+ *
+ * ### 4. Testing Deep Merge
+ *
+ * Test that your adapter correctly handles:
+ * ```typescript
+ * // Setup
+ * await index.add('test', 'id', 1, { a: { b: 1 }, c: 2 })
+ *
+ * // Update nested property
+ * await index.update('test', 'id', { a: { d: 3 } })
+ * const result = await index.get('test', 'id')
+ *
+ * // MUST preserve existing nested data
+ * expect(result.metadata).toEqual({ a: { b: 1, d: 3 }, c: 2 })
+ * // NOT: { a: { d: 3 }, c: 2 } ← b is lost!
+ * ```
+ *
  */
 
 export interface StoreAdapter {

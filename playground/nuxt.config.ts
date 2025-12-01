@@ -3,11 +3,12 @@ export default defineNuxtConfig({
     '@nuxt/ui',
     'nuxt-mcp',
     // Load adapter modules BEFORE nvent so they can register themselves
-    '@nvent/adapter-queue-redis',
-    '@nvent/adapter-stream-redis',
-    '@nvent/adapter-store-redis',
+    '@nvent-addon/adapter-queue-redis',
+    '@nvent-addon/adapter-stream-redis',
+    '@nvent-addon/adapter-store-redis',
+    '@nvent-addon/adapter-store-postgres',
     'nvent',
-    '@nvent/app',
+    '@nvent-addon/app',
   ],
 
   imports: {
@@ -30,11 +31,13 @@ export default defineNuxtConfig({
       level: 'info',
     },
 
-    // v0.4.1: New config structure with shared connections
     connections: {
       redis: {
         host: '127.0.0.1',
         port: 6379,
+      },
+      postgres: {
+        connectionString: 'postgresql://postgres:postgres@localhost:5432/nvent',
       },
       file: {
         dataDir: '.data',
@@ -73,7 +76,7 @@ export default defineNuxtConfig({
 
     // Store adapter configuration
     store: {
-      adapter: 'file', // Use file for development (change to 'redis' for production)
+      adapter: 'postgres', // Use file for development (change to 'redis' for production)
       // file.dataDir inherited from connections.file → becomes '.data/store'
       prefix: 'nvent',
       state: {
