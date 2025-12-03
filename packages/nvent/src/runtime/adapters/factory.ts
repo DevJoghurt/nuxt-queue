@@ -194,7 +194,7 @@ async function createQueueAdapter(config: QueueConfig): Promise<QueueAdapter> {
       throw new Error('Redis queue adapter not registered. Install @nvent/adapter-queue-redis and add it to your nuxt.config modules.')
 
     case 'postgres':
-      throw new Error('Postgres queue adapter (PGBoss) not yet implemented')
+      throw new Error('Postgres queue adapter not registered. Install @nvent/adapter-queue-postgres and add it to your nuxt.config modules.')
 
     default:
       throw new Error(`Unknown queue adapter type: ${type}`)

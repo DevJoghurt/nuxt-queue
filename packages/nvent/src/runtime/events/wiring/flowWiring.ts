@@ -1148,17 +1148,14 @@ export function createFlowWiring() {
           }
         }
 
-        // For step.completed or step.failed, check if flow is complete
-        // IMPORTANT: Do this AFTER incrementing completedSteps to avoid race condition
-        // Sequential processing ensures emit tracking completes before orchestration
-        if (e.type === 'step.completed' || e.type === 'step.failed') {
-          logger.debug('Step completed/failed, checking pending steps', {
-            flowName,
-            runId,
-            stepName: e.stepName,
-            eventType: e.type,
-          })
-
+        // For step.completed, trigger orchestration to check pending steps
+        // IMPORTANT: Do NOT trigger orchestration on step.failed events!
+        // - step.failed is emitted for EVERY failed attempt (including retries)
+        // - If the step will retry, a step.retry event is also emitted
+        // - The queue adapter (pg-boss/BullMQ) handles retries automatically
+        // - Re-enqueueing on step.failed creates duplicate jobs and infinite loops
+        // Only trigger orchestration when a step successfully completes
+        if (e.type === 'step.completed') {
           // ORCHESTRATION: Check if any steps can now be triggered
           // This handles both emit events and step completions, so we only need to call it here
           try {
@@ -1172,7 +1169,9 @@ export function createFlowWiring() {
             })
             throw err
           }
-
+        }
+        // Check flow completion for both step.completed and step.failed
+        if (e.type === 'step.completed' || e.type === 'step.failed') {
           try {
             // Read all events for this flow to analyze completion
             const allEvents = await store.stream.read(streamName)

@@ -1,7 +1,7 @@
 {
-  "name": "@nvent-addon/adapter-queue-redis",
+  "name": "@nvent-addon/adapter-queue-postgres",
   "version": "0.4.5",
-  "description": "Redis queue adapter for nvent using BullMQ",
+  "description": "PostgreSQL queue adapter for nvent using pg-boss",
   "repository": "DevJoghurt/nvent",
   "license": "MIT",
   "type": "module",
@@ -26,9 +26,9 @@
   },
   "dependencies": {
     "@nuxt/kit": "^4.2.1",
-    "bullmq": "5.65.1",
     "defu": "^6.1.4",
-    "ioredis": "5.8.2"
+    "pg-boss": "12.5.2",
+    "pg": "8.16.3"
   },
   "devDependencies": {
     "@nuxt/module-builder": "^1.0.2",

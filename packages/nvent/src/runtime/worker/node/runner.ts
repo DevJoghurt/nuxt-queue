@@ -334,26 +334,8 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
       // Determine if this is a retry or final failure
       const willRetry = !isFinalAttempt
 
-      // v0.4: Always emit step.failed for every failed attempt
-      try {
-        await eventMgr.publishBus({
-          type: 'step.failed',
-          runId: flowId || 'unknown',
-          flowName,
-          stepName: job.name,
-          stepId: stepRunId,
-          attempt,
-          data: {
-            error: String((err as any)?.message || err),
-            stack: (err as any)?.stack,
-          },
-        })
-      }
-      catch {
-        // ignore
-      }
-
-      // v0.4: If retrying, also emit step.retry event
+      // Only emit step.retry for non-final attempts
+      // Emit step.failed ONLY on the final attempt (after all retries exhausted)
       if (willRetry) {
         try {
           await eventMgr.publishBus({
@@ -369,7 +351,29 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
               attempt,
               maxAttempts,
               nextAttempt: attempt + 1,
+              error: String((err as any)?.message || err),
+              stack: (err as any)?.stack,
             } as any,
+          })
+        }
+        catch {
+          // ignore
+        }
+      }
+      else {
+        // Final attempt failed - emit step.failed
+        try {
+          await eventMgr.publishBus({
+            type: 'step.failed',
+            runId: flowId || 'unknown',
+            flowName,
+            stepName: job.name,
+            stepId: stepRunId,
+            attempt,
+            data: {
+              error: String((err as any)?.message || err),
+              stack: (err as any)?.stack,
+            },
           })
         }
         catch {
@@ -389,7 +393,7 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
         stepName: job.name,
         stepId: stepRunId,
         attempt,
-        data: { result },
+        data: { result } as any,
       })
     }
     catch {

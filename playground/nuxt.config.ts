@@ -7,6 +7,7 @@ export default defineNuxtConfig({
     '@nvent-addon/adapter-stream-redis',
     '@nvent-addon/adapter-store-redis',
     '@nvent-addon/adapter-store-postgres',
+    '@nvent-addon/adapter-queue-postgres',
     'nvent',
     '@nvent-addon/app',
   ],
@@ -28,7 +29,7 @@ export default defineNuxtConfig({
   nvent: {
     debug: {
       // Global log level: 'debug' | 'info' | 'warn' | 'error' | 'silent'
-      level: 'info',
+      level: 'debug',
     },
 
     connections: {
@@ -46,7 +47,7 @@ export default defineNuxtConfig({
 
     // Queue adapter configuration
     queue: {
-      adapter: 'file', // Use file for development (change to 'redis' for production)
+      adapter: 'postgres', // Use file for development (change to 'redis' for production)
       // redis connection inherited from connections.redis
       prefix: 'nvent',
       defaultJobOptions: {
