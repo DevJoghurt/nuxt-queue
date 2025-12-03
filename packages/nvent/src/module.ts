@@ -181,9 +181,9 @@ export default defineNuxtModule<ModuleOptions>().with({
         eventIndex: {},
       })))
 
-      console.log(`[nuxt-queue] registry refreshed (${reason})`, changedPath || '')
-      console.log(`[nuxt-queue] new registry has ${lastCompiledRegistry.workers?.length || 0} workers`)
-      console.log(`[nuxt-queue] new registry compiled at: ${lastCompiledRegistry.compiledAt}`)
+      console.log(`[nvent] registry refreshed (${reason})`, changedPath || '')
+      console.log(`[nvent] new registry has ${lastCompiledRegistry.workers?.length || 0} workers`)
+      console.log(`[nvent] new registry compiled at: ${lastCompiledRegistry.compiledAt}`)
 
       // Update templates to trigger regeneration
       await updateTemplates({
@@ -193,13 +193,13 @@ export default defineNuxtModule<ModuleOptions>().with({
             || template.filename === ANALYZED_FLOWS_TEMPLATE
             || template.filename === TRIGGER_REGISTRY_TEMPLATE
           if (match) {
-            console.log(`[nuxt-queue] updating template: ${template.filename}`)
+            console.log(`[nvent] updating template: ${template.filename}`)
           }
           return match
         },
       })
 
-      console.log(`[nuxt-queue] templates updated`)
+      console.log(`[nvent] templates updated`)
     }
 
     if (nuxt.options.dev) {

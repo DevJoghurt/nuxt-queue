@@ -5,7 +5,7 @@ import { useLogger } from '@nuxt/kit'
 import { debounce } from 'perfect-debounce'
 import type { LayerInfo } from '../registry'
 
-const logger = useLogger('nuxt-queue')
+const logger = useLogger('nvent')
 
 interface WatcherOptions {
   nuxt: Nuxt

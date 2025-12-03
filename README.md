@@ -1,359 +1,612 @@
 # Nvent
 
-Event-sourced queue and flow orchestration for Nuxt. Zero dependencies to get started - built-in memory/file adapters included. Scale to Redis when ready.
+Event-driven workflow orchestration for Nuxt with pluggable adapters. Start with zero dependencies using built-in memory/file adapters, scale to PostgreSQL or Redis for production.
 
 ## ✨ Features
 
-- 🚀 **Zero Setup**: Start instantly with built-in memory/file adapters - no Redis required
-- 🔄 **Queue Management**: Reliable job processing with pluggable queue adapters
-- 🎭 **Flow Orchestration**: Multi-step workflows with event sourcing
-- ⏰ **Flow Scheduling**: Cron-based and delayed flow execution
-- 🔌 **Pluggable Adapters**: Built-in memory/file support, optional Redis adapters for production
-- 📊 **Event Sourcing**: Complete audit trail of all flow operations
-- 🎨 **Development UI**: Visual flow diagrams, timeline, and scheduling (separate package)
-- 🔌 **Function Context**: Rich runtime with state, logging, and events
-- 📦 **Auto-discovery**: Filesystem-based worker registry
-- 🚀 **Horizontal Scaling**: Stateless architecture with Redis adapters
+- 🚀 **Zero Setup**: Start instantly with built-in memory/file adapters
+- 🔄 **Job Queue**: Reliable job processing with retries and concurrency control
+- 🎭 **Flow Orchestration**: Event-driven multi-step workflows
+- ⏰ **Triggers**: Time-based (cron, delays), webhook, and manual triggers
+- ⏸️ **Await Patterns**: Pause flows for time delays or webhook confirmations
+- 🔌 **Pluggable Adapters**: Choose your backend - Memory, File, Redis, or PostgreSQL
+- 📊 **Event Sourcing**: Complete audit trail with immutable event streams
+- 🎨 **Development UI**: Real-time monitoring, flow diagrams, and debugging
+- 📦 **Auto-discovery**: Filesystem-based function registry
+- 🚀 **Production Ready**: Horizontal scaling with PostgreSQL or Redis
 - 🔍 **Full Observability**: Real-time logs, metrics, and event streams
-- 🛑 **Flow Control**: Cancel running flows, detect stalled flows, query flow status
 
+## 📦 Adapters
 
----
+Nvent uses three types of adapters that can be mixed and matched:
 
-**Version**: v0.4.5  
-**Status**: ✅ Current Implementation  
-**Last Updated**: 2025-11-18
-✅ Core queue and flow functionality  
-✅ Built-in memory/file adapters - no Redis required to start  
-✅ Optional Redis adapters for production scaling  
-✅ Event sourcing with stream adapters  
-✅ Real-time monitoring UI (separate @nvent-addon/app package)  
-✅ Flow scheduling (cron patterns and delays)  
-✅ Flow control (cancel, query running flows, stall detection)  
-✅ Worker context with state, logging, and events  
-✅ Auto-discovery and flow analysis  
-🚧 Comprehensive trigger system (planned v0.5)  
-🚧 Python functions (planned v0.5)  
-🚧 Postgres adapters (planned v0.6)
+### Queue Adapters
+Process jobs with retries, concurrency, and scheduling:
+- **memory** - Development (built-in, no persistence)
+- **file** - Single instance with persistence (built-in)
+- **redis** - Production with BullMQ (`@nvent-addon/adapter-queue-redis`)
+- **postgres** - Production with pg-boss (`@nvent-addon/adapter-queue-postgres`)
 
+### Store Adapters
+Store flow metadata, state, and trigger data:
+- **memory** - Development (built-in)
+- **file** - Local persistence (built-in)
+- **redis** - Production (`@nvent-addon/adapter-store-redis`)
+- **postgres** - Production with optimized schema (`@nvent-addon/adapter-store-postgres`)
 
-## 🗃️ Event Schema & Storage
-
-All flow operations are event-sourced and stored in streams (`{prefix}:flow:<runId>`, default prefix: `nvent`). Events are immutable, type-safe, and provide a complete audit trail.
-
-**Event types:**
-
-  - `flow.start`, `flow.completed`, `flow.failed`, `flow.cancel`, `flow.stalled`
-  - `step.started`, `step.completed`, `step.failed`, `step.retry`
-  - `log`, `emit`, `state`
-
-**Storage Options:**
-- **Built-in**: Memory (development), File (persistence without database)
-- **Production**: Redis Streams with `@nvent-addon/adapter-stream-redis`
-
-See [Event Schema](./specs/v0.4/event-schema.md) for full details and field definitions.
-
-## 🏆 Best Practices
-
-- Keep steps small and focused
-- Use state for shared data between steps
-- Use `ctx.flow.emit()` to trigger downstream steps
-- Log with context using `ctx.logger.log()`
-- Set concurrency based on resource needs
-- Use `on-complete` state cleanup for automatic state management
-- Document schedules with metadata for maintainability
-
-## ⚠️ Limitations (v0.4.5)
-
-1. **TypeScript only**: Python functions not yet implemented (planned for v0.5)
-2. **No complex triggers**: Only basic scheduling available (v0.5 will add triggers)
-3. **No await patterns**: Pausing flows for time/events planned for v0.5
-4. **No Postgres adapters**: Only memory/file/Redis adapters available (Postgres planned for v0.6)
-5. **State separate from events**: Not unified with stream store (planned for v0.6)
-6. **Basic logging**: No advanced logger adapters (planned for v0.7)
-7. **No schedule editing**: Must delete and recreate schedules (v0.5 will add full trigger management)
-8. **File adapter limitations**: Single instance only, not suitable for horizontal scaling
+### Stream Adapters
+Real-time event distribution and pub/sub:
+- **memory** - Development (built-in, single instance)
+- **redis** - Production with Redis Pub/Sub (`@nvent-addon/adapter-stream-redis`)
+- **postgres** - Production with LISTEN/NOTIFY (`@nvent-addon/adapter-stream-postgres`)
 
 
 ## 🚀 Quick Start
 
 ### Installation
 
-**Core package (zero dependencies to start):**
-```sh
+```bash
+# Core package (includes built-in memory/file adapters)
 npm install nvent
-```
 
-**Optional UI package:**
-```sh
+# Optional: UI for monitoring and debugging
 npm install @nvent-addon/app
-```
 
-**Optional Redis adapters for production:**
-```sh
+# Optional: PostgreSQL adapters (recommended for production)
+npm install @nvent-addon/adapter-queue-postgres
+npm install @nvent-addon/adapter-store-postgres
+npm install @nvent-addon/adapter-stream-postgres
+
+# Alternative: Redis adapters
 npm install @nvent-addon/adapter-queue-redis
 npm install @nvent-addon/adapter-store-redis
 npm install @nvent-addon/adapter-stream-redis
 ```
 
-### Configuration
+## ⚙️ Configuration
 
-**Minimal setup (uses built-in memory adapters):**
+### Development Setup (Zero Config)
+
+Uses built-in memory adapters - perfect for getting started:
+
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ['nvent'],
+  modules: ['nvent']
 })
 ```
 
-**With persistence (file adapters):**
+### Development with Persistence
+
+Use file adapters to persist data between restarts:
+
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
   modules: ['nvent'],
+  
   nvent: {
+    connections: {
+      file: {
+        dataDir: '.data'  // Will create .data/queue, .data/store subdirs
+      }
+    },
+    
     queue: {
       adapter: 'file',
-      dataDir: './.data/queue'
+      worker: {
+        concurrency: 2
+      }
     },
+    
     store: {
-      adapter: 'file',
-      dataDir: './.data/store'
+      adapter: 'file'
     },
+    
     stream: {
-      adapter: 'file',
-      dataDir: './.data/stream'
+      adapter: 'memory'  // File stream not recommended (use memory for dev)
     }
   }
 })
 ```
 
-**Production setup (Redis adapters):**
+### Production with PostgreSQL (Recommended)
+
+Single database for all adapters with schema isolation:
+
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
   modules: [
+    '@nvent-addon/adapter-queue-postgres',
+    '@nvent-addon/adapter-store-postgres',
+    '@nvent-addon/adapter-stream-postgres',
     'nvent',
+    '@nvent-addon/app'  // Optional UI
+  ],
+  
+  nvent: {
+    // Shared PostgreSQL connection
+    connections: {
+      postgres: {
+        connectionString: process.env.DATABASE_URL
+        // or individual settings:
+        // host: 'localhost',
+        // port: 5432,
+        // database: 'nvent',
+        // user: 'postgres',
+        // password: 'postgres'
+      }
+    },
+    
+    queue: {
+      adapter: 'postgres',
+      schema: 'nvent_queue',  // Separate schema for queue tables
+      worker: {
+        concurrency: 5,
+        autorun: true
+      }
+    },
+    
+    store: {
+      adapter: 'postgres',
+      schema: 'nvent_store',  // Separate schema for store tables
+      prefix: 'nvent'
+    },
+    
+    stream: {
+      adapter: 'postgres',  // Uses LISTEN/NOTIFY
+      prefix: 'nvent'
+    },
+    
+    flow: {
+      stallDetection: {
+        enabled: true,
+        stallTimeout: 1800000,  // 30 minutes
+        checkInterval: 900000   // 15 minutes
+      }
+    }
+  }
+})
+```
+
+### Production with Redis
+
+High-throughput setup for distributed systems:
+
+```ts
+// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: [
     '@nvent-addon/adapter-queue-redis',
     '@nvent-addon/adapter-store-redis',
     '@nvent-addon/adapter-stream-redis',
-    '@nvent-addon/app'  // Optional UI
+    'nvent',
+    '@nvent-addon/app'
   ],
+  
   nvent: {
     // Shared Redis connection
     connections: {
       redis: {
-        host: '127.0.0.1',
+        host: process.env.REDIS_HOST || '127.0.0.1',
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+        password: process.env.REDIS_PASSWORD
+      }
+    },
+    
+    queue: {
+      adapter: 'redis',
+      prefix: 'nvent',
+      worker: {
+        concurrency: 10
+      }
+    },
+    
+    store: {
+      adapter: 'redis',
+      prefix: 'nvent'
+    },
+    
+    stream: {
+      adapter: 'redis',
+      prefix: 'nvent'
+    }
+  }
+})
+```
+
+### Hybrid Setup
+
+Mix adapters based on your needs:
+
+```ts
+// Example: PostgreSQL for persistence, Redis for real-time streams
+export default defineNuxtConfig({
+  modules: [
+    '@nvent-addon/adapter-queue-postgres',
+    '@nvent-addon/adapter-store-postgres',
+    '@nvent-addon/adapter-stream-redis',
+    'nvent'
+  ],
+  
+  nvent: {
+    connections: {
+      postgres: {
+        connectionString: process.env.DATABASE_URL
+      },
+      redis: {
+        host: process.env.REDIS_HOST,
         port: 6379
       }
     },
-    // Configure adapters
-    queue: {
-      adapter: 'redis',
-      defaultConfig: { concurrency: 2 }
-    },
-    store: {
-      adapter: 'redis'
-    },
-    stream: {
-      adapter: 'redis'
-    },
-    // Flow configuration
-    flows: {
-      stallDetection: {
-        enabled: true,
-        timeout: 300000  // 5 minutes
+    
+    queue: { adapter: 'postgres', schema: 'nvent_queue' },
+    store: { adapter: 'postgres', schema: 'nvent_store' },
+    stream: { adapter: 'redis' }  // Redis for low-latency pub/sub
+  }
+})
+```
+
+## 📝 Usage Examples
+
+### Simple Function
+
+Create a function in `server/functions/`:
+
+```typescript
+// server/functions/send-email.ts
+import { defineFunctionConfig, defineFunction } from '#imports'
+
+export const config = defineFunctionConfig({
+  queue: { name: 'emails' }
+})
+
+export default defineFunction(async (input, ctx) => {
+  const { to, subject, body } = input
+  
+  // Use context for logging
+  ctx.logger.log('info', 'Sending email', { to, subject })
+  
+  // Your email logic
+  await sendEmail(to, subject, body)
+  
+  return { sent: true, timestamp: new Date().toISOString() }
+})
+```
+
+Enqueue from anywhere in your app:
+
+```typescript
+// API route, event handler, etc.
+await $nvent.queue.enqueue('emails', {
+  name: 'send-email',
+  data: {
+    to: 'user@example.com',
+    subject: 'Welcome!',
+    body: 'Thanks for signing up'
+  }
+})
+```
+
+### Event-Driven Flow
+
+Multi-step workflows with automatic orchestration:
+
+```typescript
+// server/functions/example/first_step.ts
+import { defineFunctionConfig, defineFunction } from '#imports'
+
+export const config = defineFunctionConfig({
+  queue: { name: 'example_queue' },
+  flow: {
+    name: 'example-flow',
+    role: 'entry',  // Entry point of the flow
+    step: 'first_step',
+    emits: ['first_step.completed']
+  }
+})
+
+export default defineFunction(async (input, ctx) => {
+  ctx.logger.log('info', `Starting step ${ctx.jobId}`)
+  
+  // Your business logic
+  const result = await processData(input)
+  
+  // Emit event to trigger next steps
+  await ctx.flow.emit('first_step.completed', { result })
+  
+  return { ok: true }
+})
+```
+
+```typescript
+// server/functions/example/second_step.ts
+import { defineFunctionConfig, defineFunction } from '#imports'
+
+export const config = defineFunctionConfig({
+  queue: { name: 'example_queue' },
+  flow: {
+    name: 'example-flow',
+    role: 'step',
+    step: 'second_step',
+    subscribes: ['first_step.completed'],  // Triggered by first step
+    emits: ['second_step.completed']
+  }
+})
+
+export default defineFunction(async (input, ctx) => {
+  // Input is keyed by event name
+  const firstStepData = input['first_step.completed']
+  
+  ctx.logger.log('info', 'Processing second step', { receivedData: firstStepData })
+  
+  await processMoreData(firstStepData)
+  
+  await ctx.flow.emit('second_step.completed', { done: true })
+  
+  return { ok: true }
+})
+```
+
+Start flows via triggers or manually:
+
+```typescript
+// Via API - flow starts automatically when triggered
+// See trigger examples below
+
+// Query flow status
+const running = await $nvent.flow.isRunning('example-flow', runId)
+const runs = await $nvent.flow.getRunningFlows('example-flow')
+
+// Cancel if needed
+await $nvent.flow.cancel()  // Uses flowId from context
+```
+
+### Triggers
+
+Automatically start flows based on time, webhooks, or manual triggers:
+
+#### Time-Based Triggers (Cron)
+
+```typescript
+// server/functions/scheduled-report.ts
+import { defineFunctionConfig, defineFunction } from '#imports'
+
+export const config = defineFunctionConfig({
+  queue: { name: 'reports' },
+  flow: {
+    name: 'daily-report-flow',
+    role: 'entry',
+    step: 'generate-report',
+    triggers: {
+      define: {
+        name: 'daily-report-schedule',
+        type: 'time',
+        scope: 'global',
+        displayName: 'Daily Report',
+        description: 'Generate daily report at 9 AM'
+      },
+      subscribe: ['daily-report-schedule'],
+      mode: 'auto',
+      config: {
+        cron: '0 9 * * *'  // Every day at 9 AM
       }
     }
   }
 })
+
+export default defineFunction(async (input, ctx) => {
+  const report = await generateDailyReport()
+  await sendReport(report)
+  return { generated: true }
+})
+
+// Common cron patterns:
+// '*/5 * * * *'  - Every 5 minutes
+// '0 * * * *'    - Every hour
+// '0 9 * * *'    - Daily at 9 AM
+// '0 9 * * 1'    - Every Monday at 9 AM
+// '0 0 1 * *'    - First day of month
 ```
 
-### Create Your First Function
+#### Manual Triggers
 
 ```typescript
-// server/functions/example/process.ts
-export default defineFunction(async (job, ctx) => {
-  // Access job data
-  const { message } = job.data
-  
-  // Log to stream
-  ctx.logger.log('info', 'Processing message', { message })
-  
-  // Store state
-  await ctx.state.set('processedAt', new Date().toISOString())
-  
-  // Return result
-  return { success: true, processed: message }
-})
+// server/functions/notification-flow.ts
+import { defineFunctionConfig, defineFunction } from '#imports'
 
 export const config = defineFunctionConfig({
-  concurrency: 5,
-})
-```
-
-### Enqueue a Job
-
-```typescript
-// API route or wherever
-const queue = useQueueAdapter()
-await queue.enqueue('process', {
-  name: 'process',
-  data: { message: 'Hello World' }
-})
-```
-
-### Create a Flow
-
-Multi-step workflows with event-driven orchestration:
-
-```typescript
-// server/functions/my-flow/start.ts
-export default defineFunction(async (job, ctx) => {
-  ctx.logger.log('info', 'Flow started')
-  const prepared = { step: 1, data: job.data }
-  
-  // Emit event to trigger next steps
-  ctx.flow.emit('data.prepared', prepared)
-  
-  return prepared
-})
-
-export const config = defineFunctionConfig({
+  queue: { name: 'notifications' },
   flow: {
-    name: ['my-flow'],
+    name: 'notification-flow',
     role: 'entry',
-    step: 'start',
-    emits: ['data.prepared']
-  }
-})
-
-// server/functions/my-flow/process.ts
-export default defineFunction(async (job, ctx) => {
-  const result = await processData(job.data)
-  
-  // Emit to trigger next step
-  ctx.flow.emit('data.processed', result)
-  
-  return result
-})
-
-export const config = defineFunctionConfig({
-  flow: {
-    name: ['my-flow'],
-    role: 'step',
-    step: 'process',
-    subscribes: ['data.prepared'],  // Triggered by start
-    emits: ['data.processed']
-  }
-})
-
-// server/functions/my-flow/validate.ts
-export default defineFunction(async (job, ctx) => {
-  const validated = await validate(job.data)
-  ctx.flow.emit('validation.complete', validated)
-  return validated
-})
-
-export const config = defineFunctionConfig({
-  flow: {
-    name: ['my-flow'],
-    role: 'step',
-    step: 'validate',
-    subscribes: ['data.prepared'],  // Also triggered by start (parallel with process)
-    emits: ['validation.complete']
-  }
-})
-```
-
-**Start the flow:**
-```typescript
-const { startFlow } = useFlow()
-await startFlow('my-flow', { input: 'data' })
-```
-
-**Check flow status:**
-```typescript
-const { isRunning, getRunningFlows, cancelFlow } = useFlow()
-
-// Check if specific run is still active
-const running = await isRunning('my-flow', runId)
-
-// Get all running instances of a flow
-const runs = await getRunningFlows('my-flow')
-
-// Cancel a running flow
-await cancelFlow('my-flow', runId)
-```
-
-**Flow execution**: Entry step emits `data.prepared` → Both `process` and `validate` steps run in parallel (they both subscribe to `data.prepared`) → Each emits its own completion event for downstream steps.
-
-### Schedule a Flow
-
-Schedule flows to run automatically with cron patterns or delays:
-
-```typescript
-// Schedule a flow to run daily at 2 AM
-await $fetch('/api/_flows/my-flow/schedule', {
-  method: 'POST',
-  body: {
-    cron: '0 2 * * *',
-    input: { retentionDays: 30 },
-    metadata: {
-      description: 'Daily cleanup job'
+    step: 'send-notification',
+    triggers: {
+      define: {
+        name: 'manual.send-notification',
+        type: 'manual',
+        scope: 'flow',
+        displayName: 'Send Notification',
+        description: 'Manually trigger notification'
+      },
+      subscribe: ['manual.send-notification'],
+      mode: 'auto'
     }
   }
 })
 
-// Schedule a one-time delayed execution (5 minutes)
-await $fetch('/api/_flows/reminder-flow/schedule', {
-  method: 'POST',
-  body: {
-    delay: 300000,  // milliseconds
-    input: { userId: '123', message: 'Check your email' }
+export default defineFunction(async (input, ctx) => {
+  const triggerData = input.trigger?.data
+  
+  await sendNotification(triggerData)
+  return { sent: true }
+})
+
+// Trigger via UI at /_nvent or programmatically
+```
+
+### Await Patterns
+
+Pause flow execution for time delays or webhook confirmation:
+
+#### Time Delay (awaitAfter)
+
+```typescript
+// server/functions/notification-with-delay.ts
+import { defineFunctionConfig, defineFunction } from '#imports'
+
+export const config = defineFunctionConfig({
+  queue: { name: 'notifications' },
+  flow: {
+    name: 'notification-confirmation-flow',
+    role: 'entry',
+    step: 'send-notification',
+    emits: ['notification.sent'],
+    awaitAfter: {
+      type: 'time',
+      delay: 10000  // Wait 10 seconds after step completes
+    }
   }
 })
 
-// List all schedules for a flow
-const schedules = await $fetch('/api/_flows/my-flow/schedules')
-
-// Delete a schedule
-await $fetch('/api/_flows/my-flow/schedules/schedule-id', {
-  method: 'DELETE'
+export default defineFunction(async (input, ctx) => {
+  await sendNotification(input)
+  
+  // Emit event - but next step won't run for 10 seconds
+  await ctx.flow.emit('notification.sent', { notificationId: ctx.runId })
+  
+  return { sent: true }
 })
 ```
 
-**Common cron patterns:**
-- `* * * * *` - Every minute
-- `*/5 * * * *` - Every 5 minutes
-- `0 * * * *` - Every hour
-- `0 2 * * *` - Daily at 2 AM
-- `0 9 * * 1` - Every Monday at 9 AM
-- `0 0 1 * *` - First day of month at midnight
+#### Webhook Approval (awaitBefore)
+
+```typescript
+// server/functions/process-approval.ts
+import { defineFunctionConfig, defineFunction, defineAwaitRegisterHook } from '#imports'
+
+export const config = defineFunctionConfig({
+  queue: { name: 'approvals' },
+  flow: {
+    name: 'webhook-approval-flow',
+    role: 'step',
+    step: 'process-approval',
+    subscribes: ['approval.requested'],
+    awaitBefore: {
+      type: 'webhook',
+      method: 'POST',
+      timeout: 300000,  // 5 minutes
+      timeoutAction: 'fail'
+    }
+  }
+})
+
+// Hook called when webhook URL is generated
+export const onAwaitRegister = defineAwaitRegisterHook(async (webhookUrl, awaitData, ctx) => {
+  // Send webhook URL via email, Slack, etc.
+  await sendApprovalRequest(webhookUrl, awaitData)
+  
+  ctx.logger.log('info', 'Approval webhook generated', { url: webhookUrl })
+})
+
+export default defineFunction(async (input, ctx) => {
+  // This only runs AFTER webhook is called
+  const approval = ctx.trigger  // Webhook payload
+  
+  if (!approval?.approved) {
+    throw new Error(`Approval denied: ${approval?.comment}`)
+  }
+  
+  await processApprovedRequest(approval)
+  return { approved: true }
+})
+```
+
+### Using State
+
+Share data between flow steps:
+
+```typescript
+export const config = defineFunctionConfig({
+  queue: { name: 'order_queue' },
+  flow: {
+    name: 'process-order',
+    role: 'entry',
+    step: 'process_order'
+  }
+})
+
+export default defineFunction(async (input, ctx) => {
+  // Store state that survives across steps
+  await ctx.state.set('orderId', input.orderId)
+  await ctx.state.set('total', input.total, { ttl: 3600000 }) // 1 hour TTL
+  
+  // Retrieve state later
+  const orderId = await ctx.state.get('orderId')
+  
+  // Delete when done
+  await ctx.state.delete('orderId')
+  
+  return { processed: true }
+})
+```
 
 ## 🎨 Development UI
 
-**Install the UI package:**
-```sh
+Install the monitoring UI:
+
+```bash
 npm install @nvent-addon/app
 ```
 
-**Add to your Nuxt modules:**
+Add to your Nuxt config:
+
 ```ts
 export default defineNuxtConfig({
   modules: ['nvent', '@nvent-addon/app']
 })
 ```
 
-Access the built-in UI as `<NventApp />` component:
+The UI is available in two ways:
 
-- 📊 **Dashboard**: Overview of queues and flows
-- 🔄 **Flow Diagrams**: Visual representation with Vue Flow
-- ⏰ **Flow Scheduling**: Create and manage cron-based or delayed schedules
-- 📝 **Event Timeline**: Real-time event stream with step details
-- 📋 **Logs**: Filtered logging by flow/step
-- 📈 **Metrics**: Queue statistics and performance
-- 🔍 **Flow Runs**: Complete history with status tracking (running, completed, failed, canceled, stalled)
+**1. As a built-in route** (enabled by default):
+
+Navigate to `http://localhost:3000/_nvent` in your browser.
+
+**2. As a component in your app**:
+
+Add the `<NventApp />` component anywhere in your pages:
+
+```vue
+<template>
+  <div>
+    <NventApp />
+  </div>
+</template>
+```
+
+You can customize the route configuration:
+
+```ts
+export default defineNuxtConfig({
+  modules: ['nvent', '@nvent-addon/app'],
+  nventapp: {
+    route: true,              // Enable/disable built-in route (default: true)
+    routePath: '/_nvent',     // Customize route path (default: '/_nvent')
+    layout: false             // Layout to use: false (no layout), 'default', 'admin', etc. (default: false)
+  }
+})
+```
+
+The UI provides:
+
+- 📊 **Dashboard** - Queue stats and active flows
+- 🔄 **Flow Visualizer** - Interactive flow diagrams
+- ⚡ **Triggers** - Manage schedules and webhooks  
+- 📝 **Event Timeline** - Real-time event stream
+- 📋 **Logs** - Filterable logs by flow/step
+- 🔍 **Job Inspector** - View job details and retry history
 
 ## 🏗️ Architecture
 
@@ -363,14 +616,17 @@ Nvent uses a three-tier adapter system:
 
 1. **Queue Adapter**: Job processing and scheduling
    - Built-in: `memory`, `file`
+   - PostgreSQL: `@nvent-addon/adapter-queue-postgres` (pg-boss)
    - Redis: `@nvent-addon/adapter-queue-redis` (BullMQ)
 
 2. **Store Adapter**: Document and key-value storage
    - Built-in: `memory`, `file`
+   - PostgreSQL: `@nvent-addon/adapter-store-postgres`
    - Redis: `@nvent-addon/adapter-store-redis`
 
 3. **Stream Adapter**: Event sourcing and real-time distribution
    - Built-in: `memory`, `file`
+   - PostgreSQL: `@nvent-addon/adapter-stream-postgres` (LISTEN/NOTIFY)
    - Redis: `@nvent-addon/adapter-stream-redis` (Redis Streams + Pub/Sub)
 
 ### Event Sourcing
@@ -423,58 +679,6 @@ Every function receives a rich context:
   }
 }
 ```
-
-## 📚 Documentation
-
-### v0.4 Documentation
-- **[Current Implementation](./specs/v0.4/current-implementation.md)** - Complete v0.4 architecture
-- **[Event Schema](./specs/v0.4/event-schema.md)** - Event types and structure
-- **[Flow Scheduling](./specs/v0.4/flow-scheduling.md)** - Scheduling specification
-- **[Quick Reference](./specs/v0.4/quick-reference.md)** - One-page API reference
-
-### API & Advanced
-- **[API Reference](./specs/v0.4/current-implementation.md#api-endpoints)** - REST endpoints for flows/queues
-- **[Logging](./specs/v0.4/logging.md)** - Server logging and best practices
-
-### Roadmap & Future
-- **[Roadmap](./specs/roadmap.md)** - Planned features across versions
-- **[v0.5 Trigger System](./specs/v0.5/trigger-system.md)** - Next-gen event handling
-- **[v0.6 Multi-language Functions](./specs/v0.6/multi-language-workers.md)** - Python support
-- **[v0.6 Postgres Backend](./specs/v0.6/postgres-backend.md)** - PgBoss integration
-
-## 🔮 Roadmap
-
-### v0.4.5 (Current - November 2025)
-✅ Core queue and flow orchestration  
-✅ Built-in memory/file adapters - zero setup required  
-✅ Optional Redis adapters for production scaling  
-✅ Modular package structure (core + addons)  
-✅ Event sourcing with pluggable stream adapters  
-✅ Real-time monitoring UI (separate @nvent-addon/app package)  
-✅ Flow scheduling (cron and delays)  
-✅ Flow control (cancel, query status, stall detection)  
-✅ Function context with state and logging  
-✅ Improved configuration structure  
-
-### v0.5
-- 🎯 Comprehensive trigger system (schedule, webhook, event, manual)
-- ⏱️ Await patterns (time, event, condition)
-- 🐍 Python function support with RPC bridge
-- 🔗 Webhook triggers with auto-setup
-
-### v0.6
-- 🐘 PgBoss queue provider option
-- 🗄️ Postgres stream store adapter
-- 🔄 Unified state and event storage
-- 📊 Advanced state management
-
-### v0.7
-- 📊 Enhanced logger with multiple adapters
-- 🌐 HTTP mode for functions (REST/gRPC)
-- 🔌 External service hooks
-- 🎨 Pluggable function execution modes
-
-See [specs/roadmap.md](./specs/roadmap.md) for complete details.
 
 ## 🤝 Contributing
 

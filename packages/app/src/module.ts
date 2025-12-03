@@ -6,6 +6,7 @@ import {
   addComponentsDir,
   addServerScanDir,
   addPlugin,
+  extendPages,
 } from '@nuxt/kit'
 import defu from 'defu'
 import type {} from '@nuxt/schema'
@@ -16,11 +17,33 @@ const meta = {
   configKey: 'nventapp',
 }
 
-type ModuleOptions = Record<string, unknown>
+interface ModuleOptions {
+  /**
+   * Enable the built-in route at /_nvent
+   * @default true
+   */
+  route?: boolean
+  /**
+   * Custom route path for the Nvent app
+   * @default '/_nvent'
+   */
+  routePath?: string
+  /**
+   * Layout to use for the route page
+   * Set to false to use no layout (standalone page)
+   * Set to a string to use a specific layout from your app
+   * @default false
+   */
+  layout?: string | false
+}
 
 export default defineNuxtModule<ModuleOptions>({
   meta,
-  defaults: {},
+  defaults: {
+    route: true,
+    routePath: '/_nvent',
+    layout: false,
+  },
   moduleDependencies: {
     'json-editor-vue/nuxt': {
       version: '0.18.1',
@@ -50,11 +73,26 @@ export default defineNuxtModule<ModuleOptions>({
       prefix: 'Nvent',
     })
 
+    // Register as global component (for manual use like <NventApp />)
     addComponent({
       name: 'NventApp',
       filePath: resolve('./runtime/app/pages/index.vue'),
       global: true,
     })
+
+    // Add route if enabled
+    if (options.route !== false) {
+      extendPages((pages) => {
+        pages.push({
+          name: 'nvent-app',
+          path: options.routePath || '/_nvent',
+          file: resolve('./runtime/app/pages/index.vue'),
+          meta: {
+            layout: options.layout === false ? false : options.layout,
+          },
+        })
+      })
+    }
 
     // add jsoneditor to vite optimize -> for esm support
     nuxt.options.vite.optimizeDeps = defu(nuxt.options.vite.optimizeDeps, {

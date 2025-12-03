@@ -177,17 +177,24 @@ Then pg-boss will create its tables within this schema on first startup.
 ### Basic Usage
 
 ```typescript
-// Define a job handler
-export default defineNventFunction('sendEmail', async (payload) => {
-  await sendEmail(payload.to, payload.subject, payload.body)
+// server/functions/send-email.ts
+export const config = defineFunctionConfig({
+  queue: { name: 'email_queue' }
+})
+
+export default defineFunction(async (input) => {
+  await sendEmail(input.to, input.subject, input.body)
   return { sent: true }
 })
 
-// Enqueue a job
-await $nvent.enqueue('sendEmail', {
-  to: 'user@example.com',
-  subject: 'Welcome',
-  body: 'Welcome to our app!'
+// Enqueue from anywhere
+await $nvent.queue.enqueue('email_queue', {
+  name: 'send-email',
+  data: {
+    to: 'user@example.com',
+    subject: 'Welcome',
+    body: 'Welcome to our app!'
+  }
 })
 ```
 
@@ -195,12 +202,16 @@ await $nvent.enqueue('sendEmail', {
 
 ```typescript
 // Send email after 1 hour
-await $nvent.schedule('sendEmail', {
-  to: 'user@example.com',
-  subject: 'Reminder',
-  body: 'Don\'t forget!'
-}, {
-  delay: 3600000 // 1 hour in milliseconds
+await $nvent.queue.enqueue('email_queue', {
+  name: 'send-email',
+  data: {
+    to: 'user@example.com',
+    subject: 'Reminder',
+    body: 'Don\'t forget!'
+  },
+  options: {
+    delay: 3600000 // 1 hour in milliseconds
+  }
 })
 ```
 
@@ -208,24 +219,30 @@ await $nvent.schedule('sendEmail', {
 
 ```typescript
 // Send daily digest at 9 AM
-await $nvent.schedule('sendDailyDigest', {
-  userId: '123'
-}, {
-  cron: '0 9 * * *' // 9 AM every day
+await $nvent.queue.enqueue('digest_queue', {
+  name: 'send-daily-digest',
+  data: { userId: '123' },
+  options: {
+    cron: '0 9 * * *' // 9 AM every day
+  }
 })
 ```
 
 ### Job Options
 
 ```typescript
-await $nvent.enqueue('processOrder', orderData, {
-  attempts: 5, // Retry up to 5 times
-  backoff: {
-    type: 'exponential',
-    delay: 2000 // Start with 2s delay
-  },
-  priority: 10, // Higher priority
-  timeout: 30000, // 30 second timeout
+await $nvent.queue.enqueue('order_queue', {
+  name: 'process-order',
+  data: orderData,
+  options: {
+    attempts: 5, // Retry up to 5 times
+    backoff: {
+      type: 'exponential',
+      delay: 2000 // Start with 2s delay
+    },
+    priority: 10, // Higher priority
+    timeout: 30000, // 30 second timeout
+  }
 })
 ```
 

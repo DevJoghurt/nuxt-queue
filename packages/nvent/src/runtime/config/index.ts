@@ -113,7 +113,7 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
 
   if (neededConnections.has('postgres') && !normalized.connections.postgres) {
     normalized.connections.postgres = {
-      connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/nuxt_queue',
+      connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/nvent',
     }
   }
 
