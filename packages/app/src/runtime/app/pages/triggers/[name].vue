@@ -148,7 +148,7 @@
               </USelectMenu>
             </div>
           </div>
-          
+
           <div
             v-if="eventsStatus === 'pending' && !events"
             class="flex-1 flex items-center justify-center"
@@ -189,7 +189,7 @@
                 :key="idx"
                 class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 cursor-pointer transition-colors"
                 :class="{
-                  'bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-500': selectedEvent && selectedEvent.type === event.type && (selectedEvent.ts || selectedEvent.timestamp) === (event.ts || event.timestamp)
+                  'bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-500': selectedEvent && selectedEvent.type === event.type && (selectedEvent.ts || selectedEvent.timestamp) === (event.ts || event.timestamp),
                 }"
                 @click="selectEvent(event)"
               >
@@ -264,224 +264,224 @@
               v-if="activeTab === 'overview'"
               class="p-6 space-y-6"
             >
-            <!-- Stats Cards -->
-            <div>
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                Trigger Statistics
-              </h3>
-              <div class="grid grid-cols-2 gap-4">
-                <StatCard
-                  icon="i-lucide-zap"
-                  :count="trigger.stats.totalFires"
-                  label="Total Fires"
-                  variant="gray"
-                />
-                <StatCard
-                  icon="i-lucide-git-branch"
-                  :count="trigger.stats.activeSubscribers"
-                  label="Active Subscribers"
-                  variant="purple"
-                />
-                <StatCard
-                  v-if="trigger.stats.lastFiredAt"
-                  icon="i-lucide-clock"
-                  :count="formatTime(new Date(trigger.stats.lastFiredAt).getTime())"
-                  label="Last Fired"
-                  variant="blue"
-                />
-                <StatCard
-                  icon="i-lucide-users"
-                  :count="trigger.subscriptionCount"
-                  label="Subscriptions"
-                  variant="emerald"
-                />
-              </div>
-            </div>
-
-            <!-- Description -->
-            <div
-              v-if="trigger.description"
-              class="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4"
-            >
-              <div class="flex items-start gap-2">
-                <UIcon
-                  name="i-lucide-info"
-                  class="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0"
-                />
-                <p class="text-sm text-blue-900 dark:text-blue-100">
-                  {{ trigger.description }}
-                </p>
-              </div>
-            </div>
-
-            <!-- Configuration -->
-            <div>
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                Configuration
-              </h3>
-              <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 space-y-3">
-                <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800">
-                  <span class="text-sm text-gray-600 dark:text-gray-400">Name</span>
-                  <span class="text-sm font-medium font-mono text-gray-900 dark:text-gray-100">{{ trigger.name }}</span>
-                </div>
-                <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800">
-                  <span class="text-sm text-gray-600 dark:text-gray-400">Type</span>
-                  <UBadge
-                    :label="trigger.type"
-                    :color="getTriggerTypeColor(trigger.type)"
-                    variant="subtle"
-                    size="xs"
+              <!-- Stats Cards -->
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                  Trigger Statistics
+                </h3>
+                <div class="grid grid-cols-2 gap-4">
+                  <StatCard
+                    icon="i-lucide-zap"
+                    :count="trigger.stats.totalFires"
+                    label="Total Fires"
+                    variant="gray"
                   />
-                </div>
-                <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800">
-                  <span class="text-sm text-gray-600 dark:text-gray-400">Scope</span>
-                  <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ trigger.scope }}</span>
-                </div>
-                <div
-                  v-if="trigger.source"
-                  class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800"
-                >
-                  <span class="text-sm text-gray-600 dark:text-gray-400">Source</span>
-                  <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ trigger.source }}</span>
-                </div>
-                <div
-                  v-if="trigger.registeredAt"
-                  class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800"
-                >
-                  <span class="text-sm text-gray-600 dark:text-gray-400">Registered</span>
-                  <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ formatDate(trigger.registeredAt) }}</span>
-                </div>
-                <div
-                  v-if="(trigger.stats as any).lastFiredAt"
-                  class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800"
-                >
-                  <span class="text-sm text-gray-600 dark:text-gray-400">Last Fired</span>
-                  <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ formatTime((trigger.stats as any).lastFiredAt) }}</span>
-                </div>
-                <div
-                  v-if="trigger.lastActivityAt"
-                  class="flex items-center justify-between py-2"
-                >
-                  <span class="text-sm text-gray-600 dark:text-gray-400">Last Modified</span>
-                  <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ formatTime(trigger.lastActivityAt) }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Webhook Config -->
-            <div v-if="trigger.webhook">
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                Webhook Configuration
-              </h3>
-              <div class="space-y-3">
-                <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3">
-                  <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs text-gray-500 dark:text-gray-400">Webhook URL</span>
-                    <UButton
-                      v-if="trigger.webhook.fullUrl"
-                      icon="i-lucide-copy"
-                      size="xs"
-                      color="neutral"
-                      variant="ghost"
-                      @click="copyToClipboard(trigger.webhook.fullUrl)"
-                    />
-                  </div>
-                  <code class="text-xs font-mono text-blue-600 dark:text-blue-400 break-all">
-                    {{ trigger.webhook.fullUrl || trigger.webhook.path }}
-                  </code>
-                </div>
-                <div class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
-                  <span class="text-sm text-gray-500 dark:text-gray-400">Method</span>
-                  <UBadge
-                    :label="trigger.webhook.method || 'POST'"
-                    color="neutral"
-                    variant="subtle"
-                    size="xs"
+                  <StatCard
+                    icon="i-lucide-git-branch"
+                    :count="trigger.stats.activeSubscribers"
+                    label="Active Subscribers"
+                    variant="purple"
+                  />
+                  <StatCard
+                    v-if="trigger.stats.lastFiredAt"
+                    icon="i-lucide-clock"
+                    :count="formatTime(new Date(trigger.stats.lastFiredAt).getTime())"
+                    label="Last Fired"
+                    variant="blue"
+                  />
+                  <StatCard
+                    icon="i-lucide-users"
+                    :count="trigger.subscriptionCount"
+                    label="Subscriptions"
+                    variant="emerald"
                   />
                 </div>
               </div>
-            </div>
 
-            <!-- Schedule Config -->
-            <div v-if="trigger.schedule">
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                Schedule Configuration
-              </h3>
-              <div class="space-y-2 text-sm">
-                <div
-                  v-if="trigger.schedule.cron"
-                  class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
-                >
-                  <span class="text-gray-500 dark:text-gray-400">Cron Expression</span>
-                  <span class="font-mono text-gray-900 dark:text-gray-100">{{ trigger.schedule.cron }}</span>
-                </div>
-                <div
-                  v-if="trigger.schedule.interval"
-                  class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
-                >
-                  <span class="text-gray-500 dark:text-gray-400">Interval</span>
-                  <span class="text-gray-900 dark:text-gray-100">{{ formatInterval(trigger.schedule.interval) }}</span>
-                </div>
-                <div
-                  v-if="trigger.schedule.timezone"
-                  class="flex items-center justify-between py-2"
-                >
-                  <span class="text-gray-500 dark:text-gray-400">Timezone</span>
-                  <span class="text-gray-900 dark:text-gray-100">{{ trigger.schedule.timezone }}</span>
+              <!-- Description -->
+              <div
+                v-if="trigger.description"
+                class="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4"
+              >
+                <div class="flex items-start gap-2">
+                  <UIcon
+                    name="i-lucide-info"
+                    class="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0"
+                  />
+                  <p class="text-sm text-blue-900 dark:text-blue-100">
+                    {{ trigger.description }}
+                  </p>
                 </div>
               </div>
-            </div>
 
-            <!-- Subscribed Flows -->
-            <div>
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                Subscribed Flows ({{ trigger.subscriptionCount }})
-              </h3>
-              <div
-                v-if="trigger.subscriptions.length === 0"
-                class="text-center py-8"
-              >
-                <UIcon
-                  name="i-lucide-git-branch-plus"
-                  class="w-8 h-8 mx-auto mb-2 text-gray-300 dark:text-gray-700"
-                />
-                <p class="text-sm text-gray-500 dark:text-gray-400">
-                  No subscriptions
-                </p>
-              </div>
-              <div
-                v-else
-                class="space-y-2"
-              >
-                <div
-                  v-for="sub in trigger.subscriptions"
-                  :key="`${sub.flowName}-${sub.triggerName}`"
-                  class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors cursor-pointer"
-                  @click="goToFlow(sub.flowName)"
-                >
-                  <div class="flex items-center gap-2 min-w-0">
-                    <UIcon
-                      name="i-lucide-git-branch"
-                      class="w-4 h-4 text-blue-500 shrink-0"
-                    />
-                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{{ sub.flowName }}</span>
+              <!-- Configuration -->
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                  Configuration
+                </h3>
+                <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 space-y-3">
+                  <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800">
+                    <span class="text-sm text-gray-600 dark:text-gray-400">Name</span>
+                    <span class="text-sm font-medium font-mono text-gray-900 dark:text-gray-100">{{ trigger.name }}</span>
                   </div>
-                  <div class="flex items-center gap-2">
+                  <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800">
+                    <span class="text-sm text-gray-600 dark:text-gray-400">Type</span>
                     <UBadge
-                      :label="sub.mode"
-                      :color="sub.mode === 'auto' ? 'success' : 'neutral'"
+                      :label="trigger.type"
+                      :color="getTriggerTypeColor(trigger.type)"
                       variant="subtle"
                       size="xs"
                     />
-                    <UIcon
-                      name="i-lucide-arrow-right"
-                      class="w-4 h-4 text-gray-400"
+                  </div>
+                  <div class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800">
+                    <span class="text-sm text-gray-600 dark:text-gray-400">Scope</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ trigger.scope }}</span>
+                  </div>
+                  <div
+                    v-if="trigger.source"
+                    class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800"
+                  >
+                    <span class="text-sm text-gray-600 dark:text-gray-400">Source</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ trigger.source }}</span>
+                  </div>
+                  <div
+                    v-if="trigger.registeredAt"
+                    class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800"
+                  >
+                    <span class="text-sm text-gray-600 dark:text-gray-400">Registered</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ formatDate(trigger.registeredAt) }}</span>
+                  </div>
+                  <div
+                    v-if="(trigger.stats as any).lastFiredAt"
+                    class="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800"
+                  >
+                    <span class="text-sm text-gray-600 dark:text-gray-400">Last Fired</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ formatTime((trigger.stats as any).lastFiredAt) }}</span>
+                  </div>
+                  <div
+                    v-if="trigger.lastActivityAt"
+                    class="flex items-center justify-between py-2"
+                  >
+                    <span class="text-sm text-gray-600 dark:text-gray-400">Last Modified</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ formatTime(trigger.lastActivityAt) }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Webhook Config -->
+              <div v-if="trigger.webhook">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                  Webhook Configuration
+                </h3>
+                <div class="space-y-3">
+                  <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-xs text-gray-500 dark:text-gray-400">Webhook URL</span>
+                      <UButton
+                        v-if="trigger.webhook.fullUrl"
+                        icon="i-lucide-copy"
+                        size="xs"
+                        color="neutral"
+                        variant="ghost"
+                        @click="copyToClipboard(trigger.webhook.fullUrl)"
+                      />
+                    </div>
+                    <code class="text-xs font-mono text-blue-600 dark:text-blue-400 break-all">
+                      {{ trigger.webhook.fullUrl || trigger.webhook.path }}
+                    </code>
+                  </div>
+                  <div class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                    <span class="text-sm text-gray-500 dark:text-gray-400">Method</span>
+                    <UBadge
+                      :label="trigger.webhook.method || 'POST'"
+                      color="neutral"
+                      variant="subtle"
+                      size="xs"
                     />
                   </div>
                 </div>
               </div>
+
+              <!-- Schedule Config -->
+              <div v-if="trigger.schedule">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                  Schedule Configuration
+                </h3>
+                <div class="space-y-2 text-sm">
+                  <div
+                    v-if="trigger.schedule.cron"
+                    class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
+                  >
+                    <span class="text-gray-500 dark:text-gray-400">Cron Expression</span>
+                    <span class="font-mono text-gray-900 dark:text-gray-100">{{ trigger.schedule.cron }}</span>
+                  </div>
+                  <div
+                    v-if="trigger.schedule.interval"
+                    class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800"
+                  >
+                    <span class="text-gray-500 dark:text-gray-400">Interval</span>
+                    <span class="text-gray-900 dark:text-gray-100">{{ formatInterval(trigger.schedule.interval) }}</span>
+                  </div>
+                  <div
+                    v-if="trigger.schedule.timezone"
+                    class="flex items-center justify-between py-2"
+                  >
+                    <span class="text-gray-500 dark:text-gray-400">Timezone</span>
+                    <span class="text-gray-900 dark:text-gray-100">{{ trigger.schedule.timezone }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Subscribed Flows -->
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                  Subscribed Flows ({{ trigger.subscriptionCount }})
+                </h3>
+                <div
+                  v-if="trigger.subscriptions.length === 0"
+                  class="text-center py-8"
+                >
+                  <UIcon
+                    name="i-lucide-git-branch-plus"
+                    class="w-8 h-8 mx-auto mb-2 text-gray-300 dark:text-gray-700"
+                  />
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                    No subscriptions
+                  </p>
+                </div>
+                <div
+                  v-else
+                  class="space-y-2"
+                >
+                  <div
+                    v-for="sub in trigger.subscriptions"
+                    :key="`${sub.flowName}-${sub.triggerName}`"
+                    class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors cursor-pointer"
+                    @click="goToFlow(sub.flowName)"
+                  >
+                    <div class="flex items-center gap-2 min-w-0">
+                      <UIcon
+                        name="i-lucide-git-branch"
+                        class="w-4 h-4 text-blue-500 shrink-0"
+                      />
+                      <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{{ sub.flowName }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <UBadge
+                        :label="sub.mode"
+                        :color="sub.mode === 'auto' ? 'success' : 'neutral'"
+                        variant="subtle"
+                        size="xs"
+                      />
+                      <UIcon
+                        name="i-lucide-arrow-right"
+                        class="w-4 h-4 text-gray-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
 
             <!-- Event Details Tab -->
             <div
@@ -581,7 +581,7 @@ const eventTypeFilter = computed({
 const currentPage = computed({
   get: () => {
     const page = route.query.page as string
-    return page ? parseInt(page, 10) : 1
+    return page ? Number.parseInt(page, 10) : 1
   },
   set: (value: number) => {
     router.push({
@@ -608,11 +608,11 @@ const eventQueryOptions = computed(() => {
     limit: eventsPerPage,
     offset: (currentPage.value - 1) * eventsPerPage,
   }
-  
+
   if (eventTypeFilter.value !== 'all') {
     options.types = [eventTypeFilter.value]
   }
-  
+
   return options
 })
 
@@ -667,7 +667,7 @@ function setupSubscriptions(newName: string) {
       if (data.id !== newName) {
         return
       }
-      
+
       const metadata = data?.metadata
       if (!metadata) {
         return
@@ -697,13 +697,13 @@ function setupSubscriptions(newName: string) {
       if (data.id !== newName) {
         return
       }
-      
+
       // Wait for trigger to load if not yet available
       if (!trigger.value) {
         pendingStatsUpdate.value = data
         return
       }
-      
+
       const metadata = data?.metadata
       if (!metadata) {
         return
@@ -729,7 +729,7 @@ function setupSubscriptions(newName: string) {
 // Component remounts on navigation, so we only need to subscribe once per mount
 onMounted(() => {
   if (import.meta.server) return
-  
+
   if (triggerName.value) {
     setupSubscriptions(triggerName.value)
   }
@@ -749,7 +749,7 @@ const events = computed(() => {
 // Display paginated events from server
 const paginatedEvents = computed(() => {
   if (!events.value) return []
-  
+
   // Only merge live events if we're on page 1
   if (currentPage.value === 1) {
     // For live events, only show those that match current filter
@@ -757,7 +757,7 @@ const paginatedEvents = computed(() => {
       if (eventTypeFilter.value === 'all') return true
       return event.type === eventTypeFilter.value
     })
-    
+
     // Combine with fetched events, removing duplicates by id or timestamp
     const allEvents = [...filteredLiveEvents, ...(events.value.events || [])]
     const seen = new Set()
@@ -767,18 +767,18 @@ const paginatedEvents = computed(() => {
       seen.add(key)
       return true
     })
-    
+
     // Sort by ts/timestamp descending (most recent first)
     unique.sort((a: any, b: any) => {
       const aTime = a.ts || a.timestamp || 0
       const bTime = b.ts || b.timestamp || 0
       return bTime - aTime
     })
-    
+
     // Only return up to eventsPerPage items
     return unique.slice(0, eventsPerPage)
   }
-  
+
   // For other pages, just return the fetched events
   return events.value.events || []
 })

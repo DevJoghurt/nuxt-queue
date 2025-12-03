@@ -329,7 +329,7 @@ const nodes = computed<FlowNode[]>(() => {
   // Insert await nodes between existing nodes
   const awaitNodes: FlowNode[] = []
   const awaitGap = 70 // Gap for await nodes
-  
+
   // Check entry for awaitAfter
   if (f.entry?.awaitAfter && f.entry) {
     const entryNode = out.find(n => n.id === `entry:${f.entry!.step}`)
@@ -337,7 +337,7 @@ const nodes = computed<FlowNode[]>(() => {
       const awaitKey = `${f.entry.step}:await-after`
       const awaitState = states[awaitKey]
       const awaitStatus = awaitState?.status === 'waiting' ? 'waiting' : awaitState?.status === 'completed' ? 'resolved' : awaitState?.status === 'timeout' ? 'timeout' : 'idle'
-      
+
       awaitNodes.push({
         id: `await:entry-after:${f.entry.step}`,
         position: { x: -90, y: entryNode.position.y + rowHeight + awaitGap },
@@ -360,7 +360,7 @@ const nodes = computed<FlowNode[]>(() => {
       if (stepNode) {
         const awaitState = states[`${stepName}:await-before`]
         const awaitStatus = awaitState?.status === 'waiting' ? 'waiting' : awaitState?.status === 'completed' ? 'resolved' : awaitState?.status === 'timeout' ? 'timeout' : 'idle'
-        
+
         awaitNodes.push({
           id: `await:step-before:${stepName}`,
           position: { x: stepNode.position.x + 20, y: stepNode.position.y - awaitGap - 50 },
@@ -442,7 +442,7 @@ const edges = computed<FlowEdge[]>(() => {
         // Add edges from dependencies
         for (const depName of stepInfo.dependsOn) {
           const source = depName === f.entry?.step ? `entry:${depName}` : `step:${depName}`
-          
+
           // Check if target step has awaitBefore - insert await node
           if (targetStep?.awaitBefore) {
             const awaitNodeId = `await:step-before:${stepName}`
@@ -544,13 +544,13 @@ watch(() => props.flow, (f) => {
 // Update node data when stepStates change (for live status updates)
 watch([() => props.stepStates, () => props.flowStatus], () => {
   if (!props.flow) return
-  
+
   // Get latest computed nodes with updated status
   const latestNodes = nodes.value
-  
+
   // Preserve positions from current internal nodes
   const positionMap = new Map(internalNodes.value.map(n => [n.id, n.position]))
-  
+
   // Build completely new nodes array with updated data and preserved positions
   const updatedNodes: VFNode[] = latestNodes.map(n => ({
     id: n.id,
@@ -559,7 +559,7 @@ watch([() => props.stepStates, () => props.flowStatus], () => {
     type: n.type,
     style: n.style,
   }))
-  
+
   // Replace entire array to trigger Vue Flow reactivity
   internalNodes.value = updatedNodes
 

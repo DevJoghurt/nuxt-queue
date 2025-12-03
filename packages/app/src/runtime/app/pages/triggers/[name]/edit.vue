@@ -337,7 +337,7 @@ watch(() => formState.value.subscriptions, () => {
 const hasChanges = computed(() => {
   // Use form's built-in dirty tracking
   if (form.value?.dirty || manualDirty.value) return true
-  
+
   if (!trigger.value) return false
 
   // Additional checks for changes not tracked by form inputs
@@ -422,13 +422,13 @@ const onSubmit = async (event: FormSubmitEvent<any>) => {
 
       // Wait for event processing to complete (events are async)
       await new Promise(resolve => setTimeout(resolve, 300))
-      
+
       // Reset isSaving BEFORE refresh so watch can update the form
       isSaving.value = false
-      
+
       // Now refresh to get updated data
       await refresh()
-      
+
       // Reset dirty flags after refresh completes
       manualDirty.value = false
       if (form.value) {
@@ -499,7 +499,7 @@ const confirmDelete = async () => {
     else {
       toast.add({ title: 'Success', description: 'Trigger deleted successfully', color: 'success' })
       showDeleteDialog.value = false
-      
+
       // Wait a bit for user to see the success message, then navigate
       setTimeout(() => {
         router.push('/triggers')

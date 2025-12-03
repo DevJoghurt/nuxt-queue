@@ -154,7 +154,7 @@ export async function resolveWebhookAwait(
     await scheduler.unschedule(jobId)
     logger.debug('Unscheduled webhook timeout job', { runId, stepName, jobId })
   }
-  catch (err) {
+  catch {
     // Job might not exist or already executed, that's fine
     logger.debug('Could not unschedule timeout job (may not exist)', { runId, stepName, jobId })
   }

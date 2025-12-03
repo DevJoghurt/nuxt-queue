@@ -36,7 +36,7 @@ export default defineEventHandler(async (event: any) => {
     limit: 10000, // Large number to get all events for counting
     types,
   })
-  
+
   const totalCount = allEventsForCount?.length || 0
 
   // Then get the actual paginated events
@@ -47,7 +47,7 @@ export default defineEventHandler(async (event: any) => {
 
   // Apply offset and limit on the results
   const events = allEvents?.slice(offset, offset + limit) || []
-  
+
   return {
     triggerName: name,
     events,

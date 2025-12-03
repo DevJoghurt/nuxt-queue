@@ -528,7 +528,7 @@ onMounted(async () => {
   ])
 
   queues.value = Array.isArray(queuesResponse) ? queuesResponse : []
-  
+
   // Initialize flows with proper structure (same as flows/index.vue)
   const analyzedFlows = Array.isArray(flowsResponse) ? flowsResponse : []
   flows.value = analyzedFlows.map((flow: any) => ({
@@ -545,7 +545,7 @@ onMounted(async () => {
     timeout: flow.timeout,
     stats: { total: 0, success: 0, failure: 0, cancel: 0, running: 0, awaiting: 0 },
   }))
-  
+
   // Initialize triggers with empty stats that will be populated by WebSocket
   triggers.value = (Array.isArray(triggersResponse) ? triggersResponse : []).map((trigger: any) => ({
     ...trigger,
@@ -598,7 +598,7 @@ function updateFlowStats(data: any) {
     console.warn('[Dashboard] No flow ID in stats update:', data)
     return
   }
-  
+
   if (!flows.value || flows.value.length === 0) {
     console.warn('[Dashboard] Flows array not initialized yet')
     return
@@ -633,7 +633,7 @@ function updateFlowStats(data: any) {
     lastRunAt: metadata.lastRunAt,
     lastCompletedAt: metadata.lastCompletedAt,
   }
-  
+
   // Replace in array to trigger reactivity
   flows.value = [
     ...flows.value.slice(0, flowIndex),
@@ -649,7 +649,7 @@ function updateTriggerStats(data: any) {
     console.warn('[Dashboard] No trigger name in stats update:', data)
     return
   }
-  
+
   if (!triggers.value || triggers.value.length === 0) {
     console.warn('[Dashboard] Triggers array not initialized yet, storing for later')
     return
@@ -684,7 +684,7 @@ function updateTriggerStats(data: any) {
     stats: newStats,
     lastActivityAt: metadata.lastActivityAt,
   }
-  
+
   // Replace in array to trigger reactivity
   triggers.value = [
     ...triggers.value.slice(0, triggerIndex),
@@ -701,7 +701,7 @@ const queuesStats = computed(() => {
   }, 0)
   const completed = queues.value.reduce((sum, q) => sum + (q.counts?.completed || 0), 0)
   const failed = queues.value.reduce((sum, q) => sum + (q.counts?.failed || 0), 0)
-  
+
   return {
     total: queues.value.length,
     pending,
@@ -716,7 +716,7 @@ const flowsStats = computed(() => {
   const awaiting = flows.value.reduce((sum, f) => sum + (f.stats?.awaiting || 0), 0)
   const success = flows.value.reduce((sum, f) => sum + (f.stats?.success || 0), 0)
   const failure = flows.value.reduce((sum, f) => sum + (f.stats?.failure || 0), 0)
-  
+
   return {
     total: flows.value.length,
     active: flows.value.filter(f => f.enabled !== false).length,
@@ -732,7 +732,7 @@ const triggersStats = computed(() => {
   const totalFires = triggers.value.reduce((sum, t) => sum + (t.stats?.totalFires || 0), 0)
   const totalFlowsStarted = triggers.value.reduce((sum, t) => sum + (t.stats?.totalFlowsStarted || 0), 0)
   const totalSubscriptions = triggers.value.reduce((sum, t) => sum + (t.subscriptionCount || 0), 0)
-  
+
   return {
     total: triggers.value.length,
     totalFires,

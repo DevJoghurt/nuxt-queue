@@ -41,7 +41,10 @@
           <template #header>
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3">
-                <UIcon name="i-lucide-list" class="text-gray-500" />
+                <UIcon
+                  name="i-lucide-list"
+                  class="text-gray-500"
+                />
                 <h3 class="text-lg font-semibold">
                   Scheduled Jobs
                 </h3>
@@ -59,21 +62,36 @@
             </div>
           </template>
 
-          <div v-if="loading && jobs.length === 0" class="text-center py-8">
-            <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-gray-400 mx-auto mb-2" />
+          <div
+            v-if="loading && jobs.length === 0"
+            class="text-center py-8"
+          >
+            <UIcon
+              name="i-lucide-loader-2"
+              class="w-8 h-8 animate-spin text-gray-400 mx-auto mb-2"
+            />
             <p class="text-gray-600 dark:text-gray-400">
               Loading jobs...
             </p>
           </div>
 
-          <div v-else-if="jobs.length === 0" class="text-center py-8">
-            <UIcon name="i-lucide-inbox" class="w-12 h-12 text-gray-400 mx-auto mb-2" />
+          <div
+            v-else-if="jobs.length === 0"
+            class="text-center py-8"
+          >
+            <UIcon
+              name="i-lucide-inbox"
+              class="w-12 h-12 text-gray-400 mx-auto mb-2"
+            />
             <p class="text-gray-600 dark:text-gray-400">
               No scheduled jobs found
             </p>
           </div>
 
-          <div v-else class="space-y-2">
+          <div
+            v-else
+            class="space-y-2"
+          >
             <div
               v-for="job in jobs"
               :key="job.id"
@@ -144,7 +162,10 @@
 
                     <div v-if="job.lastRun">
                       <span class="text-gray-500 dark:text-gray-400">Last Run:</span>
-                      <span class="ml-1 text-gray-700 dark:text-gray-300" :title="formatDate(job.lastRun)">
+                      <span
+                        class="ml-1 text-gray-700 dark:text-gray-300"
+                        :title="formatDate(job.lastRun)"
+                      >
                         {{ formatRelativeTime(job.lastRun) }}
                       </span>
                     </div>
@@ -175,7 +196,10 @@
                     </div>
                   </div>
 
-                  <div v-if="job.metadata" class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800">
+                  <div
+                    v-if="job.metadata"
+                    class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800"
+                  >
                     <details class="text-xs">
                       <summary class="cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
                         Metadata

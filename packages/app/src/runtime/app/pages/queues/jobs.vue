@@ -67,7 +67,7 @@
               />
             </div>
           </div>
-          
+
           <div
             v-if="!data || !data.jobs || data.jobs.length === 0"
             class="flex-1 flex items-center justify-center"
@@ -93,7 +93,7 @@
                 :key="job.id"
                 class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 cursor-pointer transition-colors"
                 :class="{
-                  'bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-500': selectedJobId === job.id
+                  'bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-500': selectedJobId === job.id,
                 }"
                 @click="selectJob(job.id)"
               >
@@ -316,20 +316,30 @@
                       v-if="selectedJobWaitDuration"
                       class="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center"
                     >
-                      <p class="text-xs text-blue-600 dark:text-blue-400 mb-1">Wait Time</p>
-                      <p class="text-lg font-bold text-blue-700 dark:text-blue-300">{{ selectedJobWaitDuration }}</p>
+                      <p class="text-xs text-blue-600 dark:text-blue-400 mb-1">
+                        Wait Time
+                      </p>
+                      <p class="text-lg font-bold text-blue-700 dark:text-blue-300">
+                        {{ selectedJobWaitDuration }}
+                      </p>
                     </div>
                     <div
                       v-if="selectedJobExecutionDuration"
                       class="rounded-lg p-4 text-center border"
-                      :class="selectedJob.state === 'active' 
-                        ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800' 
+                      :class="selectedJob.state === 'active'
+                        ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
                         : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'"
                     >
-                      <p class="text-xs mb-1" :class="selectedJob.state === 'active' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'">
+                      <p
+                        class="text-xs mb-1"
+                        :class="selectedJob.state === 'active' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'"
+                      >
                         {{ selectedJob.state === 'active' ? 'Running' : 'Execution' }}
                       </p>
-                      <p class="text-lg font-bold" :class="selectedJob.state === 'active' ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'">
+                      <p
+                        class="text-lg font-bold"
+                        :class="selectedJob.state === 'active' ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'"
+                      >
                         {{ selectedJobExecutionDuration }}
                       </p>
                     </div>
@@ -363,7 +373,9 @@
                   Error
                 </h3>
                 <div class="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-4">
-                  <p class="text-sm text-red-700 dark:text-red-300 whitespace-pre-wrap">{{ selectedJob.failedReason }}</p>
+                  <p class="text-sm text-red-700 dark:text-red-300 whitespace-pre-wrap">
+                    {{ selectedJob.failedReason }}
+                  </p>
                 </div>
               </div>
             </div>
@@ -373,7 +385,10 @@
     </div>
 
     <!-- Configuration Slideover -->
-    <USlideover v-model:open="showConfig" title="Queue Configuration">
+    <USlideover
+      v-model:open="showConfig"
+      title="Queue Configuration"
+    >
       <template #body>
         <QueueConfiguration
           :queue-name="queueName"

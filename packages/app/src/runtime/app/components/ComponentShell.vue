@@ -81,7 +81,8 @@ const navigationItems = computed(() => {
         transformed.children = item.children.map((childGroup: any[]) =>
           childGroup.map(transformItem),
         )
-      } else {
+      }
+      else {
         // Children is a flat array
         transformed.children = item.children.map(transformItem)
       }

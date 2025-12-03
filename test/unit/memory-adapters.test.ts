@@ -151,7 +151,7 @@ describe('memory queue adapter', () => {
 
   describe('worker operations', () => {
     it('registers worker handler', async () => {
-      const handler = async (data: any, ctx: any) => ({ success: true })
+      const handler = async (_data: any, _ctx: any) => ({ success: true })
 
       // registerWorker is void, just verify it doesn't throw
       expect(() => {
@@ -274,7 +274,7 @@ describe('memory store adapter', () => {
     })
 
     it('filters by timestamp range', async () => {
-      const now = Date.now()
+      const _now = Date.now()
 
       await adapter.append('test', { type: 'old' })
       await new Promise(r => setTimeout(r, 10))
@@ -479,8 +479,12 @@ describe('memory stream adapter', () => {
       const events1: StreamEvent[] = []
       const events2: StreamEvent[] = []
 
-      await adapter.subscribe('test', async (e) => { events1.push(e) })
-      await adapter.subscribe('test', async (e) => { events2.push(e) })
+      await adapter.subscribe('test', async (e) => {
+        events1.push(e)
+      })
+      await adapter.subscribe('test', async (e) => {
+        events2.push(e)
+      })
 
       await adapter.publish('test', { type: 'event' })
 
@@ -491,7 +495,9 @@ describe('memory stream adapter', () => {
     it('isolates topics', async () => {
       const events: StreamEvent[] = []
 
-      await adapter.subscribe('topic1', async (e) => { events.push(e) })
+      await adapter.subscribe('topic1', async (e) => {
+        events.push(e)
+      })
 
       await adapter.publish('topic2', { type: 'event' })
 
@@ -501,7 +507,7 @@ describe('memory stream adapter', () => {
     it('handles async subscribers', async () => {
       let processed = false
 
-      await adapter.subscribe('test', async (event) => {
+      await adapter.subscribe('test', async (_event) => {
         await new Promise(resolve => setTimeout(resolve, 10))
         processed = true
       })
@@ -516,7 +522,9 @@ describe('memory stream adapter', () => {
     it('unsubscribes from topic', async () => {
       const events: StreamEvent[] = []
 
-      const handle = await adapter.subscribe('test', async (e) => { events.push(e) })
+      const handle = await adapter.subscribe('test', async (e) => {
+        events.push(e)
+      })
 
       await adapter.publish('test', { type: 'event1' })
       await handle.unsubscribe()
@@ -556,7 +564,9 @@ describe('memory stream adapter', () => {
     it('clears all subscriptions on shutdown', async () => {
       const events: StreamEvent[] = []
 
-      await adapter.subscribe('test', async (e) => { events.push(e) })
+      await adapter.subscribe('test', async (e) => {
+        events.push(e)
+      })
       await adapter.shutdown()
 
       await adapter.publish('test', { type: 'event' })

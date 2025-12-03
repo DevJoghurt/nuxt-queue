@@ -125,7 +125,7 @@ const getFlowId = (flow: { name?: string, id?: string }) => flow.id || flow.name
 const filteredFlows = computed(() => {
   if (!props.flows) return []
   const query = searchQuery.value.toLowerCase()
-  return props.flows.filter(flow => {
+  return props.flows.filter((flow) => {
     const flowId = getFlowId(flow)
     return flowId.toLowerCase().includes(query)
   })

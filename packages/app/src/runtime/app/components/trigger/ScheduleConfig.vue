@@ -173,8 +173,6 @@
           </template>
         </USelectMenu>
       </UFormField>
-
-
     </UForm>
   </component>
 </template>
@@ -307,14 +305,14 @@ watch(intervalUnit, (newUnit, oldUnit) => {
       hours: 3600,
       days: 86400,
     }
-    
+
     const oldMultiplier = multipliers[oldUnit as keyof typeof multipliers] || 1
     const newMultiplier = multipliers[newUnit as keyof typeof multipliers] || 1
 
     // Convert the current value to the new unit
     const currentSeconds = Number(intervalValue.value) * oldMultiplier
     const newValue = currentSeconds / newMultiplier
-    
+
     // Round to 2 decimal places for display, but ensure minimum of 1
     intervalValue.value = Math.max(1, Math.round(newValue * 100) / 100)
   }

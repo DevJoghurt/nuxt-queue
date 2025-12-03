@@ -17,8 +17,8 @@
             icon="i-lucide-plus"
             label="Create Trigger"
             color="primary"
-            @click="router.push('/triggers/new')"
             size="sm"
+            @click="router.push('/triggers/new')"
           />
         </div>
       </div>
@@ -136,172 +136,172 @@
           </USelectMenu>
         </div>
 
-      <!-- Triggers List -->
-      <div
-        v-if="!filteredTriggers || filteredTriggers.length === 0"
-        class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-8 text-center text-gray-500"
-      >
-        <div v-if="loading">
-          <UIcon
-            name="i-lucide-loader-2"
-            class="w-12 h-12 animate-spin mx-auto mb-3 opacity-50"
-          />
-          <p>Loading triggers...</p>
+        <!-- Triggers List -->
+        <div
+          v-if="!filteredTriggers || filteredTriggers.length === 0"
+          class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-8 text-center text-gray-500"
+        >
+          <div v-if="loading">
+            <UIcon
+              name="i-lucide-loader-2"
+              class="w-12 h-12 animate-spin mx-auto mb-3 opacity-50"
+            />
+            <p>Loading triggers...</p>
+          </div>
+          <div v-else-if="searchQuery || typeFilter !== 'all' || scopeFilter !== 'all' || statusFilter !== 'all'">
+            <UIcon
+              name="i-lucide-search-x"
+              class="w-12 h-12 mx-auto mb-3 opacity-50"
+            />
+            <p>No triggers match your filters</p>
+            <UButton
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              class="mt-2"
+              @click="clearFilters"
+            >
+              Clear Filters
+            </UButton>
+          </div>
+          <div v-else>
+            <UIcon
+              name="i-lucide-zap-off"
+              class="w-12 h-12 mx-auto mb-3 opacity-50"
+            />
+            <p>No triggers registered</p>
+          </div>
         </div>
-        <div v-else-if="searchQuery || typeFilter !== 'all' || scopeFilter !== 'all' || statusFilter !== 'all'">
-          <UIcon
-            name="i-lucide-search-x"
-            class="w-12 h-12 mx-auto mb-3 opacity-50"
-          />
-          <p>No triggers match your filters</p>
-          <UButton
-            size="xs"
-            color="neutral"
-            variant="ghost"
-            class="mt-2"
-            @click="clearFilters"
-          >
-            Clear Filters
-          </UButton>
-        </div>
-        <div v-else>
-          <UIcon
-            name="i-lucide-zap-off"
-            class="w-12 h-12 mx-auto mb-3 opacity-50"
-          />
-          <p>No triggers registered</p>
-        </div>
-      </div>
-      <div
-        v-else
-        class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden"
-      >
-        <div class="divide-y divide-gray-100 dark:divide-gray-800">
-          <div
-            v-for="trigger in paginatedTriggers"
-            :key="trigger.name"
-            class="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer"
-            @click="selectTrigger(trigger.name)"
-          >
-            <div class="flex items-start justify-between gap-4">
-              <!-- Left: Trigger Info -->
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 mb-1">
-                  <UIcon
-                    :name="getTriggerIcon(trigger.type)"
-                    class="w-4 h-4 shrink-0"
-                    :class="getTriggerIconColor(trigger.type)"
-                  />
-                  <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-                    {{ trigger.displayName || trigger.name }}
-                  </h3>
+        <div
+          v-else
+          class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden"
+        >
+          <div class="divide-y divide-gray-100 dark:divide-gray-800">
+            <div
+              v-for="trigger in paginatedTriggers"
+              :key="trigger.name"
+              class="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer"
+              @click="selectTrigger(trigger.name)"
+            >
+              <div class="flex items-start justify-between gap-4">
+                <!-- Left: Trigger Info -->
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-1">
+                    <UIcon
+                      :name="getTriggerIcon(trigger.type)"
+                      class="w-4 h-4 shrink-0"
+                      :class="getTriggerIconColor(trigger.type)"
+                    />
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                      {{ trigger.displayName || trigger.name }}
+                    </h3>
+                    <UBadge
+                      :label="trigger.type"
+                      :color="getTriggerTypeColor(trigger.type)"
+                      variant="subtle"
+                      size="xs"
+                    />
+                    <UBadge
+                      :label="trigger.scope"
+                      color="neutral"
+                      variant="subtle"
+                      size="xs"
+                    />
+                  </div>
+
+                  <p
+                    v-if="trigger.description"
+                    class="text-xs text-gray-500 dark:text-gray-400 mb-2 line-clamp-1"
+                  >
+                    {{ trigger.description }}
+                  </p>
+
+                  <div class="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                    <div class="flex items-center gap-1">
+                      <UIcon
+                        name="i-lucide-git-branch"
+                        class="w-3 h-3"
+                      />
+                      <span>{{ trigger.subscriptionCount }} flow{{ trigger.subscriptionCount === 1 ? '' : 's' }}</span>
+                    </div>
+                    <div
+                      v-if="trigger.stats.totalFires > 0"
+                      class="flex items-center gap-1"
+                    >
+                      <UIcon
+                        name="i-lucide-zap"
+                        class="w-3 h-3"
+                      />
+                      <span>{{ formatNumber(trigger.stats.totalFires) }} fires</span>
+                    </div>
+                    <div
+                      v-if="trigger.lastActivityAt"
+                      class="flex items-center gap-1"
+                    >
+                      <UIcon
+                        name="i-lucide-clock"
+                        class="w-3 h-3"
+                      />
+                      <span>{{ formatTime(trigger.lastActivityAt) }}</span>
+                    </div>
+                    <div
+                      v-if="trigger.source"
+                      class="flex items-center gap-1"
+                    >
+                      <UIcon
+                        name="i-lucide-package"
+                        class="w-3 h-3"
+                      />
+                      <span>{{ trigger.source }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right: Stats & Status -->
+                <div class="flex items-center gap-3">
+                  <!-- Status Badge -->
                   <UBadge
-                    :label="trigger.type"
-                    :color="getTriggerTypeColor(trigger.type)"
+                    :label="trigger.status"
+                    :color="trigger.status === 'active' ? 'success' : trigger.status === 'inactive' ? 'warning' : 'neutral'"
                     variant="subtle"
-                    size="xs"
                   />
-                  <UBadge
-                    :label="trigger.scope"
+
+                  <!-- Actions -->
+                  <UButton
+                    icon="i-lucide-arrow-right"
+                    size="xs"
                     color="neutral"
-                    variant="subtle"
-                    size="xs"
+                    variant="ghost"
+                    square
                   />
                 </div>
-                
-                <p
-                  v-if="trigger.description"
-                  class="text-xs text-gray-500 dark:text-gray-400 mb-2 line-clamp-1"
-                >
-                  {{ trigger.description }}
-                </p>
-                
-                <div class="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                  <div class="flex items-center gap-1">
-                    <UIcon
-                      name="i-lucide-git-branch"
-                      class="w-3 h-3"
-                    />
-                    <span>{{ trigger.subscriptionCount }} flow{{ trigger.subscriptionCount === 1 ? '' : 's' }}</span>
-                  </div>
-                  <div
-                    v-if="trigger.stats.totalFires > 0"
-                    class="flex items-center gap-1"
-                  >
-                    <UIcon
-                      name="i-lucide-zap"
-                      class="w-3 h-3"
-                    />
-                    <span>{{ formatNumber(trigger.stats.totalFires) }} fires</span>
-                  </div>
-                  <div
-                    v-if="trigger.lastActivityAt"
-                    class="flex items-center gap-1"
-                  >
-                    <UIcon
-                      name="i-lucide-clock"
-                      class="w-3 h-3"
-                    />
-                    <span>{{ formatTime(trigger.lastActivityAt) }}</span>
-                  </div>
-                  <div
-                    v-if="trigger.source"
-                    class="flex items-center gap-1"
-                  >
-                    <UIcon
-                      name="i-lucide-package"
-                      class="w-3 h-3"
-                    />
-                    <span>{{ trigger.source }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Right: Stats & Status -->
-              <div class="flex items-center gap-3">
-                <!-- Status Badge -->
-                <UBadge
-                  :label="trigger.status"
-                  :color="trigger.status === 'active' ? 'success' : trigger.status === 'inactive' ? 'warning' : 'neutral'"
-                  variant="subtle"
-                />
-
-                <!-- Actions -->
-                <UButton
-                  icon="i-lucide-arrow-right"
-                  size="xs"
-                  color="neutral"
-                  variant="ghost"
-                  square
-                />
               </div>
             </div>
           </div>
+
+          <!-- Pagination -->
+          <div
+            v-if="totalPages > 1"
+            class="border-t border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-center"
+          >
+            <UPagination
+              v-model:page="currentPage"
+              :items-per-page="itemsPerPage"
+              :total="filteredTriggers.length"
+            />
+          </div>
         </div>
 
-        <!-- Pagination -->
+        <!-- Footer Info -->
         <div
-          v-if="totalPages > 1"
-          class="border-t border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-center"
+          v-if="filteredTriggers && filteredTriggers.length > 0"
+          class="mt-4 text-center text-sm text-gray-500 dark:text-gray-400"
         >
-          <UPagination
-            v-model:page="currentPage"
-            :items-per-page="itemsPerPage"
-            :total="filteredTriggers.length"
-          />
+          Showing {{ startIndex + 1 }}-{{ endIndex }} of {{ filteredTriggers.length }} trigger{{ filteredTriggers.length === 1 ? '' : 's' }}
         </div>
-      </div>
-
-      <!-- Footer Info -->
-      <div
-        v-if="filteredTriggers && filteredTriggers.length > 0"
-        class="mt-4 text-center text-sm text-gray-500 dark:text-gray-400"
-      >
-        Showing {{ startIndex + 1 }}-{{ endIndex }} of {{ filteredTriggers.length }} trigger{{ filteredTriggers.length === 1 ? '' : 's' }}
       </div>
     </div>
   </div>
-</div>
 </template>
 
 <script setup lang="ts">

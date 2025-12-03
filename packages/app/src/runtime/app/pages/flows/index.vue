@@ -134,7 +134,7 @@
                       </template>
                     </UBadge>
                   </div>
-                  
+
                   <div class="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
                     <div class="flex items-center gap-1">
                       <UIcon

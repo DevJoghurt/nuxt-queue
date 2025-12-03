@@ -126,8 +126,8 @@ async function callWebhook() {
   try {
     isCallingWebhook.value = true
 
-    let url = webhookUrl.value
-    
+    const url = webhookUrl.value
+
     // Note: The actual runId and stepName should be copied from console logs
     // where they are displayed when the await is registered
     const payload = JSON.parse(webhookPayload.value)
@@ -255,15 +255,23 @@ async function emitEvent() {
             Start Flow
           </UButton>
 
-          <div v-if="lastFlowId" class="text-sm text-gray-600 dark:text-gray-400">
+          <div
+            v-if="lastFlowId"
+            class="text-sm text-gray-600 dark:text-gray-400"
+          >
             Last triggered: <code class="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{{ new Date().toLocaleTimeString() }}</code>
-            <p class="mt-1 text-xs">Check server console for actual flowId and webhook URLs</p>
+            <p class="mt-1 text-xs">
+              Check server console for actual flowId and webhook URLs
+            </p>
           </div>
         </div>
       </UCard>
 
       <!-- Webhook Testing (for webhook approval flow) -->
-      <UCard v-if="selectedFlow.awaitType === 'webhook'" class="mb-6">
+      <UCard
+        v-if="selectedFlow.awaitType === 'webhook'"
+        class="mb-6"
+      >
         <template #header>
           <h2 class="text-xl font-semibold">
             Call Webhook
@@ -307,7 +315,10 @@ async function emitEvent() {
       </UCard>
 
       <!-- Event Testing (for event-driven flow) -->
-      <UCard v-if="selectedFlow.awaitType === 'event'" class="mb-6">
+      <UCard
+        v-if="selectedFlow.awaitType === 'event'"
+        class="mb-6"
+      >
         <template #header>
           <h2 class="text-xl font-semibold">
             Emit Event

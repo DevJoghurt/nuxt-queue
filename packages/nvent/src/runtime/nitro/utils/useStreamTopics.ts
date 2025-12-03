@@ -17,7 +17,7 @@ import { useRuntimeConfig } from '#imports'
 /**
  * Get store subjects for persistent event streams and indexes
  * These are used with StoreAdapter (append/read operations)
- * 
+ *
  * Naming Convention:
  * - Streams (event logs): singular + ID -> {prefix}:flow:run:{runId}, {prefix}:trigger:event:{triggerName}
  * - Indexes (sorted sets): plural -> {prefix}:flows, {prefix}:triggers

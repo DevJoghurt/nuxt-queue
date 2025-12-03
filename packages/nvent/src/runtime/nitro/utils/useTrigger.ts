@@ -230,6 +230,10 @@ export function useTrigger() {
     /**
      * Get all registered triggers
      * @param options - Sorting and pagination options
+     * @param options.sortBy - Field to sort by
+     * @param options.order - Sort order (asc or desc)
+     * @param options.limit - Maximum number of results
+     * @param options.offset - Number of results to skip
      */
     getAllTriggers(options?: {
       sortBy?: 'registeredAt' | 'lastActivityAt' | 'name'

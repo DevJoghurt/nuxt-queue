@@ -76,7 +76,12 @@
               class="flex items-start gap-2"
             >
               <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Type:</span>
-              <UBadge color="blue" variant="subtle" size="xs" class="capitalize">
+              <UBadge
+                color="blue"
+                variant="subtle"
+                size="xs"
+                class="capitalize"
+              >
                 {{ item.eventData.awaitType }}
               </UBadge>
             </div>
@@ -85,7 +90,12 @@
               class="flex items-start gap-2"
             >
               <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Position:</span>
-              <UBadge color="neutral" variant="subtle" size="xs" class="capitalize">
+              <UBadge
+                color="neutral"
+                variant="subtle"
+                size="xs"
+                class="capitalize"
+              >
                 {{ item.eventData.position }}
               </UBadge>
             </div>

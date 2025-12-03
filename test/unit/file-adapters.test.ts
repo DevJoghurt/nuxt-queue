@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { FileQueueAdapter } from '../../packages/nvent/src/runtime/adapters/builtin/file-queue'
 import { FileStoreAdapter } from '../../packages/nvent/src/runtime/adapters/builtin/file-store'
-import type { JobInput, JobState } from '../../packages/nvent/src/runtime/adapters/interfaces/queue'
 
 const TEST_DIR = join(tmpdir(), 'nvent-test-file-adapters')
 
@@ -143,12 +142,12 @@ describe('FileQueueAdapter', () => {
   })
 
   it('handles multiple queues independently', async () => {
-    const jobId1 = await adapter.enqueue('queue-a', {
+    const _jobId1 = await adapter.enqueue('queue-a', {
       name: 'job-a',
       data: { queue: 'a' },
     })
 
-    const jobId2 = await adapter.enqueue('queue-b', {
+    const _jobId2 = await adapter.enqueue('queue-b', {
       name: 'job-b',
       data: { queue: 'b' },
     })

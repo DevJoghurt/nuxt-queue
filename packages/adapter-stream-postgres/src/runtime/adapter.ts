@@ -90,7 +90,7 @@ class PostgresListenGateway {
   private escapeIdentifier(identifier: string): string {
     // PostgreSQL channel names: alphanumeric, underscore, colon, hyphen
     // Replace any other characters and quote if needed
-    const safe = identifier.replace(/[^\w:\-]/g, '_')
+    const safe = identifier.replace(/[^\w:-]/g, '_')
     return `"${safe}"`
   }
 

@@ -487,7 +487,7 @@ const toggleFlow = (flowId: string) => {
 
 const getReviewConfig = () => {
   const config: any = {}
-  
+
   if (formState.value.type === 'event') {
     config.event = formState.value.config.event
     if (formState.value.config.filter) {
@@ -526,7 +526,7 @@ const createTrigger = async () => {
     creating.value = true
 
     const config = getReviewConfig()
-    
+
     // Additional validation for schedule triggers
     if (formState.value.type === 'schedule') {
       if (!config.cron && !config.interval) {
@@ -580,7 +580,7 @@ const createTrigger = async () => {
   }
   catch (err) {
     console.error('Failed to create trigger:', err)
-    
+
     // Extract error message
     let errorMessage = 'An unexpected error occurred'
     if (err && typeof err === 'object') {
@@ -596,7 +596,7 @@ const createTrigger = async () => {
         errorMessage = err.message as string
       }
     }
-    
+
     toast.add({
       title: 'Failed to create trigger',
       description: errorMessage,

@@ -5,7 +5,7 @@
     base="p"
     mode="query"
   >
-      <NventComponentShell
+    <NventComponentShell
       orientation="horizontal"
       :items="navItems"
     >

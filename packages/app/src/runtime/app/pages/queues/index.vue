@@ -92,7 +92,7 @@
                       size="xs"
                     />
                   </div>
-                  
+
                   <div class="flex items-center gap-4 text-xs">
                     <div
                       class="flex items-center gap-1"

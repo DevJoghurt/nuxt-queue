@@ -1,6 +1,9 @@
 <template>
   <component :is="noCard ? 'div' : UCard">
-    <template v-if="!noCard" #header>
+    <template
+      v-if="!noCard"
+      #header
+    >
       <div class="flex items-center gap-2">
         <UIcon
           name="i-lucide-radio"
@@ -42,7 +45,7 @@
         </template>
         <UTextarea
           v-model="config.filter"
-          placeholder='{"status": "active"}'
+          placeholder="{&quot;status&quot;: &quot;active&quot;}"
           :rows="4"
         />
       </UFormField>
