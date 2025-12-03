@@ -11,11 +11,7 @@ import {
 import defu from 'defu'
 import type {} from '@nuxt/schema'
 
-const meta = {
-  name: 'nventapp',
-  version: '0.1',
-  configKey: 'nventapp',
-}
+const resolver = createResolver(import.meta.url)
 
 interface ModuleOptions {
   /**
@@ -38,14 +34,30 @@ interface ModuleOptions {
 }
 
 export default defineNuxtModule<ModuleOptions>({
-  meta,
+  meta: {
+    name: 'nventapp',
+    version: '0.1',
+    configKey: 'nventapp',
+  },
   defaults: {
     route: true,
     routePath: '/_nvent',
     layout: false,
   },
+  moduleDependencies: {
+    '@nuxt/ui': {
+      version: '>=4',
+    },
+  },
   async setup(options, nuxt) {
-    const { resolve } = createResolver(import.meta.url)
+    const { resolve } = resolver
+
+    // Add module paths to Tailwind content sources
+    // This ensures Tailwind scans our components for class usage
+    nuxt.options.css = nuxt.options.css || []
+    nuxt.options.css.push(resolve('./runtime/app/assets/tailwind.css'))
+    // Add vueflow assets
+    nuxt.options.css.push(resolve('./runtime/app/assets/vueflow.css'))
 
     // Add shared utilities for both app and server
     addImportsDir(resolve('./runtime/shared/utils'))
@@ -54,10 +66,6 @@ export default defineNuxtModule<ModuleOptions>({
 
     // Scan server directory for auto-imports
     addServerScanDir(resolve('./runtime/server'))
-
-    // add vueflow assets
-    nuxt.options.css = nuxt.options.css || []
-    nuxt.options.css.push(resolve('./runtime/app/assets/vueflow.css'))
 
     addPlugin({
       src: resolve('./runtime/app/plugins/vueflow.client'),

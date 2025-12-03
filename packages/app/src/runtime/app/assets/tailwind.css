@@ -1,0 +1,6 @@
+/**
+ * Tailwind content configuration for @nvent-addon/app module
+ * This file ensures Tailwind scans our module's components for class usage
+ */
+
+@source "../**/*.vue";
