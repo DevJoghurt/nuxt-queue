@@ -1,6 +1,6 @@
 {
   "name": "nvent-monorepo",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "description": "Event-driven workflows for Nuxt - Monorepo",
   "repository": "DevJoghurt/nvent",
   "license": "MIT",
@@ -20,7 +20,7 @@
     "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit",
     "lint": "eslint --ext .ts,.js,.mjs,.cjs,.vue .",
     "cleanup": "rimraf dist*/ **/node_modules .nuxt* playground/.data packages/**/dist",
-    "bumpp": "bumpp"
+    "bumpp": "bumpp --recursive"
   },
   "devDependencies": {
     "@nuxt/devtools": "^3.1.1",
