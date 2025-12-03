@@ -1,6 +1,6 @@
 {
   "name": "@nvent-addon/adapter-queue-postgres",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "PostgreSQL queue adapter for nvent using pg-boss",
   "repository": "DevJoghurt/nvent",
   "license": "MIT",
