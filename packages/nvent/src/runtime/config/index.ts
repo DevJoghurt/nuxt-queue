@@ -16,6 +16,7 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
     queue: {
       adapter: 'file',
       prefix: 'nvent',
+      schema: 'nvent_queue',
       defaultJobOptions: {},
       worker: {
         concurrency: 2,
@@ -30,6 +31,7 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
     store: {
       adapter: 'file',
       prefix: 'nvent',
+      schema: 'nvent_store',
       state: {
         autoScope: 'always',
         cleanup: {

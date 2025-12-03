@@ -153,6 +153,14 @@ export interface QueueConfig {
    * Queue-specific options (BullMQ/PGBoss configuration)
    */
   prefix?: string
+
+  /**
+   * PostgreSQL schema name for pg-boss tables
+   * Only applies when adapter is 'postgres'
+   * @default 'pgboss'
+   */
+  schema?: string
+
   defaultJobOptions?: {
     attempts?: number
     backoff?: number | { type: 'fixed' | 'exponential', delay: number }
@@ -329,6 +337,13 @@ export interface StoreConfig {
    * @default 'nq'
    */
   prefix?: string
+
+  /**
+   * PostgreSQL schema name for store tables
+   * Only applies when adapter is 'postgres'
+   * @default 'public'
+   */
+  schema?: string
 
   /**
    * State management configuration (KV store behavior)

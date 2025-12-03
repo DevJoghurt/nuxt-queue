@@ -49,6 +49,7 @@ export default defineNuxtConfig({
     queue: {
       adapter: 'postgres', // Use file for development (change to 'redis' for production)
       // redis connection inherited from connections.redis
+      schema: 'nvent_queue', // pg-boss tables in nvent_queue schema
       prefix: 'nvent',
       defaultJobOptions: {
         attempts: 3,
@@ -79,7 +80,7 @@ export default defineNuxtConfig({
     store: {
       adapter: 'postgres', // Use file for development (change to 'redis' for production)
       // file.dataDir inherited from connections.file → becomes '.data/store'
-      prefix: 'nvent',
+      schema: 'nvent_store', // store tables in nvent_store schema
       state: {
         autoScope: 'always',
         cleanup: {

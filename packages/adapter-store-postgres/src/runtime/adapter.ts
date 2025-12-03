@@ -16,6 +16,7 @@ import { runMigrations } from './migrations'
 export interface PostgresStoreOptions {
   connection: PoolConfig | string
   prefix?: string
+  schema?: string
   autoMigrate?: boolean
   poolSize?: number
 }
@@ -110,9 +111,11 @@ const FIELD_MAPPINGS = {
  */
 class SubjectRouter {
   private prefix: string
+  private schema: string
 
-  constructor(prefix: string) {
+  constructor(prefix: string, schema: string) {
     this.prefix = prefix
+    this.schema = schema
   }
 
   getTableInfo(subject: string): {
@@ -122,29 +125,29 @@ class SubjectRouter {
   } {
     if (subject.includes(':flow:run:')) {
       const runId = subject.split(':flow:run:')[1]
-      return { table: `${this.prefix}_flow_events`, type: 'flow_events', extractedKey: runId }
+      return { table: `${this.schema}.${this.prefix}_flow_events`, type: 'flow_events', extractedKey: runId }
     }
 
     if (subject.includes(':flow:runs:')) {
       const flowName = subject.split(':flow:runs:')[1]
-      return { table: `${this.prefix}_flow_runs`, type: 'flow_runs', extractedKey: flowName }
+      return { table: `${this.schema}.${this.prefix}_flow_runs`, type: 'flow_runs', extractedKey: flowName }
     }
 
     if (subject === `${this.prefix}:flows`) {
-      return { table: `${this.prefix}_flows`, type: 'flows' }
+      return { table: `${this.schema}.${this.prefix}_flows`, type: 'flows' }
     }
 
     if (subject.includes(':trigger:event:')) {
       const triggerName = subject.split(':trigger:event:')[1]
-      return { table: `${this.prefix}_trigger_events`, type: 'trigger_events', extractedKey: triggerName }
+      return { table: `${this.schema}.${this.prefix}_trigger_events`, type: 'trigger_events', extractedKey: triggerName }
     }
 
     if (subject === `${this.prefix}:triggers`) {
-      return { table: `${this.prefix}_triggers`, type: 'triggers' }
+      return { table: `${this.schema}.${this.prefix}_triggers`, type: 'triggers' }
     }
 
     if (subject === `${this.prefix}:scheduler:jobs` || subject.includes(':scheduler:jobs')) {
-      return { table: `${this.prefix}_scheduler_jobs`, type: 'scheduler_jobs' }
+      return { table: `${this.schema}.${this.prefix}_scheduler_jobs`, type: 'scheduler_jobs' }
     }
 
     throw new Error(`[PostgresStoreAdapter] Unknown subject pattern: ${subject}`)
@@ -350,6 +353,7 @@ const MetadataMapper = {
 export class PostgresStoreAdapter implements StoreAdapter {
   private pool: Pool
   private prefix: string
+  private schema: string
   private router: SubjectRouter
   private validator: ReturnType<typeof createStoreValidator>
   public stream: StoreAdapter['stream']
@@ -362,7 +366,8 @@ export class PostgresStoreAdapter implements StoreAdapter {
       : new Pool({ ...options.connection, max: options.poolSize || 10 })
 
     this.prefix = options.prefix || 'nvent'
-    this.router = new SubjectRouter(this.prefix)
+    this.schema = options.schema || 'public'
+    this.router = new SubjectRouter(this.prefix, this.schema)
     this.validator = createStoreValidator()
 
     // Initialize stream methods
@@ -543,12 +548,12 @@ export class PostgresStoreAdapter implements StoreAdapter {
     this.kv = {
       get: async <T = any>(key: string): Promise<T | null> => {
         await this.pool.query(`
-          DELETE FROM ${this.prefix}_kv 
+          DELETE FROM ${this.schema}.${this.prefix}_kv 
           WHERE expires_at IS NOT NULL AND expires_at < NOW()
         `)
 
         const result = await this.pool.query(`
-          SELECT value FROM ${this.prefix}_kv 
+          SELECT value FROM ${this.schema}.${this.prefix}_kv 
           WHERE key = $1 AND (expires_at IS NULL OR expires_at > NOW())
         `, [key])
 
@@ -559,7 +564,7 @@ export class PostgresStoreAdapter implements StoreAdapter {
         const expiresAt = ttl ? new Date(Date.now() + ttl * 1000) : null
 
         await this.pool.query(`
-          INSERT INTO ${this.prefix}_kv (key, value, expires_at, updated_at)
+          INSERT INTO ${this.schema}.${this.prefix}_kv (key, value, expires_at, updated_at)
           VALUES ($1, $2, $3, NOW())
           ON CONFLICT (key) DO UPDATE SET
             value = EXCLUDED.value,
@@ -570,13 +575,13 @@ export class PostgresStoreAdapter implements StoreAdapter {
 
       delete: async (key: string): Promise<void> => {
         await this.pool.query(`
-          DELETE FROM ${this.prefix}_kv WHERE key = $1
+          DELETE FROM ${this.schema}.${this.prefix}_kv WHERE key = $1
         `, [key])
       },
 
       clear: async (pattern: string): Promise<number> => {
         const result = await this.pool.query(`
-          DELETE FROM ${this.prefix}_kv WHERE key LIKE $1
+          DELETE FROM ${this.schema}.${this.prefix}_kv WHERE key LIKE $1
         `, [pattern.replace('*', '%')])
         return result.rowCount || 0
       },
@@ -1091,6 +1096,7 @@ export default defineNitroPlugin(async (nitroApp: any) => {
     const config = {
       connection,
       prefix: moduleOptions.prefix || nventConfig.store?.prefix || 'nvent',
+      schema: moduleOptions.schema || nventConfig.store?.schema || 'public',
       autoMigrate: moduleOptions.autoMigrate !== false,
       poolSize: moduleOptions.poolSize || 10,
     }
@@ -1101,7 +1107,7 @@ export default defineNitroPlugin(async (nitroApp: any) => {
     // Run migrations if enabled
     if (config.autoMigrate) {
       try {
-        await runMigrations(adapter['pool'], config.prefix)
+        await runMigrations(adapter['pool'], config.prefix, config.schema || 'public')
         console.log('[adapter-store-postgres] Migrations completed')
       }
       catch (error) {

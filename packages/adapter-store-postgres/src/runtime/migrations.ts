@@ -13,21 +13,24 @@ import type { Pool } from 'pg'
 export interface Migration {
   version: number
   name: string
-  up: (pool: Pool, prefix: string) => Promise<void>
+  up: (pool: Pool, prefix: string, schema: string) => Promise<void>
 }
 
 export const migrations: Migration[] = [
   {
     version: 1,
     name: 'optimized_flat_schema',
-    up: async (pool: Pool, prefix: string) => {
+    up: async (pool: Pool, prefix: string, schema: string) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
 
+        // Create schema if it doesn't exist
+        await client.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`)
+
         // Schema version tracking
         await client.query(`
-          CREATE TABLE IF NOT EXISTS ${prefix}_schema_version (
+          CREATE TABLE IF NOT EXISTS ${schema}.${prefix}_schema_version (
             version INTEGER PRIMARY KEY,
             applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
             description TEXT
@@ -67,7 +70,7 @@ export const migrations: Migration[] = [
         // Append-only event log for flow executions
         // ============================================================
         await client.query(`
-          CREATE TABLE IF NOT EXISTS ${prefix}_flow_events (
+          CREATE TABLE IF NOT EXISTS ${schema}.${prefix}_flow_events (
             id BIGSERIAL PRIMARY KEY,
             run_id TEXT NOT NULL,
             flow_name TEXT NOT NULL,
@@ -83,12 +86,12 @@ export const migrations: Migration[] = [
 
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_flow_events_run 
-          ON ${prefix}_flow_events(run_id, ts DESC)
+          ON ${schema}.${prefix}_flow_events(run_id, ts DESC)
         `)
 
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_flow_events_flow_type 
-          ON ${prefix}_flow_events(flow_name, type, ts DESC)
+          ON ${schema}.${prefix}_flow_events(flow_name, type, ts DESC)
         `)
 
         // ============================================================
@@ -96,7 +99,7 @@ export const migrations: Migration[] = [
         // All frequently accessed fields as columns, JSONB for complex nested data only
         // ============================================================
         await client.query(`
-          CREATE TABLE IF NOT EXISTS ${prefix}_flow_runs (
+          CREATE TABLE IF NOT EXISTS ${schema}.${prefix}_flow_runs (
             flow_name TEXT NOT NULL,
             run_id TEXT NOT NULL,
             
@@ -123,28 +126,28 @@ export const migrations: Migration[] = [
         // Fast status queries
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_flow_runs_status 
-          ON ${prefix}_flow_runs(status) 
+          ON ${schema}.${prefix}_flow_runs(status) 
           WHERE status IN ('running', 'awaiting')
         `)
 
         // Fast active runs queries
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_flow_runs_active 
-          ON ${prefix}_flow_runs(flow_name, started_at DESC)
+          ON ${schema}.${prefix}_flow_runs(flow_name, started_at DESC)
           WHERE status IN ('running', 'awaiting')
         `)
 
         // Composite index for time-based queries
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_flow_runs_completed 
-          ON ${prefix}_flow_runs(flow_name, completed_at DESC NULLS LAST)
+          ON ${schema}.${prefix}_flow_runs(flow_name, completed_at DESC NULLS LAST)
           WHERE completed_at IS NOT NULL
         `)
 
         // Index on last_activity_at for monitoring/cleanup
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_flow_runs_activity 
-          ON ${prefix}_flow_runs(last_activity_at DESC NULLS LAST)
+          ON ${schema}.${prefix}_flow_runs(last_activity_at DESC NULLS LAST)
         `)
 
         // ============================================================
@@ -152,7 +155,7 @@ export const migrations: Migration[] = [
         // Stats as individual columns for atomic increments
         // ============================================================
         await client.query(`
-          CREATE TABLE IF NOT EXISTS ${prefix}_flows (
+          CREATE TABLE IF NOT EXISTS ${schema}.${prefix}_flows (
             flow_name TEXT PRIMARY KEY,
             
             -- Flat columns
@@ -177,13 +180,13 @@ export const migrations: Migration[] = [
 
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_flows_last_run 
-          ON ${prefix}_flows(last_run_at DESC NULLS LAST)
+          ON ${schema}.${prefix}_flows(last_run_at DESC NULLS LAST)
         `)
 
         // Index for stats queries
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_flows_running 
-          ON ${prefix}_flows(stats_running DESC)
+          ON ${schema}.${prefix}_flows(stats_running DESC)
           WHERE stats_running > 0
         `)
 
@@ -191,7 +194,7 @@ export const migrations: Migration[] = [
         // 4. TRIGGER EVENTS
         // ============================================================
         await client.query(`
-          CREATE TABLE IF NOT EXISTS ${prefix}_trigger_events (
+          CREATE TABLE IF NOT EXISTS ${schema}.${prefix}_trigger_events (
             id BIGSERIAL PRIMARY KEY,
             trigger_name TEXT NOT NULL,
             ts BIGINT NOT NULL,
@@ -203,20 +206,20 @@ export const migrations: Migration[] = [
 
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_trigger_events_trigger 
-          ON ${prefix}_trigger_events(trigger_name, ts DESC)
+          ON ${schema}.${prefix}_trigger_events(trigger_name, ts DESC)
         `)
 
         // Index for event type filtering
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_trigger_events_type 
-          ON ${prefix}_trigger_events(type, ts DESC)
+          ON ${schema}.${prefix}_trigger_events(type, ts DESC)
         `)
 
         // ============================================================
         // 5. TRIGGERS - FLATTENED
         // ============================================================
         await client.query(`
-          CREATE TABLE IF NOT EXISTS ${prefix}_triggers (
+          CREATE TABLE IF NOT EXISTS ${schema}.${prefix}_triggers (
             trigger_name TEXT PRIMARY KEY,
             
             -- Flat columns
@@ -250,21 +253,21 @@ export const migrations: Migration[] = [
         // Index for active triggers
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_triggers_status 
-          ON ${prefix}_triggers(status)
+          ON ${schema}.${prefix}_triggers(status)
           WHERE status = 'active'
         `)
 
         // Index for trigger type queries
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_triggers_type 
-          ON ${prefix}_triggers(trigger_type, registered_at DESC)
+          ON ${schema}.${prefix}_triggers(trigger_type, registered_at DESC)
         `)
 
         // ============================================================
         // 6. SCHEDULER JOBS - FLATTENED
         // ============================================================
         await client.query(`
-          CREATE TABLE IF NOT EXISTS ${prefix}_scheduler_jobs (
+          CREATE TABLE IF NOT EXISTS ${schema}.${prefix}_scheduler_jobs (
             job_id TEXT PRIMARY KEY,
             
             -- Flat columns
@@ -293,14 +296,14 @@ export const migrations: Migration[] = [
 
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_scheduler_jobs_next_run 
-          ON ${prefix}_scheduler_jobs(next_run_at) 
+          ON ${schema}.${prefix}_scheduler_jobs(next_run_at) 
           WHERE status = 'pending' AND enabled = true
         `)
 
         // Index for job type queries
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_scheduler_jobs_type 
-          ON ${prefix}_scheduler_jobs(type, next_run_at)
+          ON ${schema}.${prefix}_scheduler_jobs(type, next_run_at)
           WHERE enabled = true
         `)
 
@@ -308,7 +311,7 @@ export const migrations: Migration[] = [
         // 7. KEY-VALUE STORE
         // ============================================================
         await client.query(`
-          CREATE TABLE IF NOT EXISTS ${prefix}_kv (
+          CREATE TABLE IF NOT EXISTS ${schema}.${prefix}_kv (
             key TEXT PRIMARY KEY,
             value JSONB NOT NULL,
             expires_at TIMESTAMP WITH TIME ZONE,
@@ -318,13 +321,13 @@ export const migrations: Migration[] = [
 
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_${prefix}_kv_expires 
-          ON ${prefix}_kv(expires_at) 
+          ON ${schema}.${prefix}_kv(expires_at) 
           WHERE expires_at IS NOT NULL
         `)
 
         // Record migration
         await client.query(`
-          INSERT INTO ${prefix}_schema_version (version, description)
+          INSERT INTO ${schema}.${prefix}_schema_version (version, description)
           VALUES (1, 'Optimized flat schema with minimal JSONB usage')
           ON CONFLICT (version) DO NOTHING
         `)
@@ -342,10 +345,13 @@ export const migrations: Migration[] = [
   },
 ]
 
-export async function runMigrations(pool: Pool, prefix: string = 'nvent'): Promise<void> {
+export async function runMigrations(pool: Pool, prefix: string = 'nvent', schema: string = 'public'): Promise<void> {
+  // Create schema if it doesn't exist
+  await pool.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`)
+
   // Ensure schema version table exists
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS ${prefix}_schema_version (
+    CREATE TABLE IF NOT EXISTS ${schema}.${prefix}_schema_version (
       version INTEGER PRIMARY KEY,
       applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       description TEXT
@@ -354,7 +360,7 @@ export async function runMigrations(pool: Pool, prefix: string = 'nvent'): Promi
 
   // Get current version
   const result = await pool.query(`
-    SELECT MAX(version) as version FROM ${prefix}_schema_version
+    SELECT MAX(version) as version FROM ${schema}.${prefix}_schema_version
   `)
   const currentVersion = result.rows[0]?.version || 0
 
@@ -362,7 +368,7 @@ export async function runMigrations(pool: Pool, prefix: string = 'nvent'): Promi
   for (const migration of migrations) {
     if (migration.version > currentVersion) {
       console.log(`Running migration ${migration.version}: ${migration.name}`)
-      await migration.up(pool, prefix)
+      await migration.up(pool, prefix, schema)
       console.log(`✓ Migration ${migration.version} completed`)
     }
   }
