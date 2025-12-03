@@ -16,6 +16,7 @@
     "@nvent-addon/adapter-store-redis": "workspace:*",
     "@nvent-addon/adapter-stream-redis": "workspace:*",
     "@nvent-addon/adapter-store-postgres": "workspace:*",
-    "@nvent-addon/adapter-queue-postgres": "workspace:*"
+    "@nvent-addon/adapter-queue-postgres": "workspace:*",
+    "@nvent-addon/adapter-stream-postgres": "workspace:*"
   }
 }

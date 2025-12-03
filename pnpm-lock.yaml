@@ -68,8 +68,11 @@ importers:
       nvent:
         specifier: workspace:*
         version: link:../nvent
+      pg:
+        specifier: 8.16.3
+        version: 8.16.3
       pg-boss:
-        specifier: ^12.5.2
+        specifier: 12.5.2
         version: 12.5.2
     devDependencies:
       '@nuxt/module-builder':
@@ -88,13 +91,13 @@ importers:
         specifier: ^4.2.1
         version: 4.2.1(magicast@0.5.1)
       bullmq:
-        specifier: ^5.63.2
-        version: 5.63.2
+        specifier: 5.65.1
+        version: 5.65.1
       defu:
         specifier: ^6.1.4
         version: 6.1.4
       ioredis:
-        specifier: ^5.8.2
+        specifier: 5.8.2
         version: 5.8.2
       nvent:
         specifier: workspace:*
@@ -122,7 +125,7 @@ importers:
         specifier: workspace:*
         version: link:../nvent
       pg:
-        specifier: ^8.16.3
+        specifier: 8.16.3
         version: 8.16.3
     devDependencies:
       '@nuxt/module-builder':
@@ -159,6 +162,34 @@ importers:
       '@nuxt/schema':
         specifier: ^4.2.1
         version: 4.2.1
+      typescript:
+        specifier: latest
+        version: 5.9.3
+
+  packages/adapter-stream-postgres:
+    dependencies:
+      '@nuxt/kit':
+        specifier: ^4.2.1
+        version: 4.2.1(magicast@0.5.1)
+      defu:
+        specifier: ^6.1.4
+        version: 6.1.4
+      nvent:
+        specifier: workspace:*
+        version: link:../nvent
+      pg:
+        specifier: 8.16.3
+        version: 8.16.3
+    devDependencies:
+      '@nuxt/module-builder':
+        specifier: ^1.0.2
+        version: 1.0.2(@nuxt/cli@3.30.0(magicast@0.5.1))(@vue/compiler-core@3.5.24)(esbuild@0.25.12)(typescript@5.9.3)(vue-tsc@3.1.5(typescript@5.9.3))(vue@3.5.24(typescript@5.9.3))
+      '@nuxt/schema':
+        specifier: ^4.2.1
+        version: 4.2.1
+      '@types/pg':
+        specifier: ^8.15.6
+        version: 8.15.6
       typescript:
         specifier: latest
         version: 5.9.3
@@ -321,6 +352,9 @@ importers:
       '@nvent-addon/adapter-store-redis':
         specifier: workspace:*
         version: link:../packages/adapter-store-redis
+      '@nvent-addon/adapter-stream-postgres':
+        specifier: workspace:*
+        version: link:../packages/adapter-stream-postgres
       '@nvent-addon/adapter-stream-redis':
         specifier: workspace:*
         version: link:../packages/adapter-stream-redis
@@ -2600,8 +2634,8 @@ packages:
     resolution: {integrity: sha512-bkXY9WsVpY7CvMhKSR6pZilZu9Ln5WDrKVBUXf2S443etkmEO4V58heTecXcUIsNsi4Rx8JUO4NfX1IcQl4deg==}
     engines: {node: '>=18.20'}
 
-  bullmq@5.63.2:
-    resolution: {integrity: sha512-c1K5gcAh0a+C9lcRXaA1GePDYtmUywCH1pNXkUlZ8lFlqQnrtKyZpcr5aZJcjyZVx6y7t5259ru+ttJFNUQ5kw==}
+  bullmq@5.65.1:
+    resolution: {integrity: sha512-QgDAzX1G9L5IRy4Orva5CfQTXZT+5K+OfO/kbPrAqN+pmL9LJekCzxijXehlm/u2eXfWPfWvIdJJIqiuz3WJSg==}
 
   bumpp@10.3.2:
     resolution: {integrity: sha512-yUUkVx5zpTywLNX97MlrqtpanI7eMMwFwLntWR2EBVDw3/Pm3aRIzCoDEGHATLIiHK9PuJC7xWI4XNWqXItSPg==}
@@ -8776,7 +8810,7 @@ snapshots:
 
   builtin-modules@5.0.0: {}
 
-  bullmq@5.63.2:
+  bullmq@5.65.1:
     dependencies:
       cron-parser: 4.9.0
       ioredis: 5.8.2

@@ -8,6 +8,7 @@ export default defineNuxtConfig({
     '@nvent-addon/adapter-store-redis',
     '@nvent-addon/adapter-store-postgres',
     '@nvent-addon/adapter-queue-postgres',
+    '@nvent-addon/adapter-stream-postgres',
     'nvent',
     '@nvent-addon/app',
   ],
@@ -72,7 +73,7 @@ export default defineNuxtConfig({
 
     // Stream adapter configuration
     stream: {
-      adapter: 'redis', // Use memory for single-instance dev
+      adapter: 'postgres', // Use memory for single-instance dev
       prefix: 'nvent',
     },
 
