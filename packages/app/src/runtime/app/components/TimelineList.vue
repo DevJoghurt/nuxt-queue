@@ -181,7 +181,6 @@
 <script setup lang="ts">
 import { computed } from '#imports'
 import type { TimelineItem } from '@nuxt/ui'
-import { UTimeline, UIcon, UBadge } from '#components'
 
 const props = defineProps<{ items: any[], heightClass?: string }>()
 

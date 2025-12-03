@@ -544,7 +544,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted, watch, onMounted } from '#imports'
-import { UButton, UIcon, UBadge, USelectMenu, UTabs } from '#components'
 import { useTrigger, useTriggerEvents, type TriggerEvent } from '../../composables/useTrigger'
 import { useComponentRouter } from '../../composables/useComponentRouter'
 import { useTriggerWebSocket } from '../../composables/useTriggerWebSocket'

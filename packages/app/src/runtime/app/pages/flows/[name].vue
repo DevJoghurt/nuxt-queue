@@ -395,15 +395,6 @@ import FlowRunOverview from '../../components/flow/RunOverview.vue'
 import FlowRunTimeline from '../../components/flow/RunTimeline.vue'
 import FlowRunStatusBadge from '../../components/flow/RunStatusBadge.vue'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
-import {
-  UIcon,
-  UButton,
-  UModal,
-  UTextarea,
-  UTabs,
-  UDropdownMenu,
-  UBadge,
-} from '#components'
 import { useRoute, useRouter } from '#app'
 
 // Composables

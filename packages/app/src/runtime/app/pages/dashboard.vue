@@ -497,7 +497,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from '#imports'
-import { UIcon } from '#components'
 import { useComponentRouter } from '../composables/useComponentRouter'
 import { useQueuesWebSocket } from '../composables/useQueuesWebSocket'
 import { useFlowWebSocket } from '../composables/useFlowWebSocket'

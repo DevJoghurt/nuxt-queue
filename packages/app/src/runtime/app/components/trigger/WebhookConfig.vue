@@ -81,8 +81,10 @@
 </template>
 
 <script setup lang="ts">
-import { UCard } from '#components'
+import { resolveComponent } from '#imports'
 import { z } from 'zod'
+
+const UCard = resolveComponent('UCard')
 
 const { noCard = false, name = 'webhook' } = defineProps<{
   noCard?: boolean

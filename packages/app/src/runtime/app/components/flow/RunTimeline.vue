@@ -59,7 +59,6 @@
 <script setup lang="ts">
 import { ref, computed } from '#imports'
 import TimelineList from '../TimelineList.vue'
-import { UButton, UIcon, URadioGroup } from '#components'
 
 const props = defineProps<{
   events: any[]

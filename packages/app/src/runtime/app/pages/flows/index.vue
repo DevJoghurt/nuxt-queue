@@ -223,7 +223,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from '#imports'
-import { UButton, UIcon, UBadge, UInput } from '#components'
 import { useComponentRouter } from '../../composables/useComponentRouter'
 import { useFlowWebSocket } from '../../composables/useFlowWebSocket'
 import StatCard from '../../components/StatCard.vue'

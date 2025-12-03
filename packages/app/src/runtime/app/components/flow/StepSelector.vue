@@ -293,7 +293,6 @@
 import { computed, ref } from 'vue'
 import { tv } from 'tailwind-variants'
 import { twMerge } from 'tailwind-merge'
-import { UIcon, UBadge } from '#components'
 import type { ClassValue } from 'tailwind-variants'
 
 const props = defineProps<{

@@ -38,7 +38,6 @@
 
 <script setup lang="ts">
 import { computed } from '#imports'
-import { UIcon, UBadge } from '#components'
 
 interface AwaitConfig {
   type?: 'time' | 'event' | 'webhook'

@@ -178,9 +178,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from '#imports'
-import { UCard } from '#components'
+import { ref, computed, watch, resolveComponent } from '#imports'
 import { z } from 'zod'
+
+const UCard = resolveComponent('UCard')
 
 const { noCard = false, name = 'schedule' } = defineProps<{
   noCard?: boolean

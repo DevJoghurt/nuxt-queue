@@ -205,7 +205,6 @@
 
 <script setup lang="ts">
 import { computed, useFetch } from '#imports'
-import { UCard, UButton, UBadge } from '#components'
 import { useComponentRouter } from '../../composables/useComponentRouter'
 import type { Job } from '../../composables/useQueueJobs'
 

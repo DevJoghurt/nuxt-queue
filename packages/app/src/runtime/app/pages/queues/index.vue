@@ -189,7 +189,6 @@
 
 <script setup lang="ts">
 import { ref, computed } from '#imports'
-import { UIcon, UPagination, UButton, UBadge } from '#components'
 import { useQueues } from '../../composables/useQueues'
 import { useQueuesLive } from '../../composables/useQueuesLive'
 import { useComponentRouter } from '../../composables/useComponentRouter'

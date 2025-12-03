@@ -119,7 +119,6 @@
 
 <script setup lang="ts">
 import { computed } from '#imports'
-import { UCard, UButton, UBadge, UIcon } from '#components'
 
 type Status = 'idle' | 'running' | 'error' | 'done' | 'canceled' | string | undefined
 

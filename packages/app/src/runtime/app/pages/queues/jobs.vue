@@ -402,7 +402,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from '#imports'
-import { UButton, UBadge, UPagination, USelectMenu, UIcon, UTabs, USlideover } from '#components'
 import { useQueueJobs } from '../../composables/useQueueJobs'
 import { useQueueUpdates } from '../../composables/useQueueUpdates'
 import { useQueues } from '../../composables/useQueues'

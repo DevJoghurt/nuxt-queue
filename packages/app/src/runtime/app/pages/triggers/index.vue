@@ -306,7 +306,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from '#imports'
-import { UButton, UIcon, UBadge, UInput, USelectMenu, UPagination } from '#components'
 import { useComponentRouter } from '../../composables/useComponentRouter'
 import { useTriggerWebSocket } from '../../composables/useTriggerWebSocket'
 import StatCard from '../../components/StatCard.vue'

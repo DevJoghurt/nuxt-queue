@@ -25,7 +25,6 @@
 
 <script setup lang="ts">
 import { computed } from '#imports'
-import { UIcon } from '#components'
 
 interface Props {
   icon: string

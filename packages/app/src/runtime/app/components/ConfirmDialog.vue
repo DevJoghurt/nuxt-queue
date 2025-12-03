@@ -82,7 +82,6 @@
 
 <script setup lang="ts">
 import { computed } from '#imports'
-import { UModal, UButton, UIcon } from '#components'
 
 interface Props {
   title: string
