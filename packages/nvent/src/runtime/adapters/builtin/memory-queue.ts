@@ -273,6 +273,13 @@ export class MemoryQueueAdapter implements QueueAdapter {
           // Add more context as needed
         })
 
+        // Check if job is awaiting (awaitBefore pattern)
+        // If so, remove from jobs map so it can be re-enqueued with resolved data
+        if (result && typeof result === 'object' && (result as any).awaiting === true) {
+          this.jobs.delete(task.jobId)
+          return result
+        }
+
         // Update job state to completed
         this.updateJobState(task.jobId, 'completed', {
           returnvalue: result,

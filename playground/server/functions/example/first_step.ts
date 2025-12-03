@@ -16,7 +16,7 @@ export const config = defineFunctionConfig({
     },
   },
   worker: {
-    concurrency: 4, // Override default: process 3 jobs concurrently instead of 2
+    concurrency: 4, // Override default: process 4 jobs concurrently instead of 2
     lockDurationMs: 60000, // Override: increase lock duration to 60s
   },
   flow: {

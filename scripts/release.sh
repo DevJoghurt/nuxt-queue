@@ -40,4 +40,19 @@ cd packages/adapter-stream-redis
 npm publish --access public --tolerate-republish
 cd ../..
 
+echo "⚡ Publishing @nvent-addon/adapter-queue-postgres"
+cd packages/adapter-queue-postgres
+npm publish --access public --tolerate-republish
+cd ../..
+
+echo "⚡ Publishing @nvent-addon/adapter-store-postgres"
+cd packages/adapter-store-postgres
+npm publish --access public --tolerate-republish
+cd ../..
+
+echo "⚡ Publishing @nvent-addon/adapter-stream-postgres"
+cd packages/adapter-stream-postgres
+npm publish --access public --tolerate-republish
+cd ../..
+
 echo "✅ All packages published successfully"

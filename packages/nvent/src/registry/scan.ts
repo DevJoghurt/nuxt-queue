@@ -49,6 +49,7 @@ export async function scanWorkers(layers: LayerInfo[], functionsDir = 'functions
             queueName = String((meta.queue?.name || meta.queueName) || (id.split('/').pop() || id))
             workerByVirtualPath.set(virtualPath, {
               id,
+              name: queueName,
               kind,
               filePath: virtualPath,
               absPath: abs,
@@ -73,6 +74,7 @@ export async function scanWorkers(layers: LayerInfo[], functionsDir = 'functions
           queueName = String((meta.queue?.name || meta.queueName) || (id.split('/').pop() || id))
           workerByVirtualPath.set(virtualPath, {
             id,
+            name: queueName,
             kind,
             filePath: virtualPath,
             absPath: abs,
@@ -98,6 +100,7 @@ export async function scanWorkers(layers: LayerInfo[], functionsDir = 'functions
               queueName = String((meta.queue?.name || meta.queueName) || (id.split('/').pop() || id))
               workerByVirtualPath.set(virtualPath, {
                 id,
+                name: queueName,
                 kind,
                 filePath: virtualPath,
                 absPath: abs,

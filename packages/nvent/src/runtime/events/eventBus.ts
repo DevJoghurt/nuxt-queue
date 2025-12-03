@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
-import type { EventRecord } from '../types'
+import type { EventRecord } from './types'
 
-// v0.4 Event Bus - publishes events to internal subscribers
+// Event Bus - publishes events to internal subscribers
 type Handler = (e: EventRecord) => void
 
 // Ensure a single emitter across Nitro HMR and module reloads

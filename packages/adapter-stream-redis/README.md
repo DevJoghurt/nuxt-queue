@@ -39,7 +39,7 @@ export default defineNuxtConfig({
       password: process.env.REDIS_PASSWORD,
       db: 0
     },
-    prefix: 'nq'
+    prefix: 'nvent'
   }
 })
 ```
@@ -56,15 +56,17 @@ export default defineNuxtConfig({
 
 ### Adapter Options
 
-- `prefix` - Prefix for Redis channels (default: 'nq')
+- `prefix` - Prefix for Redis channels (default: 'nvent')
 
 ## How It Works
 
 The adapter creates Redis Pub/Sub channels for each topic:
 
 ```
-nq:stream:{topic}
+{prefix}:stream:{topic}
 ```
+
+With the default prefix `nvent`, channels look like: `nvent:stream:mytopic`
 
 Messages are JSON-serialized StreamMessage objects with automatic retry and error handling.
 

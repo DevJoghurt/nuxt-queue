@@ -1,7 +1,7 @@
-import { $useQueueRegistry } from '#imports'
+import { $useFunctionRegistry } from '#imports'
 
 export default defineEventHandler(async () => {
-  const registry = $useQueueRegistry()
+  const registry = $useFunctionRegistry()
 
   return {
     hasFlows: !!registry?.flows,

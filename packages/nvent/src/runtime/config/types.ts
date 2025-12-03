@@ -153,6 +153,14 @@ export interface QueueConfig {
    * Queue-specific options (BullMQ/PGBoss configuration)
    */
   prefix?: string
+
+  /**
+   * PostgreSQL schema name for pg-boss tables
+   * Only applies when adapter is 'postgres'
+   * @default 'pgboss'
+   */
+  schema?: string
+
   defaultJobOptions?: {
     attempts?: number
     backoff?: number | { type: 'fixed' | 'exponential', delay: number }
@@ -212,6 +220,19 @@ export interface StreamConfig {
   prefix?: string
   retryAttempts?: number
   retryDelay?: number
+}
+
+/**
+ * Webhooks configuration
+ */
+export interface WebhooksConfig {
+  /**
+   * Base URL for webhook endpoints
+   * Auto-detected from Nitro context in development
+   * Set explicitly for production or to override auto-detection
+   * @default Auto-detected from NUXT_PUBLIC_SITE_URL, NITRO_URL, or dev server (http://localhost:3000 fallback)
+   */
+  baseUrl?: string
 }
 
 /**
@@ -318,6 +339,13 @@ export interface StoreConfig {
   prefix?: string
 
   /**
+   * PostgreSQL schema name for store tables
+   * Only applies when adapter is 'postgres'
+   * @default 'public'
+   */
+  schema?: string
+
+  /**
    * State management configuration (KV store behavior)
    */
   state?: StateManagementConfig
@@ -393,7 +421,13 @@ export interface ModuleOptions {
    * Flow-specific configuration
    * @since v0.4.1
    */
-  flows?: FlowConfig
+  flow?: FlowConfig
+
+  /**
+   * Webhooks configuration
+   * @since v0.5.0
+   */
+  webhooks?: WebhooksConfig
 
   /**
    * Shared connection configurations
@@ -411,7 +445,8 @@ export interface ModuleConfig {
   queue: Required<QueueConfig>
   stream: Required<StreamConfig>
   store: Required<StoreConfig>
-  flows: Required<FlowConfig>
+  flow: Required<FlowConfig>
+  webhooks: Required<WebhooksConfig>
   connections: Required<ConnectionsConfig>
   rootDir?: string
 }

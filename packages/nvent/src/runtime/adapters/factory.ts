@@ -1,5 +1,5 @@
 /**
- * Adapter Factory (v0.4.1)
+ * Adapter Factory
  *
  * Creates adapters independently without dependencies
  * StoreAdapter is pure storage - streaming handled by wiring layer
@@ -13,6 +13,7 @@ import type { StreamAdapter } from './interfaces/stream'
 import type { StoreAdapter } from './interfaces/store'
 import type { QueueConfig, StreamConfig, StoreConfig } from '../config/types'
 import { useAdapterRegistry } from './registry'
+import { useStreamTopics, $useAnalyzedFlows } from '#imports'
 
 import {
   MemoryQueueAdapter,
@@ -29,7 +30,7 @@ export interface AdapterSet {
 }
 
 /**
- * Create a complete set of adapters (v0.4.1)
+ * Create a complete set of adapters
  * All adapters are independent - wiring layer handles coordination
  */
 export async function createAdapters(config: {
@@ -85,38 +86,82 @@ async function createStoreAdapter(
   const type = config.adapter || 'file'
   const registry = useAdapterRegistry()
 
+  let adapter: StoreAdapter
+
   // Check if an external adapter is registered
   if (registry.hasStore(type)) {
-    const adapter = registry.getStore(type)
+    adapter = registry.getStore(type)
     // StoreAdapter doesn't have init() method, only close()
-    return adapter
+  }
+  else {
+    // Fall back to built-in adapters
+    switch (type) {
+      case 'memory': {
+        // Memory adapter - pure in-memory storage
+        adapter = new MemoryStoreAdapter()
+        break
+      }
+
+      case 'file': {
+        const dataDir = config.file?.dataDir || '.data/store'
+        const fileAdapter = new FileStoreAdapter({
+          dataDir,
+        })
+        await fileAdapter.init()
+        adapter = fileAdapter
+        break
+      }
+
+      case 'redis':
+        throw new Error('Redis store adapter not registered. Install @nvent/adapter-store-redis and add it to your nuxt.config modules.')
+
+      case 'postgres':
+        throw new Error('Postgres store adapter not yet implemented')
+
+      default:
+        throw new Error(`Unknown store adapter type: ${type}`)
+    }
   }
 
-  // Fall back to built-in adapters
-  switch (type) {
-    case 'memory': {
-      // Memory adapter - pure in-memory storage
-      return new MemoryStoreAdapter()
+  // Initialize flow index structure after adapter is ready
+  // TODO: If we implement distributed flow orchestration, this needs to be handled differently -> it is then part of the registration process
+  try {
+    const { StoreSubjects } = useStreamTopics()
+    const flowIndexKey = StoreSubjects.flowIndex()
+
+    // Check if index exists by trying to read it
+    const existingFlows = await adapter.index.read(flowIndexKey, { limit: 1 })
+    if (existingFlows.length === 0) {
+      // Index is empty, initialize with analyzed flows
+      const analyzedFlows = $useAnalyzedFlows()
+      if (analyzedFlows && analyzedFlows.length > 0) {
+        const now = new Date().toISOString()
+        for (const flow of analyzedFlows) {
+          await adapter.index.add(flowIndexKey, flow.id, Date.now(), {
+            name: flow.id,
+            displayName: flow.id,
+            registeredAt: now,
+            stats: {
+              total: 0,
+              success: 0,
+              failure: 0,
+              cancel: 0,
+              running: 0,
+              awaiting: 0,
+            },
+            version: 1,
+          })
+        }
+      }
     }
-
-    case 'file': {
-      const dataDir = config.file?.dataDir || '.data/store'
-      const adapter = new FileStoreAdapter({
-        dataDir,
-      })
-      await adapter.init()
-      return adapter
-    }
-
-    case 'redis':
-      throw new Error('Redis store adapter not registered. Install @nvent/adapter-store-redis and add it to your nuxt.config modules.')
-
-    case 'postgres':
-      throw new Error('Postgres store adapter not yet implemented')
-
-    default:
-      throw new Error(`Unknown store adapter type: ${type}`)
   }
+  catch (err) {
+    // Log warning but don't fail adapter creation
+    // Flow index will be created on first flow start if initialization fails
+    console.warn('[factory] Failed to initialize flow index:', (err as any)?.message)
+  }
+
+  return adapter
 }
 
 async function createQueueAdapter(config: QueueConfig): Promise<QueueAdapter> {
@@ -149,7 +194,7 @@ async function createQueueAdapter(config: QueueConfig): Promise<QueueAdapter> {
       throw new Error('Redis queue adapter not registered. Install @nvent/adapter-queue-redis and add it to your nuxt.config modules.')
 
     case 'postgres':
-      throw new Error('Postgres queue adapter (PGBoss) not yet implemented')
+      throw new Error('Postgres queue adapter not registered. Install @nvent/adapter-queue-postgres and add it to your nuxt.config modules.')
 
     default:
       throw new Error(`Unknown queue adapter type: ${type}`)

@@ -19,8 +19,26 @@ export interface PublishPayload<T = any> {
   data?: T
 }
 
-// v0.4 Event Schema
-export type EventType = 'flow.start' | 'flow.completed' | 'flow.failed' | 'flow.cancel' | 'step.started' | 'step.completed' | 'step.failed' | 'step.retry' | 'log' | 'emit' | 'state' | 'flow.stalled'
+// v0.4 Event Schema + v0.5 Trigger Events
+export type EventType
+  = | 'flow.start'
+    | 'flow.completed'
+    | 'flow.failed'
+    | 'flow.cancel'
+    | 'step.started'
+    | 'step.completed'
+    | 'step.failed'
+    | 'step.retry'
+    | 'log'
+    | 'emit'
+    | 'state'
+    | 'flow.stalled'
+  // v0.5: Trigger events
+    | 'trigger.fired'
+    | 'trigger.registered'
+    | 'await.registered'
+    | 'await.resolved'
+    | 'await.timeout'
 
 export interface BaseEvent {
   id?: string // Redis stream ID (auto-generated, not present for ingress events)
@@ -133,4 +151,56 @@ export interface StateEvent extends StepEvent {
   }
 }
 
-export type FlowEvent = FlowStartEvent | FlowCompletedEvent | FlowFailedEvent | FlowCancelEvent | FlowStalledEvent | StepStartedEvent | StepCompletedEvent | StepFailedEvent | StepRetryEvent | LogEvent | EmitEvent | StateEvent
+// v0.5: Trigger event interfaces
+export interface TriggerFiredEvent extends BaseEvent {
+  type: 'trigger.fired'
+  triggerName: string
+  data: any
+}
+
+export interface TriggerRegisteredEvent {
+  type: 'trigger.registered'
+  triggerName: string
+  triggerType: 'event' | 'webhook' | 'schedule' | 'manual'
+  scope: 'flow' | 'run'
+}
+
+export interface AwaitRegisteredEvent extends BaseEvent {
+  type: 'await.registered'
+  stepName: string
+  awaitType: 'webhook' | 'event' | 'schedule' | 'time'
+  position: 'before' | 'after'
+  config: any
+}
+
+export interface AwaitResolvedEvent extends BaseEvent {
+  type: 'await.resolved'
+  stepName: string
+  triggerData: any
+  position: 'before' | 'after'
+}
+
+export interface AwaitTimeoutEvent extends BaseEvent {
+  type: 'await.timeout'
+  stepName: string
+  action: 'fail' | 'continue' | 'retry'
+}
+
+export type FlowEvent
+  = | FlowStartEvent
+    | FlowCompletedEvent
+    | FlowFailedEvent
+    | FlowCancelEvent
+    | FlowStalledEvent
+    | StepStartedEvent
+    | StepCompletedEvent
+    | StepFailedEvent
+    | StepRetryEvent
+    | LogEvent
+    | EmitEvent
+    | StateEvent
+    | TriggerFiredEvent
+    | TriggerRegisteredEvent
+    | AwaitRegisteredEvent
+    | AwaitResolvedEvent
+    | AwaitTimeoutEvent

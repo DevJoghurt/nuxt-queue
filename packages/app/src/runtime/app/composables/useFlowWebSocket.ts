@@ -17,20 +17,39 @@ export interface FlowSubscription {
   onHistory?: (events: any[]) => void
 }
 
+export interface StatsSubscription {
+  onInitial?: (data: any) => void
+  onUpdate?: (data: any) => void
+}
+
+// Singleton state - shared across all instances
+let sharedWs: WebSocket | null = null
+let sharedConnected = false
+let sharedReconnecting = false
+let retry = 0
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let currentOptions: UseFlowWebSocketOptions | undefined
+let currentSubscription: FlowSubscription | null = null
+let currentStatsSubscription: StatsSubscription | null = null
+let pendingStatsSubscription = false // Track if stats subscription is pending connection
+let isStatsSubscribed = false // Track if stats are actually subscribed on server
+let statsCache: any[] = [] // Cache last received stats for replay
+let pingInterval: ReturnType<typeof setInterval> | null = null
+let isServerRestarting = false
+let refCount = 0 // Track how many components are using the connection
+
 /**
- * WebSocket composable for flow run events
- * Replaces the SSE-based useEventSSE with a more reliable WebSocket implementation
+ * WebSocket composable for flow run events and flow stats
+ * Architecture: Client (this) → WebSocket → Server Handler → StreamAdapter.subscribe(StreamTopics.flowEvents)
+ * Supports subscribing to specific flow runs and global flow statistics
+ * Uses a singleton connection shared across all instances
  */
 export function useFlowWebSocket() {
-  const ws = ref<WebSocket | null>(null)
-  const connected = ref(false)
-  const reconnecting = ref(false)
-  let retry = 0
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  let currentOptions: UseFlowWebSocketOptions | undefined
-  let currentSubscription: FlowSubscription | null = null
-  let pingInterval: ReturnType<typeof setInterval> | null = null
-  let isServerRestarting = false
+  const ws = ref<WebSocket | null>(sharedWs)
+  const connected = ref(sharedConnected)
+  const reconnecting = ref(sharedReconnecting)
+
+  refCount++
 
   const computeDelay = (opts?: UseFlowWebSocketOptions) => {
     const base = Math.max(100, opts?.baseDelayMs ?? 1000)
@@ -63,38 +82,64 @@ export function useFlowWebSocket() {
     }
   }
 
+  const updateRefs = () => {
+    ws.value = sharedWs
+    connected.value = sharedConnected
+    reconnecting.value = sharedReconnecting
+  }
+
   const send = (data: any) => {
-    if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-      ws.value.send(JSON.stringify(data))
+    if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+      try {
+        sharedWs.send(JSON.stringify(data))
+        return true
+      }
+      catch (err) {
+        console.error('[useFlowWebSocket] Error sending message:', err)
+        return false
+      }
     }
+    return false
   }
 
   const startPingInterval = () => {
     clearTimers()
     // Send ping every 30 seconds to keep connection alive
     pingInterval = setInterval(() => {
-      if (ws.value && ws.value.readyState === WebSocket.OPEN) {
+      if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
         send({ type: 'ping' })
       }
     }, 30000)
   }
 
   const stop = () => {
+    // Only decrement ref count, don't close connection
+    refCount = Math.max(0, refCount - 1)
+    // Component unmounting
+  }
+
+  const forceClose = () => {
     clearTimers()
     isServerRestarting = false
     try {
-      if (ws.value) {
-        ws.value.close(1000, 'Client closing')
+      if (sharedWs) {
+        sharedWs.close(1000, 'Client closing')
       }
     }
     catch (err) {
       console.warn('[useFlowWebSocket] Error closing WebSocket:', err)
     }
-    ws.value = null
-    connected.value = false
-    reconnecting.value = false
+    sharedWs = null
+    sharedConnected = false
+    sharedReconnecting = false
+    updateRefs()
     retry = 0
+    refCount = 0
     currentSubscription = null
+    currentStatsSubscription = null
+    isStatsSubscribed = false
+    pendingStatsSubscription = false
+    statsCache = []
   }
 
   const attemptReconnect = () => {
@@ -111,39 +156,53 @@ export function useFlowWebSocket() {
     }
 
     retry++
-    reconnecting.value = true
+    sharedReconnecting = true
+    updateRefs()
 
     // If server is restarting, wait longer before reconnecting
     // This gives Nitro time to fully shut down and restart
     const baseDelay = isServerRestarting ? 2000 : computeDelay(currentOptions)
     const delay = baseDelay
 
-    console.log(`[useFlowWebSocket] Will attempt reconnection in ${delay}ms (attempt ${retry}/${max})${isServerRestarting ? ' [server restart]' : ''}`)
+    // Will attempt reconnection
 
     clearTimers()
     reconnectTimer = setTimeout(() => {
-      if (currentSubscription) {
-        innerSubscribe(currentSubscription, currentOptions)
+      // Reconnect with both subscriptions if they existed
+      if (currentSubscription || currentStatsSubscription) {
+        connect(currentOptions)
       }
     }, delay)
   }
 
-  const setupWebSocket = (socket: WebSocket, subscription: FlowSubscription, opts?: UseFlowWebSocketOptions) => {
+  const setupWebSocket = (socket: WebSocket, opts?: UseFlowWebSocketOptions) => {
     socket.onopen = () => {
       console.log('[useFlowWebSocket] Connected')
-      connected.value = true
-      reconnecting.value = false
+      sharedConnected = true
+      sharedReconnecting = false
+      updateRefs()
       retry = 0
 
       // Start ping interval
       startPingInterval()
 
-      // Send subscription message
-      send({
-        type: 'subscribe',
-        flowName: subscription.flowName,
-        runId: subscription.runId,
-      })
+      // Resubscribe to flow run if needed
+      if (currentSubscription) {
+        send({
+          type: 'subscribe',
+          flowName: currentSubscription.flowName,
+          runId: currentSubscription.runId,
+        })
+      }
+
+      // Resubscribe to stats if needed
+      if (currentStatsSubscription || pendingStatsSubscription) {
+        // Sending stats subscription after connection opened
+        send({
+          type: 'subscribe.stats',
+        })
+        pendingStatsSubscription = false
+      }
 
       opts?.onOpen?.()
     }
@@ -154,31 +213,78 @@ export function useFlowWebSocket() {
 
         switch (data.type) {
           case 'connected':
-            console.log('[useFlowWebSocket] Server acknowledged connection')
             break
 
           case 'subscribed':
-            console.log('[useFlowWebSocket] Subscribed to flow:', data.flowName, data.runId)
             break
 
           case 'unsubscribed':
-            console.log('[useFlowWebSocket] Unsubscribed from flow:', data.flowName, data.runId)
             break
 
-          case 'history':
-            if (subscription.onHistory) {
-              subscription.onHistory(data.events)
+          case 'stats.subscribed':
+            isStatsSubscribed = true
+            break
+
+          case 'stats.unsubscribed':
+            isStatsSubscribed = false
+            break
+
+          case 'flow.stats.initial': {
+            // Store in cache
+            const existingIndex = statsCache.findIndex(s => s.id === data.data.id)
+            if (existingIndex >= 0) {
+              statsCache[existingIndex] = data.data
             }
             else {
-              // If no onHistory handler, treat as individual events
-              for (const eventData of data.events) {
-                subscription.onEvent(eventData)
+              statsCache.push(data.data)
+            }
+            // Trigger handler
+            if (currentStatsSubscription?.onInitial) {
+              currentStatsSubscription.onInitial(data.data)
+            }
+            else {
+              console.warn('[useFlowWebSocket] No onInitial handler for stats:', data.data)
+            }
+            break
+          }
+
+          case 'flow.stats.update': {
+            // Update cache
+            const cacheIndex = statsCache.findIndex(s => s.id === data.data.id)
+            if (cacheIndex >= 0) {
+              statsCache[cacheIndex] = data.data
+            }
+            else {
+              statsCache.push(data.data)
+            }
+            // Trigger handler
+            if (currentStatsSubscription?.onUpdate) {
+              currentStatsSubscription.onUpdate(data.data)
+            }
+            else {
+              console.warn('[useFlowWebSocket] No onUpdate handler for stats:', data.data)
+            }
+            break
+          }
+
+          case 'history':
+            if (currentSubscription) {
+              if (currentSubscription.onHistory) {
+                currentSubscription.onHistory(data.events)
+              }
+              else {
+                // If no onHistory handler, treat as individual events
+                for (const eventData of data.events) {
+                  currentSubscription.onEvent(eventData)
+                }
               }
             }
             break
 
           case 'event':
-            subscription.onEvent(data.event)
+            if (currentSubscription) {
+              currentSubscription.onEvent(data.event)
+            }
             break
 
           case 'pong':
@@ -186,7 +292,7 @@ export function useFlowWebSocket() {
             break
 
           case 'server-restart':
-            console.log('[useFlowWebSocket] Server is restarting (HMR)')
+            // Server is restarting (HMR)
             // Mark that server is restarting so we wait longer before reconnecting
             isServerRestarting = true
             break
@@ -212,7 +318,8 @@ export function useFlowWebSocket() {
 
     socket.onclose = (event) => {
       console.log('[useFlowWebSocket] Connection closed:', event.code, event.reason)
-      connected.value = false
+      sharedConnected = false
+      updateRefs()
       clearTimers()
       opts?.onClose?.(event)
 
@@ -222,7 +329,7 @@ export function useFlowWebSocket() {
       // 1006 = abnormal closure - should reconnect
       const shouldReconnect = event.code !== 1000 && opts?.autoReconnect
       if (shouldReconnect) {
-        console.log('[useFlowWebSocket] Will attempt reconnection (code:', event.code, ')')
+        // Will attempt reconnection
         attemptReconnect()
       }
       else {
@@ -232,42 +339,30 @@ export function useFlowWebSocket() {
     }
   }
 
-  const innerSubscribe = (subscription: FlowSubscription, opts?: UseFlowWebSocketOptions) => {
+  const connect = (opts?: UseFlowWebSocketOptions) => {
     // WebSocket is only available in the browser
     if (import.meta.server || typeof WebSocket === 'undefined') {
       console.warn('[useFlowWebSocket] WebSocket not available (SSR context)')
       return
     }
 
-    // If we already have an open connection, just change the subscription
-    if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-      console.log('[useFlowWebSocket] Reusing connection, switching subscription')
-      // Unsubscribe from previous flow if exists
-      if (currentSubscription) {
-        send({
-          type: 'unsubscribe',
-          flowName: currentSubscription.flowName,
-          runId: currentSubscription.runId,
-        })
-      }
-
-      // Update subscription and subscribe to new flow
-      currentSubscription = subscription
-      send({
-        type: 'subscribe',
-        flowName: subscription.flowName,
-        runId: subscription.runId,
-      })
+    // If already connected or connecting, no need to reconnect
+    if (sharedWs && (sharedWs.readyState === WebSocket.OPEN || sharedWs.readyState === WebSocket.CONNECTING)) {
+      // Reusing existing connection
       return
     }
 
-    // No active connection, close any stale connection and create new one
-    if (ws.value) {
-      stop()
+    // Close any stale connection
+    if (sharedWs) {
+      try {
+        sharedWs.close()
+      }
+      catch {
+        // ignore
+      }
     }
 
     currentOptions = opts
-    currentSubscription = subscription
 
     try {
       // Construct WebSocket URL
@@ -275,8 +370,9 @@ export function useFlowWebSocket() {
       const wsUrl = `${protocol}//${window.location.host}/api/_flows/ws`
 
       const socket = new WebSocket(wsUrl)
-      ws.value = socket
-      setupWebSocket(socket, subscription, opts)
+      sharedWs = socket
+      updateRefs()
+      setupWebSocket(socket, opts)
     }
     catch (err) {
       console.error('[useFlowWebSocket] Error creating WebSocket:', err)
@@ -286,11 +382,37 @@ export function useFlowWebSocket() {
   }
 
   const subscribe = (subscription: FlowSubscription, opts?: UseFlowWebSocketOptions) => {
-    innerSubscribe(subscription, opts)
+    // Unsubscribe from previous flow if exists
+    if (currentSubscription && sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+      send({
+        type: 'unsubscribe',
+        flowName: currentSubscription.flowName,
+        runId: currentSubscription.runId,
+      })
+    }
+
+    // Update subscription
+    // Server will subscribe to StreamTopics.flowEvents(runId) and send updates
+    // Historical events loaded from StoreSubjects.flowRun(runId)
+    currentSubscription = subscription
+
+    // If we already have an open connection, just subscribe
+    if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+      // Reusing connection, subscribing to flow run
+      send({
+        type: 'subscribe',
+        flowName: subscription.flowName,
+        runId: subscription.runId,
+      })
+      return
+    }
+
+    // No active connection, connect first
+    connect(opts)
   }
 
   const unsubscribe = () => {
-    if (currentSubscription && ws.value && ws.value.readyState === WebSocket.OPEN) {
+    if (currentSubscription && sharedWs && sharedWs.readyState === WebSocket.OPEN) {
       send({
         type: 'unsubscribe',
         flowName: currentSubscription.flowName,
@@ -300,12 +422,68 @@ export function useFlowWebSocket() {
     currentSubscription = null
   }
 
-  onBeforeUnmount(() => stop())
+  const subscribeStats = (subscription: StatsSubscription, opts?: UseFlowWebSocketOptions) => {
+    // Store stats subscription
+    // Server will subscribe to StreamTopics.flowStats() and send updates
+    currentStatsSubscription = subscription
+
+    // If we already have an open connection with active subscription, just update handlers
+    if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+      if (isStatsSubscribed) {
+        // Reusing connection and existing stats subscription, replaying cached stats
+        // Replay cached stats to new handlers
+        if (subscription.onInitial && statsCache.length > 0) {
+          for (const cachedStat of statsCache) {
+            subscription.onInitial(cachedStat)
+          }
+        }
+        return
+      }
+      // Not subscribed yet, send subscription
+      // Reusing connection, subscribing to stats
+      send({
+        type: 'subscribe.stats',
+      })
+      return
+    }
+
+    // If connection is in progress, wait for it to open
+    if (sharedWs && sharedWs.readyState === WebSocket.CONNECTING) {
+      // Connection is opening, marking stats subscription as pending
+      pendingStatsSubscription = true
+      return
+    }
+
+    // Connection is pending or not established, mark subscription as pending
+    // No connection, marking stats subscription as pending
+    pendingStatsSubscription = true
+
+    // No active connection, connect first
+    // The subscription will be sent when onopen fires
+    connect(opts)
+  }
+
+  const unsubscribeStats = () => {
+    if (currentStatsSubscription && sharedWs && sharedWs.readyState === WebSocket.OPEN) {
+      send({
+        type: 'unsubscribe.stats',
+      })
+    }
+    currentStatsSubscription = null
+    isStatsSubscribed = false // Reset subscription state immediately
+  }
+
+  onBeforeUnmount(() => {
+    stop()
+  })
 
   return {
     subscribe,
     unsubscribe,
+    subscribeStats,
+    unsubscribeStats,
     stop,
+    forceClose, // Exposed for debugging/manual cleanup
     connected,
     reconnecting,
   }

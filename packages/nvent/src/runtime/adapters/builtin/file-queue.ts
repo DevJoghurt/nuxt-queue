@@ -8,7 +8,7 @@
  * - Single instance only (no distributed lock)
  *
  * Storage format:
- * - {dataDir}/queues/{queueName}/jobs/{jobId}.json - Individual job files
+ * - {dataDir}/{queueName}/jobs/{jobId}.json - Individual job files
  * - Jobs are loaded on init and kept in memory with fastq
  */
 
@@ -52,6 +52,8 @@ interface JobWithOpts extends Job {
     delay?: number
     priority?: number
     timeout?: number
+    removeOnComplete?: boolean | number
+    removeOnFail?: boolean | number
   }
 }
 
@@ -82,7 +84,7 @@ export class FileQueueAdapter implements QueueAdapter {
     if (this.initialized) return
 
     // Create data directory
-    await fs.mkdir(join(this.options.dataDir, 'queues'), { recursive: true })
+    await fs.mkdir(this.options.dataDir, { recursive: true })
 
     // Load existing jobs from disk
     await this.loadJobsFromDisk()
@@ -91,7 +93,7 @@ export class FileQueueAdapter implements QueueAdapter {
   }
 
   private async loadJobsFromDisk(): Promise<void> {
-    const queuesDir = join(this.options.dataDir, 'queues')
+    const queuesDir = this.options.dataDir
 
     try {
       const queueNames = await fs.readdir(queuesDir)
@@ -123,7 +125,7 @@ export class FileQueueAdapter implements QueueAdapter {
   }
 
   private async persistJob(queueName: string, job: Job): Promise<void> {
-    const jobsDir = join(this.options.dataDir, 'queues', queueName, 'jobs')
+    const jobsDir = join(this.options.dataDir, queueName, 'jobs')
     await fs.mkdir(jobsDir, { recursive: true })
 
     const jobPath = join(jobsDir, `${job.id}.json`)
@@ -131,7 +133,7 @@ export class FileQueueAdapter implements QueueAdapter {
   }
 
   private async deleteJobFile(queueName: string, jobId: string): Promise<void> {
-    const jobPath = join(this.options.dataDir, 'queues', queueName, 'jobs', `${jobId}.json`)
+    const jobPath = join(this.options.dataDir, queueName, 'jobs', `${jobId}.json`)
 
     try {
       await fs.unlink(jobPath)
@@ -179,7 +181,7 @@ export class FileQueueAdapter implements QueueAdapter {
     const workerInfo = this.workers.get(queueName)
     if (workerInfo && !workerInfo.paused) {
       // Don't catch errors here - let them propagate to dispatcher for retry handling
-      workerInfo.queue.push({ jobId, jobName: job.name, data: job.data }).catch(() => {
+      workerInfo.queue.push({ jobId, jobName: job.name, data: internalJob.data }).catch(() => {
         // Errors are handled by dispatcher's retry logic
       })
     }
@@ -486,6 +488,15 @@ export class FileQueueAdapter implements QueueAdapter {
         // which expects a job object and will build the full RunContext
         const result = await handler(jobLike as any, {} as any)
 
+        // Check if job is awaiting (awaitBefore pattern)
+        // If so, remove from jobs map and disk so it can be re-enqueued with resolved data
+        // Note: Awaiting jobs are temporary and should always be deleted
+        if (result && typeof result === 'object' && (result as any).awaiting === true) {
+          this.jobs.delete(task.jobId)
+          await this.deleteJobFile(queueName, task.jobId)
+          return result
+        }
+
         // Update job state to completed
         await this.updateJobState(queueName, task.jobId, 'completed', {
           returnvalue: result,
@@ -495,8 +506,8 @@ export class FileQueueAdapter implements QueueAdapter {
         // Emit completed event
         this.emitEvent(queueName, 'completed', { jobId: task.jobId, returnvalue: result })
 
-        // Delete completed job file to avoid reprocessing on restart
-        await this.deleteJobFile(queueName, task.jobId)
+        // Handle removeOnComplete option
+        await this.cleanupCompletedJobs(queueName, storedJob.opts?.removeOnComplete)
 
         return result
       }
@@ -559,6 +570,9 @@ export class FileQueueAdapter implements QueueAdapter {
           attemptsMade: newAttemptCount,
           maxAttempts,
         })
+
+        // Handle removeOnFail option
+        await this.cleanupFailedJobs(queueName, storedJob.opts?.removeOnFail)
 
         throw err
       }
@@ -636,6 +650,86 @@ export class FileQueueAdapter implements QueueAdapter {
       }
       catch (error) {
         console.error(`[FileQueueAdapter] Error in event listener for ${key}:`, error)
+      }
+    }
+  }
+
+  /**
+   * Clean up completed jobs based on removeOnComplete option
+   * - true: delete immediately
+   * - false/undefined: keep forever
+   * - number: keep last N jobs, delete older ones
+   */
+  private async cleanupCompletedJobs(queueName: string, removeOnComplete?: boolean | number): Promise<void> {
+    // If removeOnComplete is false or undefined, keep all jobs
+    if (removeOnComplete === false || removeOnComplete === undefined) {
+      return
+    }
+
+    // If removeOnComplete is true, delete immediately
+    if (removeOnComplete === true) {
+      const completedJobs = Array.from(this.jobs.values()).filter(
+        j => j.state === 'completed' && j.data?.__queueName === queueName,
+      )
+
+      for (const job of completedJobs) {
+        this.jobs.delete(job.id)
+        await this.deleteJobFile(queueName, job.id)
+      }
+      return
+    }
+
+    // If removeOnComplete is a number, keep last N jobs
+    if (typeof removeOnComplete === 'number') {
+      const completedJobs = Array.from(this.jobs.values())
+        .filter(j => j.state === 'completed' && j.data?.__queueName === queueName)
+        .sort((a, b) => (b.finishedOn || 0) - (a.finishedOn || 0)) // Sort by finishedOn desc
+
+      // Delete jobs beyond the limit
+      const jobsToDelete = completedJobs.slice(removeOnComplete)
+      for (const job of jobsToDelete) {
+        this.jobs.delete(job.id)
+        await this.deleteJobFile(queueName, job.id)
+      }
+    }
+  }
+
+  /**
+   * Clean up failed jobs based on removeOnFail option
+   * - true: delete immediately
+   * - false/undefined: keep forever
+   * - number: keep last N jobs, delete older ones
+   */
+  private async cleanupFailedJobs(queueName: string, removeOnFail?: boolean | number): Promise<void> {
+    // If removeOnFail is false or undefined, keep all jobs
+    if (removeOnFail === false || removeOnFail === undefined) {
+      return
+    }
+
+    // If removeOnFail is true, delete immediately
+    if (removeOnFail === true) {
+      const failedJobs = Array.from(this.jobs.values()).filter(
+        j => j.state === 'failed' && j.data?.__queueName === queueName,
+      )
+
+      for (const job of failedJobs) {
+        this.jobs.delete(job.id)
+        await this.deleteJobFile(queueName, job.id)
+      }
+      return
+    }
+
+    // If removeOnFail is a number, keep last N jobs
+    if (typeof removeOnFail === 'number') {
+      const failedJobs = Array.from(this.jobs.values())
+        .filter(j => j.state === 'failed' && j.data?.__queueName === queueName)
+        .sort((a, b) => (b.finishedOn || 0) - (a.finishedOn || 0)) // Sort by finishedOn desc
+
+      // Delete jobs beyond the limit
+      const jobsToDelete = failedJobs.slice(removeOnFail)
+      for (const job of jobsToDelete) {
+        this.jobs.delete(job.id)
+        await this.deleteJobFile(queueName, job.id)
       }
     }
   }

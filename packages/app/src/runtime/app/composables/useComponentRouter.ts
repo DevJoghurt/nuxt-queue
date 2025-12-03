@@ -8,6 +8,7 @@ import {
   watch,
   defineAsyncComponent,
 } from '#imports'
+import { createHooks } from 'hookable'
 
 export type ComponentRouteRecord = {
   path: string
@@ -26,6 +27,10 @@ export interface UseComponentRouterOptions {
   debug?: boolean
 }
 
+type RouterHooks = {
+  navigated: (data: { path: string, params: Record<string, string> }) => void
+}
+
 type RouterContext = {
   route: ReturnType<
     typeof shallowRef<{
@@ -41,6 +46,8 @@ type RouterContext = {
   makeHref: (patternOrPath: string, params?: Record<string, any>) => string
   pushTo: (patternOrPath: string, params?: Record<string, any>) => Promise<void>
   replaceTo: (patternOrPath: string, params?: Record<string, any>) => Promise<void>
+  // Navigation hooks
+  hooks: ReturnType<typeof createHooks<RouterHooks>>
 }
 
 export function useComponentRouter(): RouterContext & { component?: any }
@@ -70,6 +77,7 @@ export function useComponentRouter(
         )
       const noopMake = (p: string, _params?: Record<string, any>) => p
       const noopHref = (p: string, _params?: Record<string, any>) => p
+      const emptyHooks = createHooks<RouterHooks>()
       return {
         route: emptyRoute,
         push: warnNav,
@@ -78,6 +86,7 @@ export function useComponentRouter(
         makeHref: noopHref,
         pushTo: async (p: string, _params?: Record<string, any>) => warnNav(p),
         replaceTo: async (p: string, _params?: Record<string, any>) => warnNav(p),
+        hooks: emptyHooks,
         component: undefined,
       }
     }
@@ -113,6 +122,8 @@ export function useComponentRouter(
     params: {},
     query: {},
   })
+
+  const hooks = createHooks<RouterHooks>()
 
   const dbg = (...args: any[]) => {
     if (props.debug) console.info('[component-router]', ...args)
@@ -189,6 +200,10 @@ export function useComponentRouter(
       query: queryParams, // Only use query params from the current path, not from nuxtRoute
     }
     dbg('current', route.value)
+
+    // Call navigation hook for subscribers
+    dbg('calling navigated hook with', { path: pathOnly || path, params: m.params })
+    hooks.callHook('navigated', { path: pathOnly || path, params: m.params })
   }
 
   function readFromHost(): string | null {
@@ -210,6 +225,8 @@ export function useComponentRouter(
 
   async function writeToHost(path: string, replace = false) {
     dbg('writeToHost', path, { replace, mode: props.mode })
+    const prevPath = route.value.path
+    dbg('current path before write:', prevPath, 'new path:', path)
     if (props.mode === 'query') {
       // Split path into path and query parts
       const [pathOnly, queryString] = path.split('?')
@@ -290,7 +307,7 @@ export function useComponentRouter(
   }
 
   // Provide for nested/child consumers IMMEDIATELY so children can consume during initial render
-  const exposed: RouterContext = { push, replace, route, makePath, makeHref, pushTo, replaceTo }
+  const exposed: RouterContext = { push, replace, route, makePath, makeHref, pushTo, replaceTo, hooks }
   provide(props.provideKey!, exposed)
 
   // Init and sync with host
@@ -312,7 +329,7 @@ export function useComponentRouter(
     },
   )
 
-  return { component, route, push, replace, makePath, makeHref, pushTo, replaceTo }
+  return { component, route, push, replace, makePath, makeHref, pushTo, replaceTo, hooks }
 }
 
 export default useComponentRouter

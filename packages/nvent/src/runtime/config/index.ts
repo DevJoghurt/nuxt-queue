@@ -2,7 +2,7 @@ import type { ModuleOptions, ModuleConfig } from './types'
 import defu from 'defu'
 
 /**
- * Merge and normalize module options with defaults (v0.4.1).
+ * Merge and normalize module options with defaults.
  * Applies connection fallback: adapter-specific connections override connections.redis/postgres.
  * Only includes connection defaults for adapters that are actually used.
  */
@@ -15,7 +15,8 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
     connections: {},
     queue: {
       adapter: 'file',
-      prefix: 'nq',
+      prefix: 'nvent',
+      schema: 'nvent_queue',
       defaultJobOptions: {},
       worker: {
         concurrency: 2,
@@ -25,11 +26,12 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
     },
     stream: {
       adapter: 'memory',
-      prefix: 'nq',
+      prefix: 'nvent',
     },
     store: {
       adapter: 'file',
-      prefix: 'nq',
+      prefix: 'nvent',
+      schema: 'nvent_store',
       state: {
         autoScope: 'always',
         cleanup: {
@@ -40,13 +42,18 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
       eventTTL: 604800, // 7 days
       metadataTTL: 2592000, // 30 days
     },
-    flows: {
+    flow: {
       stallDetection: {
         enabled: true,
         stallTimeout: 30 * 60 * 1000, // 30 minutes
         checkInterval: 15 * 60 * 1000, // 15 minutes
         enablePeriodicCheck: true,
       },
+    },
+    webhooks: {
+      // baseUrl will be determined at runtime from Nitro context
+      // Users can override via NUXT_PUBLIC_SITE_URL or explicit config
+      baseUrl: process.env.NUXT_PUBLIC_SITE_URL || undefined,
     },
   }
 
@@ -106,7 +113,7 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
 
   if (neededConnections.has('postgres') && !normalized.connections.postgres) {
     normalized.connections.postgres = {
-      connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/nuxt_queue',
+      connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/nvent',
     }
   }
 
@@ -181,7 +188,7 @@ function applyConnectionFallback(config: Required<ModuleOptions>): void {
 }
 
 /**
- * Convert normalized module options to runtime config format (v0.4.1).
+ * Convert normalized module options to runtime config format.
  */
 export function toRuntimeConfig(normalizedOptions: Required<ModuleOptions>): ModuleConfig {
   return {
@@ -191,7 +198,8 @@ export function toRuntimeConfig(normalizedOptions: Required<ModuleOptions>): Mod
     stream: normalizedOptions.stream as Required<typeof normalizedOptions.stream>,
     store: normalizedOptions.store as Required<typeof normalizedOptions.store>,
     connections: normalizedOptions.connections as Required<typeof normalizedOptions.connections>,
-    flows: normalizedOptions.flows as Required<typeof normalizedOptions.flows>,
+    flow: normalizedOptions.flow as Required<typeof normalizedOptions.flow>,
+    webhooks: normalizedOptions.webhooks as Required<typeof normalizedOptions.webhooks>,
   }
 }
 

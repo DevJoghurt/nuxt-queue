@@ -389,7 +389,7 @@ export default defineNitroPlugin(async (nitroApp) => {
 
     const config = defu(moduleOptions, {
       connection,
-      prefix: nventConfig.queue?.prefix || 'nq',
+      prefix: nventConfig.queue?.prefix || 'nvent',
       defaultJobOptions: nventConfig.queue?.defaultJobOptions,
     })
 

@@ -2,7 +2,8 @@ import { join } from 'node:path'
 import {
   defineNuxtModule,
   createResolver,
-  addServerScanDir,
+  addServerPlugin,
+  addServerHandler,
   addServerImports,
   addTemplate,
   addTypeTemplate,
@@ -11,7 +12,8 @@ import {
 import defu from 'defu'
 import { compileRegistryFromServerWorkers, type LayerInfo } from './registry'
 import { watchQueueFiles } from './utils/dev'
-import { generateRegistryTemplate, generateHandlersTemplate, generateAnalyzedFlowsTemplate } from './utils/templates'
+import { generateRegistryTemplate, generateHandlersTemplate, generateAnalyzedFlowsTemplate, generateTriggerRegistryTemplate, generateAdapterTypesTemplate } from './utils/templates'
+import { getServerImports } from './utils/serverImports'
 import { normalizeModuleOptions, toRuntimeConfig, getRedisStorageConfig } from './runtime/config'
 import type { ModuleOptions, ModuleConfig } from './runtime/config/types'
 import type {} from '@nuxt/schema'
@@ -28,7 +30,7 @@ declare module '@nuxt/schema' {
   }
 }
 
-export default defineNuxtModule<ModuleOptions>({
+export default defineNuxtModule<ModuleOptions>().with({
   meta,
   defaults: {},
   moduleDependencies: {
@@ -45,10 +47,6 @@ export default defineNuxtModule<ModuleOptions>({
 
     // Normalize and merge configuration
     const config = normalizeModuleOptions(mergedOptions)
-
-    // Use addServerScanDir only for api/ and plugins/ directories
-    // These follow Nuxt conventions and won't include .d.ts files in the build
-    addServerScanDir(resolve('./runtime/server'))
 
     nuxt.hook('nitro:config', (nitro) => {
       // Ensure Redis storage is configured for unstorage so StateProvider persists to Redis.
@@ -105,12 +103,13 @@ export default defineNuxtModule<ModuleOptions>({
     let lastCompiledRegistry = compiledSnapshot
 
     // Template filenames for reference
-    const REGISTRY_TEMPLATE = 'queue-registry.mjs'
+    const REGISTRY_TEMPLATE = 'function-registry.mjs'
     const HANDLERS_TEMPLATE = 'worker-handlers.mjs'
     const ANALYZED_FLOWS_TEMPLATE = 'analyzed-flows.mjs'
+    const TRIGGER_REGISTRY_TEMPLATE = 'trigger-registry.mjs'
 
     // add dynamic ts files to build transpile list
-    for (const templateName of [REGISTRY_TEMPLATE, HANDLERS_TEMPLATE, ANALYZED_FLOWS_TEMPLATE] as const) {
+    for (const templateName of [REGISTRY_TEMPLATE, HANDLERS_TEMPLATE, ANALYZED_FLOWS_TEMPLATE, TRIGGER_REGISTRY_TEMPLATE] as const) {
       const templatePath = resolve(nuxt.options.buildDir, templateName)
       nuxt.options.build.transpile.push(templatePath)
     }
@@ -134,154 +133,38 @@ export default defineNuxtModule<ModuleOptions>({
       getContents: () => generateAnalyzedFlowsTemplate(lastCompiledRegistry),
     })
 
+    addTemplate({
+      filename: TRIGGER_REGISTRY_TEMPLATE,
+      write: true,
+      getContents: () => generateTriggerRegistryTemplate(lastCompiledRegistry),
+    })
+
     // Add type template for adapter interfaces
     // This allows external packages to import types via #nvent/adapters
     addTypeTemplate({
       filename: 'types/nvent-adapters.d.ts',
-      getContents: () => `
-// Auto-generated adapter type definitions
-// External adapter packages can import these types
-
-// Queue Adapter
-export type {
-  QueueAdapter,
-  JobInput,
-  Job,
-  JobsQuery,
-  JobOptions,
-  JobState,
-  ScheduleOptions,
-  JobCounts,
-  QueueEvent,
-  WorkerHandler,
-  WorkerContext,
-  WorkerOptions,
-} from ${JSON.stringify(resolve('./runtime/adapters/interfaces/queue'))}
-
-// Stream Adapter
-export type {
-  StreamAdapter,
-  StreamEvent,
-  SubscribeOptions,
-  SubscriptionHandle,
-} from ${JSON.stringify(resolve('./runtime/adapters/interfaces/stream'))}
-
-// Store Adapter
-export type {
-  StoreAdapter,
-  EventRecord,
-  EventReadOptions,
-  EventSubscription,
-  ListOptions,
-} from ${JSON.stringify(resolve('./runtime/adapters/interfaces/store'))}
-
-// Event Types
-export type {
-  EventType,
-  BaseEvent,
-  StepEvent,
-  FlowStartEvent,
-  FlowCompletedEvent,
-  FlowFailedEvent,
-  FlowCancelEvent,
-  FlowStalledEvent,
-  StepStartedEvent,
-  StepCompletedEvent,
-  StepFailedEvent,
-  StepRetryEvent,
-  LogEvent,
-  EmitEvent,
-  StateEvent,
-  FlowEvent,
-} from ${JSON.stringify(resolve('./runtime/events/types'))}
-
-// Adapter Registry
-export type { AdapterRegistry } from ${JSON.stringify(resolve('./runtime/adapters/registry'))}
-      `.trim(),
+      getContents: () => generateAdapterTypesTemplate(resolve),
     })
-
     nuxt.options.alias['#nvent/adapters'] = resolve(nuxt.options.buildDir, 'types/nvent-adapters')
 
-    // add composables
-    addServerImports([
-      // Generated templates
-      {
-        name: 'useQueueRegistry',
-        as: '$useQueueRegistry',
-        from: resolve(nuxt.options.buildDir, 'queue-registry'),
-      },
-      {
-        name: 'useWorkerHandlers',
-        as: '$useWorkerHandlers',
-        from: resolve(nuxt.options.buildDir, 'worker-handlers'),
-      },
-      {
-        name: 'useAnalyzedFlows',
-        as: '$useAnalyzedFlows',
-        from: resolve(nuxt.options.buildDir, 'analyzed-flows'),
-      },
-      // Core utilities for user code
-      {
-        name: 'defineFunctionConfig',
-        from: resolve('./runtime/utils/defineFunctionConfig'),
-      },
-      {
-        name: 'defineFunction',
-        from: resolve('./runtime/utils/defineFunction'),
-      },
-      // Composables users may need in server code
-      {
-        name: 'useFlowEngine',
-        from: resolve('./runtime/utils/useFlowEngine'),
-      },
-      {
-        name: 'useEventManager',
-        from: resolve('./runtime/utils/useEventManager'),
-      },
-      {
-        name: 'usePeerManager',
-        from: resolve('./runtime/utils/wsPeerManager'),
-      },
-      {
-        name: 'useNventLogger',
-        from: resolve('./runtime/utils/useNventLogger'),
-      }, {
-        name: 'useQueueAdapter',
-        from: resolve('./runtime/utils/adapters'),
-      }, {
-        name: 'useStoreAdapter',
-        from: resolve('./runtime/utils/adapters'),
-      }, {
-        name: 'useStreamAdapter',
-        from: resolve('./runtime/utils/adapters'),
-      }, {
-        name: 'useStateAdapter',
-        from: resolve('./runtime/utils/adapters'),
-      },
-      {
-        name: 'getAdapters',
-        from: resolve('./runtime/utils/adapters'),
-      }, {
-        name: 'setAdapters',
-        from: resolve('./runtime/utils/adapters'),
-      }, {
-        name: 'useStreamTopics',
-        from: resolve('./runtime/utils/useStreamTopics'),
-      },
-      // Adapter registration utilities for external modules
-      {
-        name: 'registerQueueAdapter',
-        from: resolve('./runtime/utils/registerAdapter'),
-      },
-      {
-        name: 'registerStreamAdapter',
-        from: resolve('./runtime/utils/registerAdapter'),
-      },
-      {
-        name: 'registerStoreAdapter',
-        from: resolve('./runtime/utils/registerAdapter'),
-      },
-    ])
+    // Add server plugin to initialize nvent in Nitro
+    addServerPlugin(resolve('./runtime/nitro/plugins/00.adapters'))
+    addServerPlugin(resolve('./runtime/nitro/plugins/01.ws-lifecycle'))
+    addServerPlugin(resolve('./runtime/nitro/plugins/02.workers'))
+    addServerPlugin(resolve('./runtime/nitro/plugins/03.triggers'))
+
+    // add webhook handler
+    addServerHandler({
+      route: '/api/_webhook/await/:flowName/:runId/:stepName',
+      handler: resolve('./runtime/nitro/routes/webhook.await'),
+    })
+    addServerHandler({
+      route: '/api/_webhook/trigger/:triggerName',
+      handler: resolve('./runtime/nitro/routes/webhook.trigger'),
+    })
+
+    // Add server auto-imports
+    addServerImports(getServerImports(resolve, nuxt.options.buildDir))
 
     // Small helper to refresh registry and re-generate app (dev)
     const refreshRegistry = async (reason: string, changedPath?: string) => {
@@ -298,9 +181,9 @@ export type { AdapterRegistry } from ${JSON.stringify(resolve('./runtime/adapter
         eventIndex: {},
       })))
 
-      console.log(`[nuxt-queue] registry refreshed (${reason})`, changedPath || '')
-      console.log(`[nuxt-queue] new registry has ${lastCompiledRegistry.workers?.length || 0} workers`)
-      console.log(`[nuxt-queue] new registry compiled at: ${lastCompiledRegistry.compiledAt}`)
+      console.log(`[nvent] registry refreshed (${reason})`, changedPath || '')
+      console.log(`[nvent] new registry has ${lastCompiledRegistry.workers?.length || 0} workers`)
+      console.log(`[nvent] new registry compiled at: ${lastCompiledRegistry.compiledAt}`)
 
       // Update templates to trigger regeneration
       await updateTemplates({
@@ -308,14 +191,15 @@ export type { AdapterRegistry } from ${JSON.stringify(resolve('./runtime/adapter
           const match = template.filename === REGISTRY_TEMPLATE
             || template.filename === HANDLERS_TEMPLATE
             || template.filename === ANALYZED_FLOWS_TEMPLATE
+            || template.filename === TRIGGER_REGISTRY_TEMPLATE
           if (match) {
-            console.log(`[nuxt-queue] updating template: ${template.filename}`)
+            console.log(`[nvent] updating template: ${template.filename}`)
           }
           return match
         },
       })
 
-      console.log(`[nuxt-queue] templates updated`)
+      console.log(`[nvent] templates updated`)
     }
 
     if (nuxt.options.dev) {

@@ -2,11 +2,15 @@ export default defineNuxtConfig({
   modules: [
     '@nuxt/ui',
     'nuxt-mcp',
+    // Load adapter modules BEFORE nvent so they can register themselves
+    '@nvent-addon/adapter-queue-redis',
+    '@nvent-addon/adapter-stream-redis',
+    '@nvent-addon/adapter-store-redis',
+    '@nvent-addon/adapter-store-postgres',
+    '@nvent-addon/adapter-queue-postgres',
+    '@nvent-addon/adapter-stream-postgres',
     'nvent',
-    '@nvent/adapter-queue-redis',
-    '@nvent/adapter-stream-redis',
-    '@nvent/adapter-store-redis',
-    '@nvent/app',
+    '@nvent-addon/app',
   ],
 
   imports: {
@@ -26,14 +30,16 @@ export default defineNuxtConfig({
   nvent: {
     debug: {
       // Global log level: 'debug' | 'info' | 'warn' | 'error' | 'silent'
-      level: 'info',
+      level: 'debug',
     },
 
-    // v0.4.1: New config structure with shared connections
     connections: {
       redis: {
         host: '127.0.0.1',
         port: 6379,
+      },
+      postgres: {
+        connectionString: 'postgresql://postgres:postgres@localhost:5432/nvent',
       },
       file: {
         dataDir: '.data',
@@ -42,9 +48,10 @@ export default defineNuxtConfig({
 
     // Queue adapter configuration
     queue: {
-      adapter: 'redis', // Use file for development (change to 'redis' for production)
+      adapter: 'postgres', // Use file for development (change to 'redis' for production)
       // redis connection inherited from connections.redis
-      prefix: 'nq',
+      schema: 'nvent_queue', // pg-boss tables in nvent_queue schema
+      prefix: 'nvent',
       defaultJobOptions: {
         attempts: 3,
         backoff: {
@@ -66,15 +73,15 @@ export default defineNuxtConfig({
 
     // Stream adapter configuration
     stream: {
-      adapter: 'redis', // Use memory for single-instance dev
-      prefix: 'nq',
+      adapter: 'postgres', // Use memory for single-instance dev
+      prefix: 'nvent',
     },
 
     // Store adapter configuration
     store: {
-      adapter: 'redis', // Use file for development (change to 'redis' for production)
+      adapter: 'postgres', // Use file for development (change to 'redis' for production)
       // file.dataDir inherited from connections.file → becomes '.data/store'
-      prefix: 'nq',
+      schema: 'nvent_store', // store tables in nvent_store schema
       state: {
         autoScope: 'always',
         cleanup: {
@@ -83,6 +90,13 @@ export default defineNuxtConfig({
       },
       eventTTL: 604800, // 7 days
       metadataTTL: 2592000, // 30 days
+    },
+    flow: {
+      stallDetection: {
+        enabled: true,
+        checkInterval: 15 * 60 * 1000, // 15 minutes
+        enablePeriodicCheck: true,
+      },
     },
   },
 })

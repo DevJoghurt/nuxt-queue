@@ -45,7 +45,7 @@ nventQueueRedis: {
     password: 'your-password',
     db: 0
   },
-  prefix: 'nq', // Queue prefix
+  prefix: 'nvent', // Queue prefix
   defaultJobOptions: {
     attempts: 3,
     backoff: {

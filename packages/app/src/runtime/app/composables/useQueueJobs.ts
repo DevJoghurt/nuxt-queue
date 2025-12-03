@@ -1,4 +1,4 @@
-import { ref, type Ref, useFetch } from '#imports'
+import { ref, type Ref, useFetch, isRef } from '#imports'
 import type { FetchError } from 'ofetch'
 
 export interface Job {
@@ -15,6 +15,9 @@ export interface Job {
 
 export interface JobsResponse {
   jobs: Job[]
+  count: number
+  total: number
+  hasMore: boolean
 }
 
 /**
@@ -23,27 +26,44 @@ export interface JobsResponse {
  */
 export function useQueueJobs(
   queueName: Ref<string>,
-  state: Ref<string | null> = ref(null),
+  options?: Ref<{
+    state?: string | null
+    limit?: number
+    offset?: number
+  }> | {
+    state?: string | null
+    limit?: number
+    offset?: number
+  },
 ): {
   data: Ref<JobsResponse | null | undefined>
   refresh: () => Promise<void>
   status: Ref<'idle' | 'pending' | 'success' | 'error'>
   error: Ref<FetchError | null | undefined>
 } {
+  // Support both reactive and non-reactive options
+  const opts = isRef(options) ? options : ref(options || {})
+
   return useFetch<JobsResponse>(
     () => {
       const params = new URLSearchParams()
-      if (state.value) {
-        params.append('state', state.value)
+      if (opts.value.state) {
+        params.append('state', opts.value.state)
+      }
+      if (opts.value.limit) {
+        params.append('limit', opts.value.limit.toString())
+      }
+      if (opts.value.offset) {
+        params.append('offset', opts.value.offset.toString())
       }
       const queryString = params.toString()
       return `/api/_queues/${encodeURIComponent(queueName.value)}/job${queryString ? `?${queryString}` : ''}`
     },
     {
-      key: () => `queue-jobs-${queueName.value}-${state.value || 'all'}`,
-      watch: [queueName, state],
+      key: () => `queue-jobs-${queueName.value}-${opts.value.state || 'all'}-${opts.value.offset || 0}`,
+      watch: false,
       immediate: true,
-      server: false, // Client-only
+      server: false,
     },
   )
 }

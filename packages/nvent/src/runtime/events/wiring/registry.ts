@@ -1,10 +1,11 @@
 import { createFlowWiring } from './flowWiring'
 import { createStreamWiring } from './streamWiring'
 import { createStateWiring } from './stateWiring'
+import { createTriggerWiring } from './triggerWiring'
 
 export interface Wiring {
-  start(): void
-  stop(): void
+  start(): void | Promise<void>
+  stop(): void | Promise<void>
 }
 
 export interface WiringRegistryOptions {
@@ -23,7 +24,7 @@ export interface WiringRegistryOptions {
 }
 
 export function createWiringRegistry(opts?: WiringRegistryOptions): Wiring {
-  // v0.4.1: Multiple wirings
+  // Multiple wirings
   const wirings: Wiring[] = [
     // 1. Flow orchestration (persistence, completion tracking, step triggering)
     createFlowWiring(),
@@ -36,19 +37,20 @@ export function createWiringRegistry(opts?: WiringRegistryOptions): Wiring {
     // 3. State wiring (automatic state cleanup)
     createStateWiring(opts?.stateWiring),
 
-    // Future wirings: triggers, webhooks, etc.
+    // 4. Trigger wiring (v0.5: trigger.fired, await.registered, await.resolved)
+    createTriggerWiring(),
   ]
   let started = false
   return {
-    start() {
+    async start() {
       if (started) return
       started = true
-      for (const w of wirings) w.start()
+      for (const w of wirings) await w.start()
     },
-    stop() {
+    async stop() {
       for (const w of wirings) {
         try {
-          w.stop()
+          await w.stop()
         }
         catch {
           // ignore
