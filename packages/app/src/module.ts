@@ -44,11 +44,6 @@ export default defineNuxtModule<ModuleOptions>({
     routePath: '/_nvent',
     layout: false,
   },
-  moduleDependencies: {
-    'json-editor-vue/nuxt': {
-      version: '0.18.1',
-    },
-  },
   async setup(options, nuxt) {
     const { resolve } = createResolver(import.meta.url)
 

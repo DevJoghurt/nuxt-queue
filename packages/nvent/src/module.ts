@@ -33,11 +33,6 @@ declare module '@nuxt/schema' {
 export default defineNuxtModule<ModuleOptions>().with({
   meta,
   defaults: {},
-  moduleDependencies: {
-    'json-editor-vue/nuxt': {
-      version: '0.18.1',
-    },
-  },
   async setup(options, nuxt) {
     const { resolve } = createResolver(import.meta.url)
 
