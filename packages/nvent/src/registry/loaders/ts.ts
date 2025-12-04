@@ -63,10 +63,11 @@ export async function loadTsConfig(absPath: string): Promise<ConfigMeta> {
 
     // Check for lifecycle hooks exports
     // We can detect these by looking for exported functions with these names
-    // They can be plain functions or wrapped with defineAwaitRegisterHook/defineAwaitResolveHook
+    // They can be plain functions or wrapped with defineAwaitRegisterHook/defineAwaitResolveHook/defineAwaitTimeoutHook
     const hasHooks = !!(
       mod.exports.onAwaitRegister
       || mod.exports.onAwaitResolve
+      || mod.exports.onAwaitTimeout
     )
 
     return { queueName, flow, runtype, queue: queueCfg, worker: workerCfg, hasDefaultExport, hasHooks }

@@ -137,6 +137,7 @@ interface StepStatus {
   status: 'pending' | 'running' | 'completed' | 'failed' | 'retrying' | 'waiting' | 'timeout' | 'canceled'
   attempt?: number
   error?: string
+  scheduledTriggerAt?: string
 }
 
 const props = defineProps<{
@@ -174,6 +175,7 @@ type AwaitNodeData = {
   awaitType?: 'time' | 'event' | 'webhook'
   awaitConfig?: AwaitConfig
   status?: 'idle' | 'waiting' | 'resolved' | 'timeout'
+  scheduledTriggerAt?: string
 }
 
 type FlowNode = {
@@ -191,12 +193,12 @@ const nodes = computed<FlowNode[]>(() => {
   if (!f) return out
 
   const states = props.stepStates || {}
-  const colWidth = 250
-  const rowHeight = 140
+  const colWidth = 280
+  const rowHeight = 160
   const horizontalGap = 50
   const verticalGap = 80
-  const entryToStepsGap = 140 // Extra gap between entry and first step row
-  const nodeWidth = 220
+  const awaitRowHeight = 140 // Height for await node rows (matches step row height)
+  const nodeWidth = 260
 
   let y = 0
 
@@ -211,17 +213,42 @@ const nodes = computed<FlowNode[]>(() => {
       data: {
         label: f.entry.step,
         queue: f.entry.queue,
+        workerId: f.entry.workerId,
         status,
         attempt: entryState?.attempt,
         error: entryState?.error,
         runtime: f.entry.runtime,
         runtype: f.entry.runtype,
         emits: f.entry.emits,
+        awaitBefore: f.entry.awaitBefore,
+        awaitAfter: f.entry.awaitAfter,
       },
       type: 'flow-entry',
       style: { minWidth: `${nodeWidth}px` },
     })
-    y += rowHeight + entryToStepsGap
+    y += rowHeight + verticalGap
+
+    // Add await row after entry if needed
+    if (f.entry.awaitAfter) {
+      const awaitKey = `${f.entry.step}:await-after`
+      const awaitState = states[awaitKey]
+      const awaitStatus = awaitState?.status === 'waiting' ? 'waiting' : awaitState?.status === 'completed' ? 'resolved' : awaitState?.status === 'timeout' ? 'timeout' : 'idle'
+
+      out.push({
+        id: `await:entry-after:${f.entry.step}`,
+        position: { x: -130, y: y },
+        data: {
+          label: `Await (${f.entry.awaitAfter.type})`,
+          awaitType: f.entry.awaitAfter.type,
+          awaitConfig: f.entry.awaitAfter,
+          status: awaitStatus,
+          scheduledTriggerAt: awaitState?.scheduledTriggerAt,
+        },
+        type: 'flow-await',
+        style: { minWidth: '180px' },
+      })
+      y += awaitRowHeight + verticalGap
+    }
   }
 
   // Use analyzed levels if available, otherwise fall back to simple grid
@@ -229,10 +256,41 @@ const nodes = computed<FlowNode[]>(() => {
 
   if (f.analyzed?.levels && f.analyzed.levels.length > 0) {
     // Use analyzed levels for better layout
-    const levels = f.analyzed.levels.filter(level => level.length > 0) // Skip empty levels
+    // Skip level 0 (entry step is already rendered above)
+    const levels = f.analyzed.levels.slice(1).filter(level => level.length > 0) // Skip empty levels
 
     levels.forEach((levelSteps) => {
       if (levelSteps.length === 0) return
+
+      // Create await nodes for steps with awaitBefore (but don't add space yet)
+      const awaitNodesCreated: string[] = []
+      levelSteps.forEach((stepName) => {
+        const step = steps[stepName]
+        if (!step?.awaitBefore) return
+
+        const awaitState = states[`${stepName}:await-before`]
+        const awaitStatus = awaitState?.status === 'waiting' ? 'waiting' : awaitState?.status === 'completed' ? 'resolved' : awaitState?.status === 'timeout' ? 'timeout' : 'idle'
+
+        out.push({
+          id: `await:step-before:${stepName}`,
+          position: { x: 0, y: y }, // Temporary position
+          data: {
+            label: `Await (${step.awaitBefore.type})`,
+            awaitType: step.awaitBefore.type,
+            awaitConfig: step.awaitBefore,
+            status: awaitStatus,
+            scheduledTriggerAt: awaitState?.scheduledTriggerAt,
+          },
+          type: 'flow-await',
+          style: { minWidth: '180px' },
+        })
+        awaitNodesCreated.push(stepName)
+      })
+
+      // Only add space if we actually created await nodes
+      if (awaitNodesCreated.length > 0) {
+        y += awaitRowHeight + verticalGap
+      }
 
       const cols = Math.min(4, levelSteps.length) // Max 4 columns per level
       const rows = Math.ceil(levelSteps.length / cols)
@@ -270,15 +328,54 @@ const nodes = computed<FlowNode[]>(() => {
             error: stepState?.error,
             runtime: step?.runtime,
             runtype: step?.runtype,
+            subscribes: step?.subscribes,
             emits: step?.emits,
+            awaitBefore: step?.awaitBefore,
+            awaitAfter: step?.awaitAfter,
           },
           type: 'flow-step',
           style: { minWidth: `${nodeWidth}px` },
         })
+
+        // Update await node position to align with step x position
+        if (step.awaitBefore) {
+          const awaitNode = out.find(n => n.id === `await:step-before:${stepName}`)
+          if (awaitNode) {
+            awaitNode.position.x = x - 20 // Center align with step
+          }
+        }
+
+        // Add await row after step if it has awaitAfter
+        if (step.awaitAfter && row === rows - 1 && idx === levelSteps.length - 1) {
+          // This is the last step in the level, add await row after
+          const awaitKey = `${stepName}:await-after`
+          const awaitState = states[awaitKey]
+          const awaitStatus = awaitState?.status === 'waiting' ? 'waiting' : awaitState?.status === 'completed' ? 'resolved' : awaitState?.status === 'timeout' ? 'timeout' : 'idle'
+
+          out.push({
+            id: `await:step-after:${stepName}`,
+            position: { x: x - 20, y: yPos + rowHeight + verticalGap },
+            data: {
+              label: `Await (${step.awaitAfter.type})`,
+              awaitType: step.awaitAfter.type,
+              awaitConfig: step.awaitAfter,
+              status: awaitStatus,
+              scheduledTriggerAt: awaitState?.scheduledTriggerAt,
+            },
+            type: 'flow-await',
+            style: { minWidth: '180px' },
+          })
+        }
       })
 
       // Move Y down for next level (account for all rows in this level)
       y += rows * (rowHeight + verticalGap)
+
+      // Add extra space if last step in level has awaitAfter
+      const lastStepName = levelSteps[levelSteps.length - 1]
+      if (lastStepName && steps[lastStepName]?.awaitAfter) {
+        y += awaitRowHeight + verticalGap
+      }
     })
   }
   else {
@@ -326,58 +423,7 @@ const nodes = computed<FlowNode[]>(() => {
     })
   }
 
-  // Insert await nodes between existing nodes
-  const awaitNodes: FlowNode[] = []
-  const awaitGap = 70 // Gap for await nodes
-
-  // Check entry for awaitAfter
-  if (f.entry?.awaitAfter && f.entry) {
-    const entryNode = out.find(n => n.id === `entry:${f.entry!.step}`)
-    if (entryNode) {
-      const awaitKey = `${f.entry.step}:await-after`
-      const awaitState = states[awaitKey]
-      const awaitStatus = awaitState?.status === 'waiting' ? 'waiting' : awaitState?.status === 'completed' ? 'resolved' : awaitState?.status === 'timeout' ? 'timeout' : 'idle'
-
-      awaitNodes.push({
-        id: `await:entry-after:${f.entry.step}`,
-        position: { x: -90, y: entryNode.position.y + rowHeight + awaitGap },
-        data: {
-          label: `Await (${f.entry.awaitAfter.type})`,
-          awaitType: f.entry.awaitAfter.type,
-          awaitConfig: f.entry.awaitAfter,
-          status: awaitStatus,
-        },
-        type: 'flow-await',
-        style: { minWidth: '180px' },
-      })
-    }
-  }
-
-  // Check steps for awaitBefore
-  Object.entries(steps).forEach(([stepName, step]) => {
-    if (step.awaitBefore) {
-      const stepNode = out.find(n => n.id === `step:${stepName}`)
-      if (stepNode) {
-        const awaitState = states[`${stepName}:await-before`]
-        const awaitStatus = awaitState?.status === 'waiting' ? 'waiting' : awaitState?.status === 'completed' ? 'resolved' : awaitState?.status === 'timeout' ? 'timeout' : 'idle'
-
-        awaitNodes.push({
-          id: `await:step-before:${stepName}`,
-          position: { x: stepNode.position.x + 20, y: stepNode.position.y - awaitGap - 50 },
-          data: {
-            label: `Await (${step.awaitBefore.type})`,
-            awaitType: step.awaitBefore.type,
-            awaitConfig: step.awaitBefore,
-            status: awaitStatus,
-          },
-          type: 'flow-await',
-          style: { minWidth: '180px' },
-        })
-      }
-    }
-  })
-
-  return [...out, ...awaitNodes]
+  return out
 })
 
 // Map step status to node visual status
@@ -413,17 +459,40 @@ const edges = computed<FlowEdge[]>(() => {
     if (added.has(id)) return
 
     // Determine if edge should be animated
-    // Animate if source is completed and target is running/pending
-    // Don't animate if flow is canceled
-    const sourceStep = source.split(':')[1]
-    const targetStep = target.split(':')[1]
-    const sourceState = sourceStep ? states[sourceStep] : undefined
-    const targetState = targetStep ? states[targetStep] : undefined
+    // Extract the actual step/node name from the ID
+    const getNodeState = (nodeId: string) => {
+      // Handle different node types:
+      // - 'entry:step-name' -> states['step-name']
+      // - 'step:step-name' -> states['step-name']
+      // - 'await:entry-after:step-name' -> states['step-name:await-after']
+      // - 'await:step-before:step-name' -> states['step-name:await-before']
+      // - 'await:step-after:step-name' -> states['step-name:await-after']
+      
+      if (nodeId.startsWith('await:entry-after:')) {
+        const stepName = nodeId.replace('await:entry-after:', '')
+        return states[`${stepName}:await-after`]
+      }
+      if (nodeId.startsWith('await:step-before:')) {
+        const stepName = nodeId.replace('await:step-before:', '')
+        return states[`${stepName}:await-before`]
+      }
+      if (nodeId.startsWith('await:step-after:')) {
+        const stepName = nodeId.replace('await:step-after:', '')
+        return states[`${stepName}:await-after`]
+      }
+      // For entry: and step: nodes, extract the step name
+      const parts = nodeId.split(':')
+      return parts[1] ? states[parts[1]] : undefined
+    }
 
+    const sourceState = getNodeState(source)
+    const targetState = getNodeState(target)
+
+    // Animate if source is completed/resolved and target is running/pending/waiting
     // Don't animate if flow is canceled or completed/failed
     const shouldAnimate = props.flowStatus === 'running'
-      && sourceState?.status === 'completed'
-      && (targetState?.status === 'running' || targetState?.status === 'pending' || !targetState)
+      && (sourceState?.status === 'completed' || sourceState?.status === 'resolved')
+      && (targetState?.status === 'running' || targetState?.status === 'pending' || targetState?.status === 'waiting' || !targetState)
 
     added.add(id)
     out.push({ id, source, target, label, animated: shouldAnimate })
@@ -433,15 +502,36 @@ const edges = computed<FlowEdge[]>(() => {
   if (f.analyzed?.steps) {
     const analyzedSteps = f.analyzed.steps
 
+    // Add edge from entry to its awaitAfter node if it exists
+    if (f.entry?.awaitAfter) {
+      const entryId = `entry:${f.entry.step}`
+      const entryAwaitId = `await:entry-after:${f.entry.step}`
+      addEdge(entryId, entryAwaitId)
+    }
+
     // Add edges based on analyzed dependencies
     for (const [stepName, stepInfo] of Object.entries(analyzedSteps)) {
+      // Skip entry step - we handled it above
+      if (stepName === f.entry?.step) continue
+
       const targetStep = steps[stepName]
       const target = `step:${stepName}`
 
       if (stepInfo.dependsOn.length > 0) {
         // Add edges from dependencies
         for (const depName of stepInfo.dependsOn) {
-          const source = depName === f.entry?.step ? `entry:${depName}` : `step:${depName}`
+          let source: string
+
+          // If dependency is the entry step and entry has awaitAfter,
+          // connect from the entry's await node instead
+          if (depName === f.entry?.step) {
+            source = f.entry.awaitAfter
+              ? `await:entry-after:${depName}`
+              : `entry:${depName}`
+          }
+          else {
+            source = `step:${depName}`
+          }
 
           // Check if target step has awaitBefore - insert await node
           if (targetStep?.awaitBefore) {
@@ -452,26 +542,6 @@ const edges = computed<FlowEdge[]>(() => {
           else {
             addEdge(source, target)
           }
-        }
-      }
-      else if (f.entry) {
-        // No dependencies means it depends on entry
-        const entryId = `entry:${f.entry.step}`
-
-        // Check if entry has awaitAfter - insert await node
-        if (f.entry.awaitAfter) {
-          const awaitNodeId = `await:entry-after:${f.entry.step}`
-          addEdge(entryId, awaitNodeId)
-          addEdge(awaitNodeId, target)
-        }
-        // Check if target step has awaitBefore - insert await node
-        else if (targetStep?.awaitBefore) {
-          const awaitNodeId = `await:step-before:${stepName}`
-          addEdge(entryId, awaitNodeId)
-          addEdge(awaitNodeId, target)
-        }
-        else {
-          addEdge(entryId, target)
         }
       }
     }

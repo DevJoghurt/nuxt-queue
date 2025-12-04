@@ -52,6 +52,14 @@ export default defineNuxtModule<ModuleOptions>({
   async setup(options, nuxt) {
     const { resolve } = resolver
 
+    // Make module options available at runtime
+    nuxt.options.runtimeConfig.public.nventapp = defu(
+      nuxt.options.runtimeConfig.public.nventapp as any,
+      {
+        routePath: options.routePath,
+      },
+    )
+
     // Add vueflow CSS
     nuxt.options.css = nuxt.options.css || []
     nuxt.options.css.push(resolve('./runtime/app/assets/vueflow.css'))

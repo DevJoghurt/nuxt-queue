@@ -3,6 +3,7 @@ import type { AwaitRegisteredEvent, AwaitResolvedEvent } from '../types'
 import { getEventBus } from '../eventBus'
 import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useFunctionRegistry, useStreamTopics, useRuntimeConfig, useScheduler } from '#imports'
 import { createStallDetector } from '../utils/stallDetector'
+import { SYSTEM_HANDLERS } from '../../worker/system'
 
 /**
  * Check if all dependencies for a step are met
@@ -124,53 +125,18 @@ export async function checkAndTriggerPendingSteps(
       // Skip if step doesn't have dependencies or already completed
       if (!step.subscribes || completedSteps.has(stepName)) continue
 
-      // Check await state - skip if step is currently awaiting (not resolved)
+      // Check await state - skip if step is currently awaiting or timed out
       const awaitState = flowEntry?.metadata?.awaitingSteps?.[stepName]
-      if (awaitState && awaitState.status === 'awaiting') {
-        logger.debug('Step is awaiting, skipping trigger', {
-          flowName,
-          runId,
-          stepName,
-          awaitType: awaitState.awaitType,
-          position: awaitState.position,
-          status: awaitState.status,
-        })
-        continue
-      }
-
-      // Skip if await has timed out - step should not be retried
-      if (awaitState && awaitState.status === 'timeout') {
-        logger.debug('Step await timed out, skipping trigger', {
-          flowName,
-          runId,
-          stepName,
-          awaitType: awaitState.awaitType,
-        })
-        continue
-      }
-
-      // If await is resolved, allow the step to proceed
-      if (awaitState?.status === 'resolved') {
-        logger.debug('Step await is resolved, will proceed', {
-          flowName,
-          runId,
-          stepName,
-          awaitType: awaitState.awaitType,
-          position: awaitState.position,
-        })
-      }
+      if (awaitState && awaitState.status === 'awaiting') continue
+      if (awaitState && awaitState.status === 'timeout') continue
 
       // Check if any dependency steps are currently awaiting (awaitAfter pattern)
       // If a step has awaitAfter, its emits should be blocked until await is resolved
       const isDependencyAwaiting = step.subscribes.some((sub: string) => {
-        // Find which step emitted this event by looking through all events
         const emitEvent = allEvents.find((evt: any) =>
           evt.type === 'emit' && evt.data?.name === sub,
         )
-
-        if (!emitEvent) {
-          return false // Emit hasn't happened yet
-        }
+        if (!emitEvent) return false
 
         const emitStepName = emitEvent.stepName
 
@@ -181,8 +147,7 @@ export async function checkAndTriggerPendingSteps(
         // Check if the emitting step is awaiting in flow index metadata
         const awaitState = awaitingSteps[emitStepName]
 
-        // If the step is awaiting after completion, its emits are blocked
-        // BUT: Only block if status is 'awaiting', not if it's 'resolved'
+        // Block if dependency is awaiting after completion
         if (awaitState?.position === 'after' && awaitState?.status === 'awaiting') {
           return true
         }
@@ -201,35 +166,108 @@ export async function checkAndTriggerPendingSteps(
           emittingStepMeta = (flowDef as any).entry
         }
 
-        // If the step has awaitAfter, check if await cycle is complete
+        // Fallback: Check if emitting step has awaitAfter that hasn't resolved
         if (emittingStepMeta?.awaitAfter) {
-          // Check if this step has completed
           const stepCompleted = allEvents.some((evt: any) =>
             evt.type === 'step.completed' && evt.stepName === emitStepName,
           )
-
           if (stepCompleted) {
-            // Check if await has been resolved
             const awaitResolved = allEvents.some((evt: any) =>
-              evt.type === 'await.resolved' && evt.stepName === emitStepName,
+              evt.type === 'await.resolved'
+              && evt.stepName === emitStepName
+              && evt.position === 'after',
             )
-
-            // Block if await hasn't resolved yet
-            if (!awaitResolved) {
-              return true
-            }
+            if (!awaitResolved) return true
           }
         }
 
         return false
       })
 
-      if (isDependencyAwaiting) {
-        continue
-      }
+      if (isDependencyAwaiting) continue
 
       // Check if all dependencies are now satisfied
       const canTrigger = checkPendingStepTriggers(step, emittedEvents, completedSteps)
+
+      // awaitBefore: Register await pattern before step executes
+      if (canTrigger && step.awaitBefore) {
+        // Skip if already resolved or awaiting
+        if (awaitState?.status === 'resolved') continue
+        if (awaitState?.status === 'awaiting') continue
+
+        // First time dependencies satisfied - register await pattern
+        try {
+          // Collect emit data from dependencies
+          const emitData: Record<string, any> = {}
+          const subscribes = step.subscribes || []
+
+          for (const sub of subscribes) {
+            const emitEvent = allEvents.find((evt: any) =>
+              evt.type === 'emit' && (evt.data as any)?.name === sub,
+            ) as EventRecord | undefined
+
+            if (emitEvent && (emitEvent.data as any)?.payload !== undefined) {
+              emitData[sub] = (emitEvent.data as any).payload
+            }
+          }
+
+          const payload = {
+            flowId: runId,
+            flowName,
+            stepName,
+            position: 'before' as const,
+            awaitConfig: step.awaitBefore,
+            input: emitData,
+          }
+
+          const jobId = `${runId}__${stepName}__await-register`
+
+          // Get the step's queue from registry
+          const flowRegistry = (registry?.flows || {})[flowName]
+          const stepMeta = flowRegistry?.steps?.[stepName]
+          let stepQueue = stepMeta?.queue
+
+          // Check if this is the entry step
+          if (!stepQueue && flowRegistry?.entry?.step === stepName) {
+            stepQueue = flowRegistry.entry.queue
+          }
+
+          // Fallback: search all workers for this flow+step combination
+          if (!stepQueue && registry?.workers) {
+            const worker = (registry.workers as any[]).find((w: any) => {
+              const flowNames = w?.flow?.names || (w?.flow?.name ? [w?.flow?.name] : [])
+              const stepMatch = w?.flow?.step === stepName || (Array.isArray(w?.flow?.step) && w?.flow?.step.includes(stepName))
+              return flowNames.includes(flowName) && stepMatch
+            })
+            stepQueue = worker?.queue?.name
+          }
+
+          if (!stepQueue) {
+            logger.error('Cannot find queue for step', {
+              stepName,
+              flowName,
+              availableSteps: Object.keys(flowRegistry?.steps || {}),
+              entryStep: flowRegistry?.entry?.step,
+            })
+            throw new Error(`Cannot register await: queue not found for step ${stepName} in flow ${flowName}`)
+          }
+
+          await queue.enqueue(stepQueue, {
+            name: SYSTEM_HANDLERS.AWAIT_REGISTER,
+            data: payload,
+            opts: { jobId },
+          })
+        }
+        catch (err) {
+          logger.error('Failed to register awaitBefore pattern', {
+            flowName,
+            stepName,
+            error: (err as Error).message,
+          })
+        }
+
+        continue
+      }
 
       if (canTrigger) {
         // Find the queue for this step from registry
@@ -260,12 +298,16 @@ export async function checkAndTriggerPendingSteps(
           }
 
           // If step had awaitBefore that's now resolved, include await data and mark as resolved
-          if (awaitState?.status === 'resolved' && awaitState?.position === 'before') {
+          const isAwaitResuming = awaitState?.status === 'resolved' && awaitState?.position === 'before'
+          if (isAwaitResuming) {
             payload.awaitResolved = true
             payload.awaitData = awaitState.triggerData
           }
 
-          const jobId = `${runId}__${stepName}`
+          // Use different jobId when resuming after awaitBefore to bypass idempotency
+          const jobId = isAwaitResuming
+            ? `${runId}__${stepName}__resumed`
+            : `${runId}__${stepName}`
 
           // Get default job options from registry worker config (includes attempts config)
           // Find the worker for this step to get its queue.defaultJobOptions
@@ -279,7 +321,7 @@ export async function checkAndTriggerPendingSteps(
             await queue.enqueue(stepMeta.queue, { name: stepName, data: payload, opts })
           }
           catch {
-            // Already enqueued - idempotency working correctly
+            // Ignore - likely already enqueued (idempotency)
           }
         }
       }
@@ -830,11 +872,21 @@ export function createFlowWiring() {
         }
       }
       catch (err) {
-        logger.warn('Failed to update flow stats', {
-          type: e.type,
-          flowName: e.flowName,
-          error: (err as any)?.message,
-        })
+        // Only log if it's not an "Entry not found" error (which is expected for new flows)
+        const errorMsg = (err as any)?.message || ''
+        if (!errorMsg.includes('Entry not found')) {
+          logger.warn('Failed to update flow stats', {
+            type: e.type,
+            flowName: e.flowName,
+            error: errorMsg,
+          })
+        }
+        else {
+          logger.debug('Flow entry not found (will be created)', {
+            type: e.type,
+            flowName: e.flowName,
+          })
+        }
       }
     }
 
@@ -959,6 +1011,7 @@ export function createFlowWiring() {
               }
 
               const updatePayload = {
+                status: 'awaiting', // Set flow status to awaiting
                 awaitingSteps: {
                   [stepName]: {
                     status: 'awaiting',
@@ -994,7 +1047,7 @@ export function createFlowWiring() {
         // For await.resolved events, update status and resume step
         if (e.type === 'await.resolved') {
           const awaitEvent = e as unknown as AwaitResolvedEvent
-          const { stepName, triggerData } = awaitEvent
+          const { stepName, triggerData, position } = awaitEvent
 
           try {
             if (store.index.updateWithRetry) {
@@ -1003,14 +1056,91 @@ export function createFlowWiring() {
                   [stepName]: {
                     status: 'resolved',
                     triggerData,
+                    position,
                   },
                 },
               })
             }
 
-            // Resume the step by checking pending steps
-            // The step will be triggered if all its dependencies are now satisfied
-            await checkAndTriggerPendingSteps(flowName, runId, store)
+            // Enqueue system handler to process await resolution
+            const queue = useQueueAdapter()
+
+            // Get input data from the flow state
+            const { StoreSubjects } = useStreamTopics()
+            const streamName = StoreSubjects.flowRun(runId)
+            const inputData: any = {}
+
+            if (store.stream.read) {
+              const events = await store.stream.read(streamName, { limit: 100 })
+              const registry = $useFunctionRegistry() as any
+              const flowRegistry = (registry?.flows || {})[flowName]
+              const stepMeta = flowRegistry?.steps?.[stepName]
+              const subscribes = stepMeta?.subscribes || []
+
+              for (const sub of subscribes) {
+                const emitEvent = events.find((evt: any) =>
+                  evt.type === 'emit' && (evt.data as any)?.name === sub,
+                )
+                if (emitEvent && (emitEvent.data as any)?.payload !== undefined) {
+                  inputData[sub] = (emitEvent.data as any).payload
+                }
+              }
+            }
+
+            const { SYSTEM_HANDLERS } = await import('../../worker/system')
+
+            const payload = {
+              flowId: runId,
+              flowName,
+              stepName,
+              position,
+              triggerData,
+              input: inputData,
+            }
+
+            const jobId = `${runId}__${stepName}__await-resolve`
+
+            // Get the step's queue from registry
+            const registry = $useFunctionRegistry() as any
+            const flowRegistry = (registry?.flows || {})[flowName]
+            const stepMeta = flowRegistry?.steps?.[stepName]
+            let stepQueue = stepMeta?.queue
+
+            // Check if this is the entry step
+            if (!stepQueue && flowRegistry?.entry?.step === stepName) {
+              stepQueue = flowRegistry.entry.queue
+            }
+
+            // Fallback: search all workers for this flow+step combination
+            if (!stepQueue && registry?.workers) {
+              const worker = (registry.workers as any[]).find((w: any) => {
+                const flowNames = w?.flow?.names || (w?.flow?.name ? [w?.flow?.name] : [])
+                const stepMatch = w?.flow?.step === stepName || (Array.isArray(w?.flow?.step) && w?.flow?.step.includes(stepName))
+                return flowNames.includes(flowName) && stepMatch
+              })
+              stepQueue = worker?.queue?.name
+            }
+
+            if (!stepQueue) {
+              logger.error('Cannot find queue for step', {
+                stepName,
+                flowName,
+                availableSteps: Object.keys(flowRegistry?.steps || {}),
+                entryStep: flowRegistry?.entry?.step,
+              })
+              throw new Error(`Cannot resolve await: queue not found for step ${stepName} in flow ${flowName}`)
+            }
+
+            await queue.enqueue(stepQueue, {
+              name: SYSTEM_HANDLERS.AWAIT_RESOLVE,
+              data: payload,
+              opts: { jobId },
+            })
+
+            // For awaitAfter, also check pending steps
+            if (position === 'after') {
+              await checkAndTriggerPendingSteps(flowName, runId, store)
+            }
           }
           catch (err) {
             logger.error('Error handling await resolution', {
@@ -1036,6 +1166,79 @@ export function createFlowWiring() {
           })
 
           try {
+            // Enqueue system handler to process await timeout
+            const queue = useQueueAdapter()
+
+            // Get input data from the flow state
+            const { StoreSubjects } = useStreamTopics()
+            const streamName = StoreSubjects.flowRun(runId)
+            const inputData: any = {}
+
+            if (store.stream.read) {
+              const events = await store.stream.read(streamName, { limit: 100 })
+              const registry = $useFunctionRegistry() as any
+              const flowRegistry = (registry?.flows || {})[flowName]
+              const stepMeta = flowRegistry?.steps?.[stepName]
+              const subscribes = stepMeta?.subscribes || []
+
+              for (const sub of subscribes) {
+                const emitEvent = events.find((evt: any) =>
+                  evt.type === 'emit' && (evt.data as any)?.name === sub,
+                )
+                if (emitEvent && (emitEvent.data as any)?.payload !== undefined) {
+                  inputData[sub] = (emitEvent.data as any).payload
+                }
+              }
+            }
+
+            const payload = {
+              flowId: runId,
+              flowName,
+              stepName,
+              position,
+              timeoutAction: action,
+              input: inputData,
+            }
+
+            const jobId = `${runId}__${stepName}__await-timeout`
+
+            // Get the step's queue from registry
+            const registry = $useFunctionRegistry() as any
+            const flowRegistry = (registry?.flows || {})[flowName]
+            const stepMeta = flowRegistry?.steps?.[stepName]
+            let stepQueue = stepMeta?.queue
+
+            // Check if this is the entry step
+            if (!stepQueue && flowRegistry?.entry?.step === stepName) {
+              stepQueue = flowRegistry.entry.queue
+            }
+
+            // Fallback: search all workers for this flow+step combination
+            if (!stepQueue && registry?.workers) {
+              const worker = (registry.workers as any[]).find((w: any) => {
+                const flowNames = w?.flow?.names || (w?.flow?.name ? [w?.flow?.name] : [])
+                const stepMatch = w?.flow?.step === stepName || (Array.isArray(w?.flow?.step) && w?.flow?.step.includes(stepName))
+                return flowNames.includes(flowName) && stepMatch
+              })
+              stepQueue = worker?.queue?.name
+            }
+
+            if (!stepQueue) {
+              logger.error('Cannot find queue for step', {
+                stepName,
+                flowName,
+                availableSteps: Object.keys(flowRegistry?.steps || {}),
+                entryStep: flowRegistry?.entry?.step,
+              })
+              throw new Error(`Cannot handle await timeout: queue not found for step ${stepName} in flow ${flowName}`)
+            }
+
+            await queue.enqueue(stepQueue, {
+              name: SYSTEM_HANDLERS.AWAIT_TIMEOUT,
+              data: payload,
+              opts: { jobId },
+            })
+
             if (action === 'fail') {
               // Mark await as failed and fail the step/flow
               if (store.index.updateWithRetry) {

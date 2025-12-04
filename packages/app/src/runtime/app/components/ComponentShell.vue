@@ -4,7 +4,7 @@
     <div
       :class="
         orientation === 'vertical' ? 'flex h-full' : 'flex flex-col w-full'"
-      style="height: calc(100vh - 4rem)"
+      :style="containerStyle"
     >
       <!-- Navigation using UNavigationMenu -->
       <div
@@ -35,7 +35,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useComponentRouter } from '#imports'
+import { useComponentRouter, useRoute, useRuntimeConfig } from '#imports'
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 const props = withDefaults(
@@ -43,6 +43,7 @@ const props = withDefaults(
     orientation?: 'horizontal' | 'vertical'
     items?: NavigationMenuItem[][]
     activeMatch?: 'exact' | 'prefix'
+    fullPage?: boolean
   }>(),
   {
     orientation: 'horizontal',
@@ -51,6 +52,23 @@ const props = withDefaults(
 )
 
 const router = useComponentRouter()
+const nuxtRoute = useRoute()
+const config = useRuntimeConfig()
+
+// Auto-detect if we're in a full page context (Nuxt route exists and matches configured route path)
+const isFullPage = computed(() => {
+  if (props.fullPage !== undefined) return props.fullPage
+  // Check if we're in a Nuxt route context matching the configured nvent route path
+  const nventPath = (config.public.nventapp as any)?.routePath || '/_nvent'
+  return nuxtRoute?.path?.startsWith(nventPath) ?? false
+})
+
+// Container height style - full viewport minus header when full page, 100% otherwise
+const containerStyle = computed(() => {
+  return isFullPage.value
+    ? 'height: calc(100vh - 4rem)'
+    : 'height: 100vh'
+})
 
 // Transform items to include onSelect handlers for routing and active state
 const navigationItems = computed(() => {

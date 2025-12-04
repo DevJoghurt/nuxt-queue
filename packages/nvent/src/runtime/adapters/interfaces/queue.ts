@@ -61,6 +61,12 @@ export interface QueueAdapter {
   removeScheduledJob?(scheduleId: string): Promise<boolean>
 
   /**
+   * Remove/cancel a job by ID
+   * @returns true if removed, false if not found
+   */
+  removeJob?(queueName: string, jobId: string): Promise<boolean>
+
+  /**
    * Pause the queue
    */
   pause(queueName: string): Promise<void>

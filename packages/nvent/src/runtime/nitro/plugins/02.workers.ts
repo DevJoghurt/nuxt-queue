@@ -1,6 +1,7 @@
 import { defineNitroPlugin, $useWorkerHandlers, $useFunctionRegistry, useQueueAdapter, useHookRegistry } from '#imports'
 import type { NodeHandler } from '../../worker/node/runner'
 import { createJobProcessor } from '../../worker/node/runner'
+import { registerSystemHandlersOnQueue } from '../../worker/system'
 
 type HandlerEntry = { queue: string, id: string, absPath: string, handler: NodeHandler, module?: any }
 
@@ -23,6 +24,8 @@ export default defineNitroPlugin(async (nitroApp) => {
 
       // Track which queues have handlers registered
       const registeredQueues = new Set<string>()
+      // Track which queues have hooks (need system handlers)
+      const queuesWithHooks = new Set<string>()
 
       for (const entry of handlers) {
         const { queue, id, handler, module } = entry as any
@@ -42,7 +45,7 @@ export default defineNitroPlugin(async (nitroApp) => {
         }
 
         // Extract lifecycle hooks if present (v0.5 await integration)
-        if (module && w?.flow) {
+        if (module) {
           const hooks: any = {}
           if (typeof module.onAwaitRegister === 'function') {
             hooks.onAwaitRegister = module.onAwaitRegister
@@ -50,9 +53,12 @@ export default defineNitroPlugin(async (nitroApp) => {
           if (typeof module.onAwaitResolve === 'function') {
             hooks.onAwaitResolve = module.onAwaitResolve
           }
+          if (typeof module.onAwaitTimeout === 'function') {
+            hooks.onAwaitTimeout = module.onAwaitTimeout
+          }
 
-          // Register hooks if any exist
-          if (Object.keys(hooks).length > 0) {
+          // Register hooks if any exist (only for flow workers)
+          if (Object.keys(hooks).length > 0 && w?.flow) {
             const hookRegistry = useHookRegistry()
 
             // Handle both singular 'name' and plural 'names' (normalized by registry)
@@ -63,6 +69,29 @@ export default defineNitroPlugin(async (nitroApp) => {
             for (const flowName of flowNames) {
               if (flowName) {
                 hookRegistry.register(flowName, jobName, hooks)
+              }
+            }
+
+            // Mark this queue as having hooks (needs system handlers)
+            queuesWithHooks.add(queue)
+          }
+
+          // Check if worker has await configuration (needs system handlers even without hooks)
+          if (w?.flow?.awaitBefore || w?.flow?.awaitAfter) {
+            queuesWithHooks.add(queue)
+          }
+
+          // Also check entry step for await configuration
+          if (w?.flow?.role === 'entry') {
+            const flowNames = w.flow.names
+              ? (Array.isArray(w.flow.names) ? w.flow.names : [w.flow.names])
+              : (w.flow.name ? (Array.isArray(w.flow.name) ? w.flow.name : [w.flow.name]) : [])
+
+            for (const flowName of flowNames) {
+              const flowRegistry = (registry?.flows || {})[flowName]
+              if (flowRegistry?.entry?.awaitBefore || flowRegistry?.entry?.awaitAfter) {
+                queuesWithHooks.add(queue)
+                break
               }
             }
           }
@@ -93,6 +122,23 @@ export default defineNitroPlugin(async (nitroApp) => {
           // Register worker through the adapter
           queueAdapter.registerWorker(queue, jobName, processor as any, opts)
           registeredQueues.add(queue)
+        }
+      }
+
+      // Register system handlers on queues that have hooks
+      for (const queueName of queuesWithHooks) {
+        try {
+          // Use the queue's concurrency setting for system handlers
+          const queueWorker = (registry.workers as any[]).find((w: any) => w?.queue?.name === queueName)
+          const concurrency = queueWorker?.worker?.concurrency
+
+          registerSystemHandlersOnQueue(queueName, concurrency)
+
+          // Ensure this queue is marked as registered so it gets started
+          registeredQueues.add(queueName)
+        }
+        catch (err) {
+          console.error(`[nvent] Failed to register system handlers on queue ${queueName}:`, err)
         }
       }
 

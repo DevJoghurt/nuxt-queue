@@ -239,14 +239,53 @@
                 <!-- Time specific -->
                 <div
                   v-if="item.step.awaitType === 'time' && item.step.awaitConfig?.delay"
-                  class="flex items-center gap-1.5"
+                  class="space-y-1"
                 >
-                  <UIcon
-                    name="i-lucide-hourglass"
-                    class="w-3 h-3 opacity-60"
-                  />
-                  <span class="opacity-75">Delay:</span>
-                  <span class="font-medium">{{ formatDuration(item.step.awaitConfig.delay) }}</span>
+                  <div class="flex items-center gap-1.5">
+                    <UIcon
+                      name="i-lucide-hourglass"
+                      class="w-3 h-3 opacity-60"
+                    />
+                    <span class="opacity-75">Delay:</span>
+                    <span class="font-medium">{{ formatDuration(item.step.awaitConfig.delay) }}</span>
+                  </div>
+                  <div
+                    v-if="item.step.scheduledTriggerAt"
+                    class="flex items-center gap-1.5"
+                  >
+                    <UIcon
+                      name="i-lucide-calendar"
+                      class="w-3 h-3 opacity-60"
+                    />
+                    <span class="opacity-75">Triggers at:</span>
+                    <span class="font-medium">{{ formatScheduledTime(item.step.scheduledTriggerAt) }}</span>
+                  </div>
+                </div>
+
+                <!-- Schedule specific -->
+                <div
+                  v-if="item.step.awaitType === 'schedule' && item.step.awaitConfig?.cron"
+                  class="space-y-1"
+                >
+                  <div class="flex items-center gap-1.5">
+                    <UIcon
+                      name="i-lucide-calendar-clock"
+                      class="w-3 h-3 opacity-60"
+                    />
+                    <span class="opacity-75">Cron:</span>
+                    <code class="px-1.5 py-0.5 bg-black/5 dark:bg-white/5 rounded text-[10px]">{{ item.step.awaitConfig.cron }}</code>
+                  </div>
+                  <div
+                    v-if="item.step.scheduledTriggerAt"
+                    class="flex items-center gap-1.5"
+                  >
+                    <UIcon
+                      name="i-lucide-calendar"
+                      class="w-3 h-3 opacity-60"
+                    />
+                    <span class="opacity-75">Next trigger:</span>
+                    <span class="font-medium">{{ formatScheduledTime(item.step.scheduledTriggerAt) }}</span>
+                  </div>
                 </div>
 
                 <!-- Timeout -->
@@ -551,5 +590,18 @@ const formatDuration = (ms: number) => {
     return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
   }
   return `${seconds}s`
+}
+
+const formatScheduledTime = (timestamp: string | number | Date) => {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return 'No schedule'
+  
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  })
 }
 </script>

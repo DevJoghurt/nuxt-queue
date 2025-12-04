@@ -482,6 +482,47 @@ export class PostgresQueueAdapter implements QueueAdapter {
     }
   }
 
+  async removeJob(queueName: string, jobId: string): Promise<boolean> {
+    if (!this.boss) {
+      return false
+    }
+
+    try {
+      // jobId is a singletonKey, but pg-boss cancel() expects the actual UUID job id
+      // We need to query for the job first to get its real id
+      const schema = this.options.schema || 'pgboss'
+      const queryResult = await this.pgPool?.query(
+        `SELECT id, state FROM ${schema}.job 
+         WHERE name = $1
+         AND singleton_key = $2
+         AND state IN ('created', 'retry')
+         LIMIT 1`,
+        [queueName, jobId],
+      )
+
+      if (!queryResult?.rows?.[0]) {
+        this.logger.warn(`Job not found for removal: queue=${queueName}, jobId=${jobId}`)
+        return false
+      }
+
+      const actualJobId = queryResult.rows[0].id
+      const jobState = queryResult.rows[0].state
+
+      this.logger.info(`Removing job: queue=${queueName}, jobId=${jobId}, actualId=${actualJobId}, state=${jobState}`)
+
+      // Use pg-boss's cancel method for proper stats tracking
+      // cancel() works for jobs in created, retry, or active states
+      // Returns { jobs: [id], requested: 1, affected: N } where N is number of cancelled jobs
+      const cancelResult = await this.boss.cancel(queueName, actualJobId) as any
+      this.logger.info(`Cancel result:`, cancelResult)
+      return cancelResult && cancelResult.affected > 0
+    }
+    catch (error) {
+      this.logger.error('Error removing job:', error)
+      return false
+    }
+  }
+
   async getScheduledJobs(queueName: string): Promise<Array<any>> {
     const { boss } = this.ensureQueue(queueName)
 

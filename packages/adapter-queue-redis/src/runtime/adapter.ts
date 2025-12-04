@@ -179,6 +179,19 @@ export class RedisQueueAdapter implements QueueAdapter {
     }
   }
 
+  async removeJob(queueName: string, jobId: string): Promise<boolean> {
+    const { queue } = this.ensureQueue(queueName)
+    const job = await queue.getJob(jobId)
+
+    if (!job) {
+      return false
+    }
+
+    // Remove the job
+    await job.remove()
+    return true
+  }
+
   async pause(queueName: string): Promise<void> {
     const { queue } = this.ensureQueue(queueName)
     await queue.pause()

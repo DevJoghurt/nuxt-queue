@@ -129,15 +129,18 @@ async function createStoreAdapter(
     const { StoreSubjects } = useStreamTopics()
     const flowIndexKey = StoreSubjects.flowIndex()
 
-    // Check if index exists by trying to read it
-    const existingFlows = await adapter.index.read(flowIndexKey, { limit: 1 })
-    if (existingFlows.length === 0) {
-      // Index is empty, initialize with analyzed flows
-      const analyzedFlows = $useAnalyzedFlows()
-      if (analyzedFlows && analyzedFlows.length > 0) {
-        const now = new Date().toISOString()
-        for (const flow of analyzedFlows) {
-          await adapter.index.add(flowIndexKey, flow.id, Date.now(), {
+    // Get all analyzed flows from build-time registry
+    const analyzedFlows = $useAnalyzedFlows()
+    if (analyzedFlows && analyzedFlows.length > 0) {
+      // Get existing flows to check which ones are missing
+      const existingFlows = await adapter.index.read(flowIndexKey, { limit: 100 })
+      const existingFlowIds = new Set(existingFlows.map(f => f.id))
+
+      // Register any missing flows
+      const now = Date.now()
+      for (const flow of analyzedFlows) {
+        if (!existingFlowIds.has(flow.id)) {
+          await adapter.index.add(flowIndexKey, flow.id, now, {
             name: flow.id,
             displayName: flow.id,
             registeredAt: now,

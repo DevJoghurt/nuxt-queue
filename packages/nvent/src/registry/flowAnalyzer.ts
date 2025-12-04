@@ -12,6 +12,8 @@ interface FlowEntry {
   runtime?: 'nodejs' | 'python'
   runtype?: 'inprocess' | 'task'
   emits?: string[]
+  awaitBefore?: AwaitConfig
+  awaitAfter?: AwaitConfig
 }
 
 interface FlowStep {
@@ -74,12 +76,13 @@ function findEmitter(
   token: string,
   entryStep: string | undefined,
   steps: Record<string, FlowStep>,
+  entry?: FlowEntry,
 ): string | null {
   const { type, value } = parseSubscription(token)
 
-  // Check entry step
-  if (entryStep) {
-    const entryEmits = steps[entryStep]?.emits || []
+  // Check entry step (from entry object, not steps collection)
+  if (entryStep && entry) {
+    const entryEmits = entry.emits || []
     if (entryEmits.includes(token) || entryEmits.includes(value)) {
       return entryStep
     }
@@ -123,6 +126,7 @@ function findEmitter(
 function buildDependencyGraph(
   entryStep: string | undefined,
   steps: Record<string, FlowStep>,
+  entry?: FlowEntry,
 ): Record<string, string[]> {
   const dependencies: Record<string, string[]> = {}
 
@@ -131,7 +135,7 @@ function buildDependencyGraph(
 
     const subscribes = step.subscribes || []
     for (const token of subscribes) {
-      const emitter = findEmitter(token, entryStep, steps)
+      const emitter = findEmitter(token, entryStep, steps, entry)
       if (emitter && emitter !== stepName) {
         deps.add(emitter)
       }
@@ -324,13 +328,32 @@ export function analyzeFlow(flow: FlowMeta): AnalyzedFlow {
   const steps = flow.steps || {}
 
   // Build dependency graph
-  const dependencies = buildDependencyGraph(entryStepName, steps)
+  const dependencies = buildDependencyGraph(entryStepName, steps, flow.entry)
 
   // Calculate execution levels
   const levels = calculateLevels(entryStepName, dependencies)
 
   // Build analyzed steps
   const analyzedSteps: Record<string, AnalyzedStep> = {}
+
+  // Include entry step if it exists
+  if (flow.entry && entryStepName) {
+    const hasAwaitPattern = !!(flow.entry.awaitBefore || flow.entry.awaitAfter)
+    analyzedSteps[entryStepName] = {
+      queue: flow.entry.queue,
+      workerId: flow.entry.workerId,
+      emits: flow.entry.emits,
+      awaitBefore: flow.entry.awaitBefore,
+      awaitAfter: flow.entry.awaitAfter,
+      name: entryStepName,
+      dependsOn: [],
+      triggers: findTriggeredSteps(entryStepName, flow.entry as any, steps),
+      level: 0,
+      hasAwaitPattern,
+    }
+  }
+
+  // Analyze regular steps
   for (const [stepName, step] of Object.entries(steps)) {
     const hasAwaitPattern = !!(step.awaitBefore || step.awaitAfter)
     analyzedSteps[stepName] = {
@@ -347,7 +370,16 @@ export function analyzeFlow(flow: FlowMeta): AnalyzedFlow {
   const maxLevel = Math.max(0, ...Object.values(levels))
   const levelGroups: string[][] = Array.from({ length: maxLevel + 1 }, () => [])
 
+  // Add entry step at level 0 if it exists (entry is not in levels object from calculateLevels)
+  if (entryStepName && flow.entry) {
+    levelGroups[0]?.push(entryStepName)
+  }
+
+  // Add all regular steps to their respective levels
   for (const [stepName, level] of Object.entries(levels)) {
+    // Skip entry step if it somehow got into levels (shouldn't happen but be defensive)
+    if (stepName === entryStepName) continue
+
     const levelArray = levelGroups[level]
     if (levelArray) {
       levelArray.push(stepName)

@@ -156,12 +156,18 @@ export type FlowEntry = {
   step: string
   queue: string
   workerId: string
+  emits?: string[]
+  awaitBefore?: AwaitConfig
+  awaitAfter?: AwaitConfig
 }
 
 export type FlowStep = {
   queue: string
   workerId: string
   subscribes?: string[]
+  emits?: string[]
+  awaitBefore?: AwaitConfig
+  awaitAfter?: AwaitConfig
 }
 
 export type FlowsIndex = Record<string, {

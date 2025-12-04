@@ -1,4 +1,4 @@
-import { defineFunctionConfig, defineFunction, defineAwaitRegisterHook } from '#imports'
+import { defineFunctionConfig, defineFunction, defineAwaitRegisterHook, defineAwaitTimeoutHook } from '#imports'
 
 /**
  * Example: Process Approval Step
@@ -25,9 +25,9 @@ export const config = defineFunctionConfig({
 })
 
 // Lifecycle hook: Called when await is registered
-export const onAwaitRegister = defineAwaitRegisterHook(async (webhookUrl, awaitData, ctx) => {
+export const onAwaitRegister = defineAwaitRegisterHook<'webhook'>(async (hookData, stepData, ctx) => {
   ctx.logger.log('info', 'Webhook approval URL generated', {
-    url: webhookUrl,
+    url: hookData.webhookUrl,
     runId: ctx.flowId,
     step: ctx.stepName,
   })
@@ -36,8 +36,17 @@ export const onAwaitRegister = defineAwaitRegisterHook(async (webhookUrl, awaitD
   // For demo: Log the webhook URL
   console.log('==========================================')
   console.log('🔗 APPROVAL WEBHOOK URL:')
-  console.log(`   POST ${webhookUrl}`)
+  console.log(`   POST ${hookData.webhookUrl}`)
   console.log(`   Body: { "approved": true/false, "comment": "..." }`)
+  console.log('==========================================')
+})
+
+export const onAwaitTimeout = defineAwaitTimeoutHook(async (stepData, ctx) => {
+  ctx.logger.log('warn', 'Approval request timed out')
+
+  console.log('==========================================')
+  console.log('⚠️ APPROVAL REQUEST TIMED OUT')
+  console.log(`   Run ID: ${ctx.flowId}`)
   console.log('==========================================')
 })
 

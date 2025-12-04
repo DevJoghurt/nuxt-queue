@@ -20,6 +20,7 @@ export interface StepState {
   attempt: number
   startedAt?: string
   completedAt?: string
+  scheduledTriggerAt?: string // When await is scheduled to trigger (for time/schedule awaits)
   error?: string
   awaitType?: 'time' | 'event' | 'trigger'
   awaitData?: any
@@ -205,6 +206,11 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
         state.steps[awaitKeyAfter].status = 'waiting'
         state.steps[awaitKeyAfter].awaitType = e.data?.awaitType
         state.steps[awaitKeyAfter].awaitData = e.data
+        // Capture scheduled trigger time from event data
+        const scheduledAt = e.data?.resolveAt || e.data?.nextOccurrence
+        if (scheduledAt) {
+          state.steps[awaitKeyAfter].scheduledTriggerAt = new Date(scheduledAt).toISOString()
+        }
 
         if (!state.steps[awaitKeyBefore]) {
           state.steps[awaitKeyBefore] = { status: 'waiting', attempt: 1 }
@@ -212,6 +218,11 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
         state.steps[awaitKeyBefore].status = 'waiting'
         state.steps[awaitKeyBefore].awaitType = e.data?.awaitType
         state.steps[awaitKeyBefore].awaitData = e.data
+        // Capture scheduled trigger time from event data
+        const scheduledAtBefore = e.data?.resolveAt || e.data?.nextOccurrence
+        if (scheduledAtBefore) {
+          state.steps[awaitKeyBefore].scheduledTriggerAt = new Date(scheduledAtBefore).toISOString()
+        }
         break
       }
 

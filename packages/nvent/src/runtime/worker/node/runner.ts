@@ -5,13 +5,10 @@ import {
   useEventManager,
   useNventLogger,
   $useFunctionRegistry,
-  useAwait,
-  useHookRegistry,
-  useStreamTopics,
   useStateAdapter,
-  useStoreAdapter,
-  useRunContext,
+  useQueueAdapter,
 } from '#imports'
+import { SYSTEM_HANDLERS } from '../system'
 
 const logger = useNventLogger('node-runner')
 
@@ -181,10 +178,10 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
     // Normal job processing
     const eventMgr = useEventManager()
     const rc: any = useRuntimeConfig()
-    // v0.4.1: Read autoScope from store.state.autoScope
+    // Read autoScope from store.state.autoScope
     const autoScope: 'always' | 'flow' | 'never' = rc?.nvent?.store?.state?.autoScope || 'always'
     const providedFlow = job.data?.flowId
-    // v0.4: Always use a proper flow identifier (UUID for new flows, never job ID)
+    // Always use a proper flow identifier (UUID for new flows, never job ID)
     const flowId = providedFlow || (autoScope === 'always' ? randomUUID() : undefined)
 
     // Get actual attempt number from BullMQ (1-indexed: attemptsMade starts at 0)
@@ -197,7 +194,7 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
     // Get flowName for v0.4 events
     const flowName = (job.data as any)?.flowName || 'unknown'
 
-    // v0.5: Load step configuration from registry for await patterns
+    // Load step configuration from registry for await patterns
     const registry = $useFunctionRegistry() as any
     const flowRegistry = (registry?.flows || {})[flowName]
 
@@ -215,66 +212,6 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
     // Check if this is an await resume
     const isAwaitResume = job.data?.awaitResolved === true
     const awaitData = job.data?.awaitData
-
-    // v0.5: AWAIT BEFORE - Register pattern and pause execution
-    if (awaitBefore && !isAwaitResume) {
-      const awaitLogger = useNventLogger('await-before')
-
-      awaitLogger.info('Step has awaitBefore, registering await pattern', {
-        flowName,
-        runId: flowId,
-        stepName: job.name,
-        awaitType: awaitBefore.type,
-      })
-
-      try {
-        // Register await pattern
-        const { register } = useAwait()
-        const awaitResult = await register(
-          flowId || 'unknown',
-          job.name,
-          flowName,
-          awaitBefore,
-          'before', // Position: awaitBefore means wait before execution
-        )
-
-        // Call lifecycle hook if exists
-        const hookRegistry = useHookRegistry()
-        const hooks = hookRegistry.load(flowName, job.name)
-
-        if (hooks?.onAwaitRegister) {
-          try {
-            await hooks.onAwaitRegister(
-              (awaitResult as any).webhookUrl || (awaitResult as any).eventName || '',
-              job.data,
-              useRunContext({ flowId, flowName, stepName: job.name }),
-            )
-          }
-          catch (err) {
-            awaitLogger.error('onAwaitRegister hook failed', { error: (err as Error).message })
-            // Continue with await registration
-          }
-        }
-
-        // await.registered event is published by the pattern implementation
-        // No need to publish again here
-
-        // Return early - handler will execute after await resolves
-        return {
-          awaiting: true,
-          awaitType: awaitBefore.type,
-          awaitConfig: awaitBefore,
-        }
-      }
-      catch (err) {
-        awaitLogger.error('Failed to register await pattern', {
-          error: (err as Error).message,
-          stack: (err as Error).stack,
-        })
-        // If await registration fails, continue with normal execution
-        // This prevents the step from getting stuck
-      }
-    }
 
     const ctx = buildContext({
       jobId: job.id as string,
@@ -295,7 +232,7 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
         ctx.logger.log(level, msg, enriched)
       },
     }
-    // v0.4: Emit step.started event
+    // Emit step.started event
     try {
       await eventMgr.publishBus({
         type: 'step.started',
@@ -383,7 +320,7 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
 
       throw err
     }
-    // v0.4: Emit step.completed event
+    // Emit step.completed event
     try {
       const eventMgr = useEventManager()
       await eventMgr.publishBus({
@@ -400,73 +337,32 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
       // ignore
     }
 
-    // v0.5: AWAIT AFTER - Buffer emits and register await pattern
+    // awaitAfter: Register await pattern after step completes
+    // This blocks dependent steps from triggering until the await is resolved
     if (awaitAfter && !isAwaitResume) {
-      const awaitLogger = useNventLogger('await-after')
-
-      awaitLogger.info('Step has awaitAfter, registering await pattern', {
-        flowName,
-        runId: flowId,
-        stepName: job.name,
-        awaitType: awaitAfter.type,
-      })
-
       try {
-        // Capture any emitted events from this step
-        // Note: Events are already published, we need to track them for blocking
-        const store = useStoreAdapter()
-        const { StoreSubjects } = useStreamTopics()
-        const streamName = StoreSubjects.flowRun(flowId || 'unknown')
+        const queue = useQueueAdapter()
 
-        // Read recent events from stream to find emits from this step
-        let _emitEvents: any[] = []
-        if (store.stream.read) {
-          const recentEvents = await store.stream.read(streamName, { limit: 100 })
-          _emitEvents = recentEvents.filter((evt: any) =>
-            evt.type === 'emit'
-            && evt.stepName === job.name
-            && evt.stepId === stepRunId,
-          )
-        }
-
-        // Register await pattern
-        const { register } = useAwait()
-        const awaitResult = await register(
-          flowId || 'unknown',
-          job.name,
-          flowName,
-          awaitAfter,
-          'after',
-        )
-
-        // Call lifecycle hook
-        const hookRegistry = useHookRegistry()
-        const hooks = hookRegistry.load(flowName, job.name)
-        if (hooks?.onAwaitRegister) {
-          try {
-            await hooks.onAwaitRegister(
-              (awaitResult as any).webhookUrl || (awaitResult as any).eventName || '',
-              { ...job.data, result },
-              ctx,
-            )
-          }
-          catch (err) {
-            awaitLogger.error('onAwaitRegister hook failed', { error: (err as Error).message })
-            // Continue with await registration
-          }
-        }
-
-        // Note: await.registered event is published by the await pattern implementation
-        // (e.g., time.ts, webhook.ts, etc.) - no need to publish here
-        // The wiring will handle storing blockedEmits from the emit events in the stream
+        // Enqueue system handler to register await pattern in the same queue
+        await queue.enqueue(queueName, {
+          name: SYSTEM_HANDLERS.AWAIT_REGISTER,
+          data: {
+            flowId: flowId || 'unknown',
+            flowName,
+            stepName: job.name,
+            position: 'after' as const,
+            awaitConfig: awaitAfter,
+            input: { ...job.data, result },
+          },
+          opts: { jobId: `${flowId}__${job.name}__await-register` },
+        })
       }
       catch (err) {
-        awaitLogger.error('Failed to register awaitAfter pattern', {
+        logger.error('Failed to register awaitAfter pattern', {
+          flowName,
+          stepName: job.name,
           error: (err as Error).message,
-          stack: (err as Error).stack,
         })
-        // If await registration fails, continue normally
-        // Emits have already been published, so flow continues
       }
     }
 
