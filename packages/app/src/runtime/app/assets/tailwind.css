@@ -1,6 +1,8 @@
 /**
- * Tailwind content configuration for @nvent-addon/app module
- * This file ensures Tailwind scans our module's components for class usage
+ * Nvent App Module Styles
+ * Import this in your main CSS file: @import "@nvent-addon/app";
  */
 
-@source "../**/*.vue";
+/* Tailwind content scanning for module components */
+@source "../components/**/*.vue";
+@source "../pages/**/*.vue";

@@ -568,6 +568,15 @@ export default defineNuxtConfig({
 })
 ```
 
+**Important:** Import the module's styles in your main CSS file to enable Tailwind scanning:
+
+```css
+/* app/assets/css/main.css or your main CSS file */
+@import "tailwindcss";
+@import "@nuxt/ui";
+@import "@nvent-addon/app";
+```
+
 The UI is available in two ways:
 
 **1. As a built-in route** (enabled by default):

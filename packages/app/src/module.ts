@@ -52,11 +52,8 @@ export default defineNuxtModule<ModuleOptions>({
   async setup(options, nuxt) {
     const { resolve } = resolver
 
-    // Add module paths to Tailwind content sources
-    // This ensures Tailwind scans our components for class usage
+    // Add vueflow CSS
     nuxt.options.css = nuxt.options.css || []
-    nuxt.options.css.push(resolve('./runtime/app/assets/tailwind.css'))
-    // Add vueflow assets
     nuxt.options.css.push(resolve('./runtime/app/assets/vueflow.css'))
 
     // Add shared utilities for both app and server

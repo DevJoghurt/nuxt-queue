@@ -8,6 +8,7 @@
   "exports": {
     ".": {
       "types": "./dist/types.d.mts",
+      "style": "./dist/runtime/app/assets/tailwind.css",
       "import": "./dist/module.mjs"
     }
   },
