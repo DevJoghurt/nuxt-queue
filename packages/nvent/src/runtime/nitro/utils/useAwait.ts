@@ -79,7 +79,13 @@ export function useAwait() {
 
       // If stepName specified, return that step's await state
       if (stepName) {
-        return awaitingSteps[stepName] || null
+        // Try composite keys first (stepName:before and stepName:after)
+        const awaitKeyBefore = `${stepName}:before`
+        const awaitKeyAfter = `${stepName}:after`
+
+        // Return the first one found (there should only be one awaiting at a time)
+        const awaitState = awaitingSteps[awaitKeyBefore] || awaitingSteps[awaitKeyAfter] || awaitingSteps[stepName]
+        return awaitState || null
       }
 
       // Otherwise return all awaiting steps

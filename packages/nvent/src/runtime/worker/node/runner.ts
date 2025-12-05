@@ -212,6 +212,7 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
     // Check if this is an await resume
     const isAwaitResume = job.data?.awaitResolved === true
     const awaitData = job.data?.awaitData
+    const awaitPosition = job.data?.awaitPosition // 'before' or 'after'
 
     const ctx = buildContext({
       jobId: job.id as string,
@@ -339,7 +340,9 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
 
     // awaitAfter: Register await pattern after step completes
     // This blocks dependent steps from triggering until the await is resolved
-    if (awaitAfter && !isAwaitResume) {
+    // Skip registration only if resuming from awaitAfter (not awaitBefore)
+    const shouldRegisterAwaitAfter = awaitAfter && (!isAwaitResume || awaitPosition === 'before')
+    if (shouldRegisterAwaitAfter) {
       try {
         const queue = useQueueAdapter()
 
@@ -354,7 +357,7 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
             awaitConfig: awaitAfter,
             input: { ...job.data, result },
           },
-          opts: { jobId: `${flowId}__${job.name}__await-register` },
+          opts: { jobId: `${flowId}__${job.name}__await-register-after` },
         })
       }
       catch (err) {

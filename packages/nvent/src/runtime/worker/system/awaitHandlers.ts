@@ -193,43 +193,10 @@ export async function awaitResolveHandler(job: QueueJob) {
       }
     }
 
-    // For awaitBefore: enqueue the actual step job now
-    if (position === 'before') {
-      const queue = useQueueAdapter()
-      const registry = $useFunctionRegistry() as any
-      const flowRegistry = (registry?.flows || {})[flowName]
-      const stepMeta = flowRegistry?.steps?.[stepName]
+    // For awaitBefore: step will be enqueued by flow wiring orchestration
+    // when it sees the await.resolved event (checkAndTriggerPendingSteps)
+    // We don't enqueue here to avoid duplicate enqueueing
 
-      if (stepMeta?.queue) {
-        const payload: any = {
-          flowId,
-          flowName,
-          input,
-          awaitResolved: true,
-          awaitData: triggerData,
-        }
-
-        const jobId = `${flowId}__${stepName}`
-
-        const worker = (registry?.workers as any[])?.find((w: any) =>
-          w?.flow?.step === stepName && w?.queue?.name === stepMeta.queue,
-        )
-        const defaultOpts = worker?.queue?.defaultJobOptions || {}
-        const opts = {
-          ...defaultOpts,
-          jobId,
-        }
-
-        await queue.enqueue(stepMeta.queue, { name: stepName, data: payload, opts })
-
-        logger.info('Enqueued actual step after await resolution', {
-          flowId,
-          flowName,
-          stepName,
-          jobId,
-        })
-      }
-    }
     // For awaitAfter: trigger pending steps (handled by flow wiring)
 
     return { success: true }

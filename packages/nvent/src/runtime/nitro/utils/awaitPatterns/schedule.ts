@@ -65,6 +65,7 @@ export async function registerScheduleAwait(
     position,
     config,
     data: {
+      position, // Store position in data for database persistence
       cron: config.cron,
       nextOccurrence,
       timeUntilNext,
@@ -99,6 +100,8 @@ export async function resolveScheduleAwait(
 
   logger.info(`Resolving schedule await`, { runId, stepName })
 
+  const scheduledAt = scheduleData?.scheduledAt || Date.now()
+
   // Emit await.resolved event (wiring will handle cleanup and processing)
   eventBus.publish({
     type: 'await.resolved',
@@ -106,8 +109,9 @@ export async function resolveScheduleAwait(
     runId,
     stepName,
     position,
-    triggerData: scheduleData,
+    triggerData: { scheduledAt },
     data: {
+      position, // Store position in data for database persistence
       resolvedAt: Date.now(),
     },
   } as any)

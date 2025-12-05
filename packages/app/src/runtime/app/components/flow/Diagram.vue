@@ -236,11 +236,12 @@ const nodes = computed<FlowNode[]>(() => {
 
       out.push({
         id: `await:entry-after:${f.entry.step}`,
-        position: { x: -130, y: y },
+        position: { x: -120, y: y },
         data: {
           label: `Await (${f.entry.awaitAfter.type})`,
           awaitType: f.entry.awaitAfter.type,
           awaitConfig: f.entry.awaitAfter,
+          awaitData: awaitState?.awaitData,
           status: awaitStatus,
           scheduledTriggerAt: awaitState?.scheduledTriggerAt,
         },
@@ -278,6 +279,7 @@ const nodes = computed<FlowNode[]>(() => {
             label: `Await (${step.awaitBefore.type})`,
             awaitType: step.awaitBefore.type,
             awaitConfig: step.awaitBefore,
+            awaitData: awaitState?.awaitData,
             status: awaitStatus,
             scheduledTriggerAt: awaitState?.scheduledTriggerAt,
           },
@@ -359,6 +361,7 @@ const nodes = computed<FlowNode[]>(() => {
               label: `Await (${step.awaitAfter.type})`,
               awaitType: step.awaitAfter.type,
               awaitConfig: step.awaitAfter,
+              awaitData: awaitState?.awaitData,
               status: awaitStatus,
               scheduledTriggerAt: awaitState?.scheduledTriggerAt,
             },
@@ -517,6 +520,13 @@ const edges = computed<FlowEdge[]>(() => {
       const targetStep = steps[stepName]
       const target = `step:${stepName}`
 
+      // Add edge from step to its awaitAfter node if it exists
+      if (targetStep?.awaitAfter) {
+        const stepId = `step:${stepName}`
+        const awaitAfterId = `await:step-after:${stepName}`
+        addEdge(stepId, awaitAfterId)
+      }
+
       if (stepInfo.dependsOn.length > 0) {
         // Add edges from dependencies
         for (const depName of stepInfo.dependsOn) {
@@ -530,7 +540,11 @@ const edges = computed<FlowEdge[]>(() => {
               : `entry:${depName}`
           }
           else {
-            source = `step:${depName}`
+            // Check if dependency step has awaitAfter - connect from its await node
+            const depStep = steps[depName]
+            source = depStep?.awaitAfter
+              ? `await:step-after:${depName}`
+              : `step:${depName}`
           }
 
           // Check if target step has awaitBefore - insert await node

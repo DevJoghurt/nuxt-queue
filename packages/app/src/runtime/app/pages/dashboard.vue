@@ -27,109 +27,54 @@
         <!-- System Stats Overview -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <!-- Queues Card -->
-          <div
-            class="bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 rounded-xl p-6 text-white shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
-            @click="navigateTo('/queues')"
-          >
-            <div class="flex items-center justify-between mb-4">
-              <div class="p-3 bg-white/20 rounded-lg backdrop-blur-sm">
-                <UIcon
-                  name="i-lucide-app-window"
-                  class="w-6 h-6"
-                />
-              </div>
-              <UIcon
-                name="i-lucide-arrow-right"
-                class="w-5 h-5 opacity-60"
-              />
-            </div>
-            <div class="text-3xl font-bold mb-1">
-              {{ queuesStats?.total || 0 }}
-            </div>
-            <div class="text-sm opacity-90 mb-3">
-              Active Queues
-            </div>
-            <div class="flex items-center gap-4 text-xs opacity-75">
-              <div v-if="queuesStats?.pending > 0">
-                <span class="font-semibold">{{ formatNumber(queuesStats?.pending || 0) }}</span> pending
-              </div>
-              <div>
-                <span class="font-semibold">{{ formatNumber(queuesStats?.completed || 0) }}</span> completed
-              </div>
-              <div v-if="queuesStats?.failed > 0">
-                <span class="font-semibold">{{ formatNumber(queuesStats?.failed || 0) }}</span> failed
-              </div>
-            </div>
-          </div>
+          <NventDashboardCard
+            icon="i-lucide-app-window"
+            title="Active Queues"
+            color="blue"
+            :primary-stats="[
+              { value: formatNumber(queuesStats?.active || 0), label: 'active' },
+              { value: formatNumber((queuesStats?.waiting || 0) + (queuesStats?.delayed || 0)), label: 'waiting' },
+              ...(queuesStats?.failed > 0 ? [{ value: formatNumber(queuesStats?.failed || 0), label: 'failed' }] : []),
+            ]"
+            :secondary-stats="[
+              { value: queuesStats?.total || 0, label: 'queues' },
+              { value: formatNumber(queuesStats?.completed || 0), label: 'completed' },
+            ]"
+            :on-click="() => navigateTo('/queues')"
+          />
 
           <!-- Flows Card -->
-          <div
-            class="bg-gradient-to-br from-purple-500 to-purple-600 dark:from-purple-600 dark:to-purple-700 rounded-xl p-6 text-white shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
-            @click="navigateTo('/flows')"
-          >
-            <div class="flex items-center justify-between mb-4">
-              <div class="p-3 bg-white/20 rounded-lg backdrop-blur-sm">
-                <UIcon
-                  name="i-lucide-git-branch"
-                  class="w-6 h-6"
-                />
-              </div>
-              <UIcon
-                name="i-lucide-arrow-right"
-                class="w-5 h-5 opacity-60"
-              />
-            </div>
-            <div class="text-3xl font-bold mb-1">
-              {{ flowsStats?.total || 0 }}
-            </div>
-            <div class="text-sm opacity-90 mb-3">
-              Registered Flows
-            </div>
-            <div class="flex items-center gap-4 text-xs opacity-75">
-              <div v-if="flowsStats?.running > 0">
-                <span class="font-semibold">{{ flowsStats?.running }}</span> running
-              </div>
-              <div v-if="flowsStats?.awaiting > 0">
-                <span class="font-semibold">{{ flowsStats?.awaiting }}</span> awaiting
-              </div>
-              <div>
-                <span class="font-semibold">{{ formatNumber(flowsStats?.success || 0) }}</span> success
-              </div>
-            </div>
-          </div>
+          <NventDashboardCard
+            icon="i-lucide-git-branch"
+            title="Registered Flows"
+            color="purple"
+            :primary-stats="[
+              ...(flowsStats?.running > 0 ? [{ value: flowsStats?.running, label: 'running' }] : []),
+              ...(flowsStats?.awaiting > 0 ? [{ value: flowsStats?.awaiting, label: 'awaiting' }] : []),
+              ...(flowsStats?.success > 0 ? [{ value: formatNumber(flowsStats?.success), label: 'completed' }] : []),
+              ...(flowsStats?.failure > 0 ? [{ value: formatNumber(flowsStats?.failure), label: 'failed' }] : []),
+            ]"
+            :secondary-stats="[
+              { value: flowsStats?.total || 0, label: 'flows' },
+              { value: formatNumber(flowsStats?.totalRuns || 0), label: 'total runs' },
+            ]"
+            :on-click="() => navigateTo('/flows')"
+          />
 
           <!-- Triggers Card -->
-          <div
-            class="bg-gradient-to-br from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700 rounded-xl p-6 text-white shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
-            @click="navigateTo('/triggers')"
-          >
-            <div class="flex items-center justify-between mb-4">
-              <div class="p-3 bg-white/20 rounded-lg backdrop-blur-sm">
-                <UIcon
-                  name="i-lucide-zap"
-                  class="w-6 h-6"
-                />
-              </div>
-              <UIcon
-                name="i-lucide-arrow-right"
-                class="w-5 h-5 opacity-60"
-              />
-            </div>
-            <div class="text-3xl font-bold mb-1">
-              {{ triggersStats?.total || 0 }}
-            </div>
-            <div class="text-sm opacity-90 mb-3">
-              Active Triggers
-            </div>
-            <div class="flex items-center gap-4 text-xs opacity-75">
-              <div>
-                <span class="font-semibold">{{ formatNumber(triggersStats?.totalFires || 0) }}</span> fires
-              </div>
-              <div>
-                <span class="font-semibold">{{ formatNumber(triggersStats?.totalFlowsStarted || 0) }}</span> flows started
-              </div>
-            </div>
-          </div>
+          <NventDashboardCard
+            icon="i-lucide-zap"
+            title="Active Triggers"
+            color="amber"
+            :primary-stats="[
+              { value: formatNumber(triggersStats?.totalFires || 0), label: 'fires' },
+            ]"
+            :secondary-stats="[
+              { value: triggersStats?.total || 0, label: 'triggers' },
+              { value: formatNumber(triggersStats?.totalFlowsStarted || 0), label: 'flows started' },
+            ]"
+            :on-click="() => navigateTo('/triggers')"
+          />
         </div>
 
         <!-- Quick Actions & Recent Activity -->
@@ -694,15 +639,18 @@ function updateTriggerStats(data: any) {
 
 // Computed stats
 const queuesStats = computed(() => {
-  const pending = queues.value.reduce((sum, q) => {
-    const counts = q.counts || {}
-    return sum + (counts.active || 0) + (counts.waiting || 0) + (counts.delayed || 0)
-  }, 0)
+  const active = queues.value.reduce((sum, q) => sum + (q.counts?.active || 0), 0)
+  const waiting = queues.value.reduce((sum, q) => sum + (q.counts?.waiting || 0), 0)
+  const delayed = queues.value.reduce((sum, q) => sum + (q.counts?.delayed || 0), 0)
+  const pending = active + waiting + delayed
   const completed = queues.value.reduce((sum, q) => sum + (q.counts?.completed || 0), 0)
   const failed = queues.value.reduce((sum, q) => sum + (q.counts?.failed || 0), 0)
 
   return {
     total: queues.value.length,
+    active,
+    waiting,
+    delayed,
     pending,
     completed,
     failed,

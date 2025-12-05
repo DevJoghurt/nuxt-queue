@@ -57,7 +57,6 @@ const config = useRuntimeConfig()
 
 // Auto-detect if we're in a full page context (Nuxt route exists and matches configured route path)
 const isFullPage = computed(() => {
-  if (props.fullPage !== undefined) return props.fullPage
   // Check if we're in a Nuxt route context matching the configured nvent route path
   const nventPath = (config.public.nventapp as any)?.routePath || '/_nvent'
   return nuxtRoute?.path?.startsWith(nventPath) ?? false
@@ -66,8 +65,8 @@ const isFullPage = computed(() => {
 // Container height style - full viewport minus header when full page, 100% otherwise
 const containerStyle = computed(() => {
   return isFullPage.value
-    ? 'height: calc(100vh - 4rem)'
-    : 'height: 100vh'
+    ? 'height: 100vh'
+    : 'height: calc(100vh - 4rem)'
 })
 
 // Transform items to include onSelect handlers for routing and active state

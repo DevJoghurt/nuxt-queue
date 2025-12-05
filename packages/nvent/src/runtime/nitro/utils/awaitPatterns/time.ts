@@ -48,7 +48,7 @@ export async function registerTimeAwait(
     },
   })
 
-  // Emit await.registered event (wiring will handle storage)
+  // Emit await.registered event
   eventBus.publish({
     type: 'await.registered',
     flowName,
@@ -58,6 +58,7 @@ export async function registerTimeAwait(
     position,
     config,
     data: {
+      position, // Store position in data for database persistence
       delay: config.delay,
       resolveAt,
       registeredAt: Date.now(),
@@ -94,8 +95,9 @@ export async function resolveTimeAwait(
     runId,
     stepName,
     position,
-    triggerData: timeData,
+    triggerData: {},
     data: {
+      position, // Store position in data for database persistence
       resolvedAt: Date.now(),
     },
   } as any)

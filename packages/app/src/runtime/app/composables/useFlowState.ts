@@ -194,83 +194,53 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
 
       case 'await.registered': {
         if (!stepKey) break
-        // Create entries for both possible positions since we don't know which one applies
-        // The diagram will only show the one that matches the flow configuration
-        const awaitKeyAfter = `${stepKey}:await-after`
-        const awaitKeyBefore = `${stepKey}:await-before`
+        // Use the position from event data to create the correct await entry
+        const position = e.data?.position || 'after' // Default to 'after' for backward compatibility
+        const awaitKey = `${stepKey}:await-${position}`
 
-        // Set both to waiting - only the one that exists in the flow config will be shown
-        if (!state.steps[awaitKeyAfter]) {
-          state.steps[awaitKeyAfter] = { status: 'waiting', attempt: 1 }
+        if (!state.steps[awaitKey]) {
+          state.steps[awaitKey] = { status: 'waiting', attempt: 1 }
         }
-        state.steps[awaitKeyAfter].status = 'waiting'
-        state.steps[awaitKeyAfter].awaitType = e.data?.awaitType
-        state.steps[awaitKeyAfter].awaitData = e.data
+        state.steps[awaitKey].status = 'waiting'
+        state.steps[awaitKey].awaitType = e.data?.awaitType
+        state.steps[awaitKey].awaitData = e.data
         // Capture scheduled trigger time from event data
         const scheduledAt = e.data?.resolveAt || e.data?.nextOccurrence
         if (scheduledAt) {
-          state.steps[awaitKeyAfter].scheduledTriggerAt = new Date(scheduledAt).toISOString()
-        }
-
-        if (!state.steps[awaitKeyBefore]) {
-          state.steps[awaitKeyBefore] = { status: 'waiting', attempt: 1 }
-        }
-        state.steps[awaitKeyBefore].status = 'waiting'
-        state.steps[awaitKeyBefore].awaitType = e.data?.awaitType
-        state.steps[awaitKeyBefore].awaitData = e.data
-        // Capture scheduled trigger time from event data
-        const scheduledAtBefore = e.data?.resolveAt || e.data?.nextOccurrence
-        if (scheduledAtBefore) {
-          state.steps[awaitKeyBefore].scheduledTriggerAt = new Date(scheduledAtBefore).toISOString()
+          state.steps[awaitKey].scheduledTriggerAt = new Date(scheduledAt).toISOString()
         }
         break
       }
 
       case 'await.resolved': {
         if (!stepKey) break
-        // Update both possible positions
-        const awaitKeyAfter = `${stepKey}:await-after`
-        const awaitKeyBefore = `${stepKey}:await-before`
+        // Use the position from event data to update the correct await entry
+        const position = e.data?.position || 'after' // Default to 'after' for backward compatibility
+        const awaitKey = `${stepKey}:await-${position}`
 
-        if (!state.steps[awaitKeyAfter]) {
-          state.steps[awaitKeyAfter] = { status: 'completed', attempt: 1 }
+        if (!state.steps[awaitKey]) {
+          state.steps[awaitKey] = { status: 'completed', attempt: 1 }
         }
-        state.steps[awaitKeyAfter].status = 'completed'
-        state.steps[awaitKeyAfter].completedAt = e.ts
-        state.steps[awaitKeyAfter].awaitType = e.data?.awaitType
-        if (e.data?.triggerData) state.steps[awaitKeyAfter].result = e.data.triggerData
-
-        if (!state.steps[awaitKeyBefore]) {
-          state.steps[awaitKeyBefore] = { status: 'completed', attempt: 1 }
-        }
-        state.steps[awaitKeyBefore].status = 'completed'
-        state.steps[awaitKeyBefore].completedAt = e.ts
-        state.steps[awaitKeyBefore].awaitType = e.data?.awaitType
-        if (e.data?.triggerData) state.steps[awaitKeyBefore].result = e.data.triggerData
+        state.steps[awaitKey].status = 'completed'
+        state.steps[awaitKey].completedAt = e.ts
+        state.steps[awaitKey].awaitType = e.data?.awaitType
+        if (e.data?.triggerData) state.steps[awaitKey].result = e.data.triggerData
         break
       }
 
       case 'await.timeout': {
         if (!stepKey) break
-        // Update both possible positions
-        const awaitKeyAfter = `${stepKey}:await-after`
-        const awaitKeyBefore = `${stepKey}:await-before`
+        // Use the position from event data to update the correct await entry
+        const position = e.data?.position || 'after' // Default to 'after' for backward compatibility
+        const awaitKey = `${stepKey}:await-${position}`
 
-        if (!state.steps[awaitKeyAfter]) {
-          state.steps[awaitKeyAfter] = { status: 'timeout', attempt: 1 }
+        if (!state.steps[awaitKey]) {
+          state.steps[awaitKey] = { status: 'timeout', attempt: 1 }
         }
-        state.steps[awaitKeyAfter].status = 'timeout'
-        state.steps[awaitKeyAfter].error = `Await timeout`
-        state.steps[awaitKeyAfter].completedAt = e.ts
-        state.steps[awaitKeyAfter].awaitType = e.data?.awaitType
-
-        if (!state.steps[awaitKeyBefore]) {
-          state.steps[awaitKeyBefore] = { status: 'timeout', attempt: 1 }
-        }
-        state.steps[awaitKeyBefore].status = 'timeout'
-        state.steps[awaitKeyBefore].error = `Await timeout`
-        state.steps[awaitKeyBefore].completedAt = e.ts
-        state.steps[awaitKeyBefore].awaitType = e.data?.awaitType
+        state.steps[awaitKey].status = 'timeout'
+        state.steps[awaitKey].error = `Await timeout`
+        state.steps[awaitKey].completedAt = e.ts
+        state.steps[awaitKey].awaitType = e.data?.awaitType
         break
       }
 
