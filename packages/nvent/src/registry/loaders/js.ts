@@ -29,6 +29,7 @@ export async function loadJsConfig(absPath: string): Promise<ConfigMeta> {
         emits: flowCfg.emits,
         subscribes,
         triggers: flowCfg.triggers,
+        stepTimeout: flowCfg.stepTimeout,
         awaitBefore: flowCfg.awaitBefore,
         awaitAfter: flowCfg.awaitAfter,
       }
@@ -51,10 +52,11 @@ export async function loadJsConfig(absPath: string): Promise<ConfigMeta> {
   const hasDefaultExport = !!(mod && mod.default)
 
   // Check for lifecycle hooks
-  // Hooks can be plain functions or wrapped with defineAwaitRegisterHook/defineAwaitResolveHook
+  // Hooks can be plain functions or wrapped with defineAwaitRegisterHook/defineAwaitResolveHook/defineAwaitTimeoutHook
   const hasHooks = !!(
     (mod && typeof mod.onAwaitRegister === 'function')
     || (mod && typeof mod.onAwaitResolve === 'function')
+    || (mod && typeof mod.onAwaitTimeout === 'function')
   )
 
   return { queueName, flow, runtype, queue: queueCfg, worker: workerCfg, hasDefaultExport, hasHooks }

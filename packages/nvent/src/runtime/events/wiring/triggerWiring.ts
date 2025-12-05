@@ -551,8 +551,13 @@ export async function startFlowFromTrigger(
     w?.flow?.step === stepName && w?.queue?.name === queueName,
   )
   const defaultOpts = entryWorker?.queue?.defaultJobOptions || {}
+
+  // Get stepTimeout from analyzed flow metadata (calculated during flow analysis)
+  const analyzedEntry = flowDef.analyzed?.steps?.[stepName]
+  const stepTimeout = analyzedEntry?.stepTimeout
+
   const jobId = `${runId}__${stepName}`
-  const opts = { ...defaultOpts, jobId }
+  const opts = { ...defaultOpts, jobId, timeout: stepTimeout }
 
   try {
     // Enqueue the entry step

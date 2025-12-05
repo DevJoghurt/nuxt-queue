@@ -51,6 +51,11 @@ export async function registerWebhookAwait(
 
   logger.info(`Registering webhook await: ${fullWebhookUrl}`, { runId, stepName })
 
+  // Calculate timeout with configurable default
+  const { useAwaitDefaults } = await import('../useAwait')
+  const { webhookTimeout: defaultTimeout, timeoutAction: defaultTimeoutAction } = useAwaitDefaults()
+  const timeoutMs = config.timeout && config.timeout > 0 ? config.timeout : defaultTimeout
+
   // Emit await.registered event (wiring will handle flow state updates)
   eventBus.publish({
     type: 'await.registered',
@@ -61,68 +66,69 @@ export async function registerWebhookAwait(
     position,
     config,
     data: {
+      position, // Store position in data for database persistence
       path,
       method: config.method || 'POST',
-      timeout: config.timeout,
+      timeout: timeoutMs, // Store resolved timeout (with default)
       registeredAt: Date.now(),
       webhookUrl: fullWebhookUrl,
+      timeoutAction: config.timeoutAction || defaultTimeoutAction,
     },
   })
 
-  // Schedule timeout if configured
-  if (config.timeout && config.timeout > 0) {
-    const scheduler = useScheduler()
-    const timeoutAt = Date.now() + config.timeout
-    const jobId = `await-webhook-timeout-${runId}-${stepName}-${position}`
+  // Schedule timeout using the already calculated timeoutMs
+  const scheduler = useScheduler()
+  const timeoutAt = Date.now() + timeoutMs
+  const jobId = `await-webhook-timeout-${runId}-${stepName}-${position}`
 
-    await scheduler.schedule({
-      id: jobId,
-      name: `Webhook Timeout: ${flowName} - ${stepName}`,
-      type: 'one-time',
-      executeAt: timeoutAt,
-      handler: async () => {
-        logger.warn('Webhook await timeout', {
-          runId,
-          stepName,
-          flowName,
-          timeout: config.timeout,
-          timeoutAction: config.timeoutAction || 'fail',
-        })
-
-        // Emit timeout event
-        eventBus.publish({
-          type: 'await.timeout',
-          flowName,
-          runId,
-          stepName,
-          position,
-          awaitType: 'webhook',
-          timeoutAction: config.timeoutAction || 'fail',
-          data: {
-            timeout: config.timeout,
-            registeredAt: Date.now() - (config.timeout || 0),
-            timedOutAt: Date.now(),
-          },
-        } as any)
-      },
-      metadata: {
-        component: 'await-pattern',
-        awaitType: 'webhook',
+  await scheduler.schedule({
+    id: jobId,
+    name: `Webhook Timeout: ${flowName} - ${stepName}`,
+    type: 'one-time',
+    executeAt: timeoutAt,
+    handler: async () => {
+      logger.warn('Webhook await timeout', {
         runId,
         stepName,
         flowName,
-        position,
-        timeout: config.timeout,
-      },
-    })
+        timeout: timeoutMs,
+        timeoutAction: config.timeoutAction || 'fail',
+      })
 
-    logger.debug(`Webhook timeout scheduled`, {
+      // Emit timeout event
+      eventBus.publish({
+        type: 'await.timeout',
+        flowName,
+        runId,
+        stepName,
+        position,
+        awaitType: 'webhook',
+        timeoutAction: config.timeoutAction || 'fail',
+        data: {
+          timeout: timeoutMs,
+          registeredAt: Date.now() - timeoutMs,
+          timedOutAt: Date.now(),
+        },
+      } as any)
+    },
+    metadata: {
+      component: 'await-pattern',
+      awaitType: 'webhook',
       runId,
       stepName,
-      timeout: config.timeout,
-      timeoutAction: config.timeoutAction,
-    })
-  }
+      flowName,
+      position,
+      timeout: timeoutMs,
+    },
+  })
+
+  logger.debug(`Webhook timeout scheduled`, {
+    runId,
+    stepName,
+    timeout: timeoutMs,
+    timeoutAction: config.timeoutAction,
+    isDefault: !config.timeout || config.timeout <= 0,
+  })
 
   logger.debug(`Webhook await registered: ${fullWebhookUrl}`, { runId, stepName })
 
@@ -168,6 +174,7 @@ export async function resolveWebhookAwait(
     position,
     triggerData: webhookData,
     data: {
+      position, // Store position in data for database persistence
       resolvedAt: Date.now(),
     },
   } as any)

@@ -3,6 +3,7 @@ import type { AwaitRegisteredEvent, AwaitResolvedEvent } from '../types'
 import { getEventBus } from '../eventBus'
 import { useNventLogger, useStoreAdapter, useQueueAdapter, $useAnalyzedFlows, $useFunctionRegistry, useStreamTopics, useRuntimeConfig, useScheduler } from '#imports'
 import { createStallDetector } from '../utils/stallDetector'
+import { SYSTEM_HANDLERS } from '../../worker/system'
 
 /**
  * Check if all dependencies for a step are met
@@ -124,53 +125,19 @@ export async function checkAndTriggerPendingSteps(
       // Skip if step doesn't have dependencies or already completed
       if (!step.subscribes || completedSteps.has(stepName)) continue
 
-      // Check await state - skip if step is currently awaiting (not resolved)
-      const awaitState = flowEntry?.metadata?.awaitingSteps?.[stepName]
-      if (awaitState && awaitState.status === 'awaiting') {
-        logger.debug('Step is awaiting, skipping trigger', {
-          flowName,
-          runId,
-          stepName,
-          awaitType: awaitState.awaitType,
-          position: awaitState.position,
-          status: awaitState.status,
-        })
-        continue
-      }
-
-      // Skip if await has timed out - step should not be retried
-      if (awaitState && awaitState.status === 'timeout') {
-        logger.debug('Step await timed out, skipping trigger', {
-          flowName,
-          runId,
-          stepName,
-          awaitType: awaitState.awaitType,
-        })
-        continue
-      }
-
-      // If await is resolved, allow the step to proceed
-      if (awaitState?.status === 'resolved') {
-        logger.debug('Step await is resolved, will proceed', {
-          flowName,
-          runId,
-          stepName,
-          awaitType: awaitState.awaitType,
-          position: awaitState.position,
-        })
-      }
+      // Check await state using composite key for awaitBefore
+      const awaitBeforeKey = `${stepName}:before`
+      const awaitState = flowEntry?.metadata?.awaitingSteps?.[awaitBeforeKey]
+      if (awaitState && awaitState.status === 'awaiting') continue
+      if (awaitState && awaitState.status === 'timeout') continue
 
       // Check if any dependency steps are currently awaiting (awaitAfter pattern)
       // If a step has awaitAfter, its emits should be blocked until await is resolved
       const isDependencyAwaiting = step.subscribes.some((sub: string) => {
-        // Find which step emitted this event by looking through all events
         const emitEvent = allEvents.find((evt: any) =>
           evt.type === 'emit' && evt.data?.name === sub,
         )
-
-        if (!emitEvent) {
-          return false // Emit hasn't happened yet
-        }
+        if (!emitEvent) return false
 
         const emitStepName = emitEvent.stepName
 
@@ -178,12 +145,12 @@ export async function checkAndTriggerPendingSteps(
           return false
         }
 
-        // Check if the emitting step is awaiting in flow index metadata
-        const awaitState = awaitingSteps[emitStepName]
+        // Check if the emitting step is awaiting (awaitAfter) using composite key
+        const awaitAfterKey = `${emitStepName}:after`
+        const awaitState = awaitingSteps[awaitAfterKey]
 
-        // If the step is awaiting after completion, its emits are blocked
-        // BUT: Only block if status is 'awaiting', not if it's 'resolved'
-        if (awaitState?.position === 'after' && awaitState?.status === 'awaiting') {
+        // Block if dependency is awaiting after completion
+        if (awaitState?.status === 'awaiting') {
           return true
         }
 
@@ -201,37 +168,123 @@ export async function checkAndTriggerPendingSteps(
           emittingStepMeta = (flowDef as any).entry
         }
 
-        // If the step has awaitAfter, check if await cycle is complete
+        // Fallback: Check if emitting step has awaitAfter that hasn't resolved
         if (emittingStepMeta?.awaitAfter) {
-          // Check if this step has completed
           const stepCompleted = allEvents.some((evt: any) =>
             evt.type === 'step.completed' && evt.stepName === emitStepName,
           )
-
           if (stepCompleted) {
-            // Check if await has been resolved
             const awaitResolved = allEvents.some((evt: any) =>
-              evt.type === 'await.resolved' && evt.stepName === emitStepName,
+              evt.type === 'await.resolved'
+              && evt.stepName === emitStepName
+              && evt.position === 'after',
             )
-
-            // Block if await hasn't resolved yet
-            if (!awaitResolved) {
-              return true
-            }
+            if (!awaitResolved) return true
           }
         }
 
         return false
       })
 
-      if (isDependencyAwaiting) {
-        continue
-      }
+      if (isDependencyAwaiting) continue
 
       // Check if all dependencies are now satisfied
       const canTrigger = checkPendingStepTriggers(step, emittedEvents, completedSteps)
 
-      if (canTrigger) {
+      // awaitBefore: Register await pattern before step executes
+      if (canTrigger && step.awaitBefore) {
+        // If awaiting, skip this step for now
+        if (awaitState?.status === 'awaiting') continue
+
+        // If not yet registered (undefined or other status), register it
+        if (awaitState?.status !== 'resolved') {
+          // First time dependencies satisfied - register await pattern
+          try {
+            // Collect emit data from dependencies
+            const emitData: Record<string, any> = {}
+            const subscribes = step.subscribes || []
+
+            for (const sub of subscribes) {
+              const emitEvent = allEvents.find((evt: any) =>
+                evt.type === 'emit' && (evt.data as any)?.name === sub,
+              ) as EventRecord | undefined
+
+              if (emitEvent && (emitEvent.data as any)?.payload !== undefined) {
+                emitData[sub] = (emitEvent.data as any).payload
+              }
+            }
+
+            const payload = {
+              flowId: runId,
+              flowName,
+              stepName,
+              position: 'before' as const,
+              awaitConfig: step.awaitBefore,
+              input: emitData,
+            }
+
+            const jobId = `${runId}__${stepName}__await-register-before`
+
+            // Get the step's queue from registry
+            const flowRegistry = (registry?.flows || {})[flowName]
+            const stepMeta = flowRegistry?.steps?.[stepName]
+            let stepQueue = stepMeta?.queue
+
+            // Check if this is the entry step
+            if (!stepQueue && flowRegistry?.entry?.step === stepName) {
+              stepQueue = flowRegistry.entry.queue
+            }
+
+            // Fallback: search all workers for this flow+step combination
+            if (!stepQueue && registry?.workers) {
+              const worker = (registry.workers as any[]).find((w: any) => {
+                const flowNames = w?.flow?.names || (w?.flow?.name ? [w?.flow?.name] : [])
+                const stepMatch = w?.flow?.step === stepName || (Array.isArray(w?.flow?.step) && w?.flow?.step.includes(stepName))
+                return flowNames.includes(flowName) && stepMatch
+              })
+              stepQueue = worker?.queue?.name
+            }
+
+            if (!stepQueue) {
+              logger.error('Cannot find queue for step', {
+                stepName,
+                flowName,
+                availableSteps: Object.keys(flowRegistry?.steps || {}),
+                entryStep: flowRegistry?.entry?.step,
+              })
+              throw new Error(`Cannot register await: queue not found for step ${stepName} in flow ${flowName}`)
+            }
+
+            // System handlers execute user-defined lifecycle hooks, so they need timeout
+            // Use the same stepTimeout as the step itself since they're part of the step lifecycle
+            const analyzedAwaitStep = (flowDef.analyzed?.steps || {})[stepName]
+            const awaitStepTimeout = analyzedAwaitStep?.stepTimeout
+
+            await queue.enqueue(stepQueue, {
+              name: SYSTEM_HANDLERS.AWAIT_REGISTER,
+              data: payload,
+              opts: { jobId, timeout: awaitStepTimeout },
+            })
+          }
+          catch (err) {
+            logger.error('Failed to register awaitBefore pattern', {
+              flowName,
+              stepName,
+              error: (err as Error).message,
+            })
+          }
+
+          continue
+        }
+        // If awaitBefore is resolved, fall through to enqueue the step
+      }
+
+      // Only enqueue step if:
+      // 1. Dependencies are satisfied (canTrigger)
+      // 2. Either no awaitBefore, OR awaitBefore is resolved
+      const shouldEnqueueStep = canTrigger && (!step.awaitBefore || awaitState?.status === 'resolved')
+
+      if (shouldEnqueueStep) {
         // Find the queue for this step from registry
         const flowRegistry = (registry?.flows || {})[flowName]
         const stepMeta = flowRegistry?.steps?.[stepName]
@@ -260,12 +313,17 @@ export async function checkAndTriggerPendingSteps(
           }
 
           // If step had awaitBefore that's now resolved, include await data and mark as resolved
-          if (awaitState?.status === 'resolved' && awaitState?.position === 'before') {
+          const isAwaitResuming = awaitState?.status === 'resolved' && awaitState?.position === 'before'
+          if (isAwaitResuming) {
             payload.awaitResolved = true
             payload.awaitData = awaitState.triggerData
+            payload.awaitPosition = 'before' // Tell runner this is resuming from awaitBefore
           }
 
-          const jobId = `${runId}__${stepName}`
+          // Use different jobId when resuming after awaitBefore to bypass idempotency
+          const jobId = isAwaitResuming
+            ? `${runId}__${stepName}__resumed`
+            : `${runId}__${stepName}`
 
           // Get default job options from registry worker config (includes attempts config)
           // Find the worker for this step to get its queue.defaultJobOptions
@@ -273,13 +331,18 @@ export async function checkAndTriggerPendingSteps(
             w?.flow?.step === stepName && w?.queue?.name === stepMeta.queue,
           )
           const defaultOpts = worker?.queue?.defaultJobOptions || {}
-          const opts = { ...defaultOpts, jobId }
+
+          // Get stepTimeout from analyzed flow metadata (calculated during flow analysis)
+          const analyzedStep = (flowDef.analyzed?.steps || {})[stepName]
+          const stepTimeout = analyzedStep?.stepTimeout
+
+          const opts = { ...defaultOpts, jobId, timeout: stepTimeout }
 
           try {
             await queue.enqueue(stepMeta.queue, { name: stepName, data: payload, opts })
           }
           catch {
-            // Already enqueued - idempotency working correctly
+            // Ignore - likely already enqueued (idempotency)
           }
         }
       }
@@ -662,6 +725,30 @@ export function createFlowWiring() {
         await bus.publish(persistedEvent as any)
 
         if (e.type === 'flow.completed' || e.type === 'flow.failed') {
+          // Unschedule ALL flow-related scheduled jobs (stall timeout + await timeouts)
+          try {
+            const scheduler = useScheduler()
+
+            // Query persisted jobs by runId pattern (efficient, works across instances)
+            const flowJobs = await scheduler.getJobsByPattern(runId)
+
+            // Unschedule all matching jobs
+            for (const job of flowJobs) {
+              await scheduler.unschedule(job.id)
+              logger.debug(`Unscheduled job for ${e.type} flow: ${job.id}`)
+            }
+
+            logger.debug(`Unscheduled ${flowJobs.length} scheduled jobs for ${e.type} flow runId '${runId}'`, {
+              jobs: flowJobs.map(j => j.id),
+            })
+          }
+          catch (error) {
+            // Job may not exist or already fired - this is fine
+            logger.debug(`Could not unschedule jobs for runId '${runId}'`, {
+              error: (error as Error).message,
+            })
+          }
+
           // Clean up the publishing tracker after a short delay to ensure
           // all concurrent orchestration handlers have finished their checks
           const publishKey = `${runId}:terminal`
@@ -830,11 +917,21 @@ export function createFlowWiring() {
         }
       }
       catch (err) {
-        logger.warn('Failed to update flow stats', {
-          type: e.type,
-          flowName: e.flowName,
-          error: (err as any)?.message,
-        })
+        // Only log if it's not an "Entry not found" error (which is expected for new flows)
+        const errorMsg = (err as any)?.message || ''
+        if (!errorMsg.includes('Entry not found')) {
+          logger.warn('Failed to update flow stats', {
+            type: e.type,
+            flowName: e.flowName,
+            error: errorMsg,
+          })
+        }
+        else {
+          logger.debug('Flow entry not found (will be created)', {
+            type: e.type,
+            flowName: e.flowName,
+          })
+        }
       }
     }
 
@@ -866,6 +963,7 @@ export function createFlowWiring() {
         // For flow.start, initialize index with running status
         if (e.type === 'flow.start') {
           const timestamp = Date.now()
+
           await indexFlowRun(flowName, runId, timestamp, {
             status: 'running',
             startedAt: timestamp,
@@ -874,6 +972,43 @@ export function createFlowWiring() {
             completedSteps: 0,
             emittedEvents: {}, // Object for atomic updates
           })
+
+          // Schedule per-flow stall timeout job
+          try {
+            // Get stallTimeout from analyzed flows
+            const analyzedFlows = $useAnalyzedFlows() as any[]
+            const flowMeta = analyzedFlows.find((f: any) => f.id === flowName)
+            const stallTimeout = flowMeta?.analyzed?.stallTimeout || (30 * 60 * 1000)
+
+            const scheduler = useScheduler()
+            const stallJobId = `stall-timeout:${runId}`
+
+            await scheduler.schedule({
+              id: stallJobId,
+              name: `Stall Timeout - ${flowName}`,
+              type: 'one-time',
+              executeAt: timestamp + stallTimeout,
+              handler: async () => {
+                // Mark this specific flow as stalled
+                if (stallDetector) {
+                  logger.info(`Per-flow stall timeout fired for '${flowName}' runId '${runId}'`)
+                  await stallDetector.markAsStalled(flowName, runId, 'Stall timeout reached')
+                }
+              },
+              metadata: {
+                component: 'stall-detector',
+                flowName,
+                runId,
+              },
+            })
+
+            logger.debug(`Scheduled stall timeout for flow '${flowName}' runId '${runId}' in ${stallTimeout / 1000}s`, { jobId: stallJobId })
+          }
+          catch (error) {
+            logger.warn(`Failed to schedule stall timeout for flow '${flowName}' runId '${runId}'`, {
+              error: (error as Error).message,
+            })
+          }
         }
 
         // For flow.cancel, update status to canceled
@@ -887,9 +1022,25 @@ export function createFlowWiring() {
 
               logger.info('Marked flow as canceled', { flowName, runId })
             }
+
+            // Unschedule ALL flow-related scheduled jobs (stall timeout + await timeouts)
+            const scheduler = useScheduler()
+
+            // Query persisted jobs by runId pattern (efficient, works across instances)
+            const flowJobs = await scheduler.getJobsByPattern(runId)
+
+            // Unschedule all matching jobs
+            for (const job of flowJobs) {
+              await scheduler.unschedule(job.id)
+              logger.debug(`Unscheduled job for canceled flow: ${job.id}`)
+            }
+
+            logger.debug(`Unscheduled ${flowJobs.length} scheduled jobs for canceled flow runId '${runId}'`, {
+              jobs: flowJobs.map(j => j.id),
+            })
           }
           catch (err) {
-            logger.warn('Failed to update canceled status', {
+            logger.warn('Failed to update canceled status or unschedule flow jobs', {
               flowName,
               runId,
               error: (err as any)?.message,
@@ -897,10 +1048,45 @@ export function createFlowWiring() {
           }
         }
 
-        // For step events, update activity timestamp (stall detection)
+        // For step events, reschedule stall timeout (extend deadline)
         if (e.type === 'step.started' || e.type === 'step.completed' || e.type === 'step.failed' || e.type === 'step.retry') {
-          if (stallDetector) {
-            await stallDetector.updateActivity(flowName, runId)
+          try {
+            const scheduler = useScheduler()
+            const stallJobId = `stall-timeout:${runId}`
+
+            // Get flow-specific stall timeout
+            const analyzedFlows = $useAnalyzedFlows() as any[]
+            const flowMeta = analyzedFlows.find((f: any) => f.id === flowName)
+            const stallTimeout = flowMeta?.analyzed?.stallTimeout || (30 * 60 * 1000)
+
+            // Reschedule by canceling and creating new job with extended deadline
+            await scheduler.unschedule(stallJobId)
+            await scheduler.schedule({
+              id: stallJobId,
+              name: `Stall Timeout - ${flowName}`,
+              type: 'one-time',
+              executeAt: Date.now() + stallTimeout,
+              handler: async () => {
+                if (stallDetector) {
+                  logger.info(`Per-flow stall timeout fired for '${flowName}' runId '${runId}'`)
+                  await stallDetector.markAsStalled(flowName, runId, 'Stall timeout reached')
+                }
+              },
+              metadata: {
+                component: 'stall-detector',
+                flowName,
+                runId,
+                stallTimeout,
+              },
+            })
+
+            logger.debug(`Rescheduled stall timeout for flow '${flowName}' runId '${runId}' (activity: ${e.type})`)
+          }
+          catch (error) {
+            // Job may not exist (already completed) or scheduler not available - log but don't fail
+            logger.debug(`Could not reschedule stall timeout for flow '${flowName}' runId '${runId}'`, {
+              error: (error as Error).message,
+            })
           }
         }
 
@@ -958,10 +1144,15 @@ export function createFlowWiring() {
                 timeoutAt = now + (24 * 60 * 60 * 1000) // 24 hours default
               }
 
+              // Use composite key: stepName:position to support both awaitBefore and awaitAfter
+              const awaitKey = `${stepName}:${position}`
+
               const updatePayload = {
+                status: 'awaiting', // Set flow status to awaiting
                 awaitingSteps: {
-                  [stepName]: {
+                  [awaitKey]: {
                     status: 'awaiting',
+                    stepName, // Keep stepName for queries
                     awaitType,
                     position,
                     config,
@@ -994,22 +1185,103 @@ export function createFlowWiring() {
         // For await.resolved events, update status and resume step
         if (e.type === 'await.resolved') {
           const awaitEvent = e as unknown as AwaitResolvedEvent
-          const { stepName, triggerData } = awaitEvent
+          const { stepName, triggerData, position } = awaitEvent
 
           try {
             if (store.index.updateWithRetry) {
+              // Use composite key: stepName:position to support both awaitBefore and awaitAfter
+              const awaitKey = `${stepName}:${position}`
+
               await store.index.updateWithRetry(indexKey, runId, {
                 awaitingSteps: {
-                  [stepName]: {
+                  [awaitKey]: {
                     status: 'resolved',
+                    stepName, // Keep stepName for queries
                     triggerData,
+                    position,
                   },
                 },
               })
             }
 
-            // Resume the step by checking pending steps
-            // The step will be triggered if all its dependencies are now satisfied
+            // Enqueue system handler to process await resolution
+            const queue = useQueueAdapter()
+
+            // Get input data from the flow state
+            const { StoreSubjects } = useStreamTopics()
+            const streamName = StoreSubjects.flowRun(runId)
+            const inputData: any = {}
+
+            if (store.stream.read) {
+              const events = await store.stream.read(streamName, { limit: 100 })
+              const registry = $useFunctionRegistry() as any
+              const flowRegistry = (registry?.flows || {})[flowName]
+              const stepMeta = flowRegistry?.steps?.[stepName]
+              const subscribes = stepMeta?.subscribes || []
+
+              for (const sub of subscribes) {
+                const emitEvent = events.find((evt: any) =>
+                  evt.type === 'emit' && (evt.data as any)?.name === sub,
+                )
+                if (emitEvent && (emitEvent.data as any)?.payload !== undefined) {
+                  inputData[sub] = (emitEvent.data as any).payload
+                }
+              }
+            }
+
+            const { SYSTEM_HANDLERS } = await import('../../worker/system')
+
+            const payload = {
+              flowId: runId,
+              flowName,
+              stepName,
+              position,
+              triggerData,
+              input: inputData,
+            }
+
+            const jobId = `${runId}__${stepName}__await-resolve`
+
+            // Get the step's queue from registry
+            const registry = $useFunctionRegistry() as any
+            const flowRegistry = (registry?.flows || {})[flowName]
+            const stepMeta = flowRegistry?.steps?.[stepName]
+            let stepQueue = stepMeta?.queue
+
+            // Check if this is the entry step
+            if (!stepQueue && flowRegistry?.entry?.step === stepName) {
+              stepQueue = flowRegistry.entry.queue
+            }
+
+            // Fallback: search all workers for this flow+step combination
+            if (!stepQueue && registry?.workers) {
+              const worker = (registry.workers as any[]).find((w: any) => {
+                const flowNames = w?.flow?.names || (w?.flow?.name ? [w?.flow?.name] : [])
+                const stepMatch = w?.flow?.step === stepName || (Array.isArray(w?.flow?.step) && w?.flow?.step.includes(stepName))
+                return flowNames.includes(flowName) && stepMatch
+              })
+              stepQueue = worker?.queue?.name
+            }
+
+            if (!stepQueue) {
+              logger.error('Cannot find queue for step', {
+                stepName,
+                flowName,
+                availableSteps: Object.keys(flowRegistry?.steps || {}),
+                entryStep: flowRegistry?.entry?.step,
+              })
+              throw new Error(`Cannot resolve await: queue not found for step ${stepName} in flow ${flowName}`)
+            }
+
+            await queue.enqueue(stepQueue, {
+              name: SYSTEM_HANDLERS.AWAIT_RESOLVE,
+              data: payload,
+              opts: { jobId },
+            })
+
+            // Trigger orchestration to check pending steps
+            // For awaitBefore: check if this step can now be enqueued
+            // For awaitAfter: check if dependent steps can now be triggered
             await checkAndTriggerPendingSteps(flowName, runId, store)
           }
           catch (err) {
@@ -1036,6 +1308,79 @@ export function createFlowWiring() {
           })
 
           try {
+            // Enqueue system handler to process await timeout
+            const queue = useQueueAdapter()
+
+            // Get input data from the flow state
+            const { StoreSubjects } = useStreamTopics()
+            const streamName = StoreSubjects.flowRun(runId)
+            const inputData: any = {}
+
+            if (store.stream.read) {
+              const events = await store.stream.read(streamName, { limit: 100 })
+              const registry = $useFunctionRegistry() as any
+              const flowRegistry = (registry?.flows || {})[flowName]
+              const stepMeta = flowRegistry?.steps?.[stepName]
+              const subscribes = stepMeta?.subscribes || []
+
+              for (const sub of subscribes) {
+                const emitEvent = events.find((evt: any) =>
+                  evt.type === 'emit' && (evt.data as any)?.name === sub,
+                )
+                if (emitEvent && (emitEvent.data as any)?.payload !== undefined) {
+                  inputData[sub] = (emitEvent.data as any).payload
+                }
+              }
+            }
+
+            const payload = {
+              flowId: runId,
+              flowName,
+              stepName,
+              position,
+              timeoutAction: action,
+              input: inputData,
+            }
+
+            const jobId = `${runId}__${stepName}__await-timeout`
+
+            // Get the step's queue from registry
+            const registry = $useFunctionRegistry() as any
+            const flowRegistry = (registry?.flows || {})[flowName]
+            const stepMeta = flowRegistry?.steps?.[stepName]
+            let stepQueue = stepMeta?.queue
+
+            // Check if this is the entry step
+            if (!stepQueue && flowRegistry?.entry?.step === stepName) {
+              stepQueue = flowRegistry.entry.queue
+            }
+
+            // Fallback: search all workers for this flow+step combination
+            if (!stepQueue && registry?.workers) {
+              const worker = (registry.workers as any[]).find((w: any) => {
+                const flowNames = w?.flow?.names || (w?.flow?.name ? [w?.flow?.name] : [])
+                const stepMatch = w?.flow?.step === stepName || (Array.isArray(w?.flow?.step) && w?.flow?.step.includes(stepName))
+                return flowNames.includes(flowName) && stepMatch
+              })
+              stepQueue = worker?.queue?.name
+            }
+
+            if (!stepQueue) {
+              logger.error('Cannot find queue for step', {
+                stepName,
+                flowName,
+                availableSteps: Object.keys(flowRegistry?.steps || {}),
+                entryStep: flowRegistry?.entry?.step,
+              })
+              throw new Error(`Cannot handle await timeout: queue not found for step ${stepName} in flow ${flowName}`)
+            }
+
+            await queue.enqueue(stepQueue, {
+              name: SYSTEM_HANDLERS.AWAIT_TIMEOUT,
+              data: payload,
+              opts: { jobId },
+            })
+
             if (action === 'fail') {
               // Mark await as failed and fail the step/flow
               if (store.index.updateWithRetry) {
@@ -1385,74 +1730,14 @@ export function createFlowWiring() {
     }
 
     // Initialize and start stall detector
+    // Note: Stall detection now uses per-flow scheduler jobs (scheduled on flow.start)
+    // No periodic background job needed
     const config = useRuntimeConfig()
     const flowConfig = (config as any).nvent.flow || {}
     stallDetector = createStallDetector(store, flowConfig.stallDetection)
-    if (flowConfig.stallDetection?.enabled) {
+    if (flowConfig.stallDetection?.enabled !== false) {
       await stallDetector.start()
-
-      // Schedule the periodic check job HERE in flowWiring (not in the class)
-      // This ensures the handler closure has the correct context
-      const scheduleConfig = stallDetector.getScheduleConfig()
-      if (scheduleConfig.enabled) {
-        try {
-          const scheduler = useScheduler()
-
-          logger.info('Scheduling periodic stall detector from flowWiring', {
-            checkInterval: `${scheduleConfig.interval / 1000}s`,
-          })
-
-          const jobId = await scheduler.schedule({
-            id: 'stall-detection',
-            name: 'Flow Stall Detection',
-            type: 'interval',
-            interval: scheduleConfig.interval,
-            handler: async () => {
-              // Guard: Check if detector still exists (shutdown scenario)
-              if (!stallDetector || !wired) {
-                logger.debug('Stall detector handler called but wiring stopped')
-                return
-              }
-
-              try {
-                logger.info('Stall detector running periodic check')
-                // Get flow names and call the detector's check method
-                const analyzedFlows = $useAnalyzedFlows() as any[]
-                const flowNames = analyzedFlows.map((f: any) => f.id).filter(Boolean)
-
-                if (flowNames.length > 0) {
-                  await stallDetector.checkFlowsForStalls(flowNames)
-                }
-              }
-              catch (error) {
-                logger.error('Stall detector periodic check failed', {
-                  error: (error as Error).message,
-                  stack: (error as Error).stack,
-                })
-                // Don't rethrow - let scheduler continue on next interval
-              }
-            },
-            metadata: {
-              component: 'stall-detector',
-              stallTimeout: scheduleConfig.stallTimeout,
-              checkInterval: scheduleConfig.interval,
-            },
-          })
-
-          stallDetector.setSchedulerJobId(jobId)
-          logger.info('Stall detector started and scheduled', { jobId })
-        }
-        catch (error) {
-          logger.error('Failed to schedule stall detector - periodic checks disabled', {
-            error: (error as Error).message,
-            stack: (error as Error).stack,
-          })
-          // Detector still runs startup recovery and lazy detection
-        }
-      }
-      else {
-        logger.info('Stall detector started (periodic check disabled)')
-      }
+      logger.info('Stall detector initialized - using per-flow scheduler jobs')
     }
   }
 

@@ -78,6 +78,18 @@
           >
             {{ getAwaitPosition(item.step.key) }}
           </UBadge>
+          <!-- Step Timeout Badge (only for regular steps, not await steps) -->
+          <span
+            v-if="item.step.stepTimeout && !isAwaitStep(item.step.key)"
+            class="flex items-center gap-1"
+            :title="`Step Execution Timeout: ${formatDuration(item.step.stepTimeout)}`"
+          >
+            <UIcon
+              name="i-lucide-hourglass"
+              class="w-3 h-3 opacity-60"
+            />
+            <span>{{ formatDuration(item.step.stepTimeout) }}</span>
+          </span>
         </div>
         <div
           v-else
@@ -141,7 +153,7 @@
 
           <!-- Await Config Details -->
           <div
-            v-if="item.step.awaitType"
+            v-if="item.step.awaitType && (item.step.awaitConfig || item.step.awaitData)"
             class="mt-2 p-2.5 rounded-md border"
             :class="getAwaitConfigBgClass(item.step.status)"
           >
@@ -165,119 +177,174 @@
               <div class="space-y-1.5 text-xs">
                 <!-- Webhook specific -->
                 <div
-                  v-if="item.step.awaitType === 'webhook' && item.step.awaitConfig"
+                  v-if="item.step.awaitType === 'webhook'"
                   class="space-y-1"
                 >
                   <div
-                    v-if="item.step.awaitConfig.method"
+                    v-if="item.step.awaitConfig?.method || item.step.awaitData?.method"
                     class="flex items-center gap-1.5"
                   >
                     <UIcon
-                      name="i-lucide-route"
+                      name="i-lucide-git-branch"
                       class="w-3 h-3 opacity-60"
                     />
                     <span class="opacity-75">Method:</span>
                     <UBadge
                       size="xs"
-                      :color="getMethodBadgeColor(item.step.awaitConfig.method)"
+                      :color="getMethodBadgeColor(item.step.awaitData?.method || item.step.awaitConfig?.method)"
                       variant="subtle"
                     >
-                      {{ item.step.awaitConfig.method }}
+                      {{ item.step.awaitData?.method || item.step.awaitConfig?.method }}
                     </UBadge>
                   </div>
                   <div
-                    v-if="item.step.awaitConfig.path"
+                    v-if="item.step.awaitData?.webhookUrl"
                     class="flex items-start gap-1.5"
                   >
                     <UIcon
                       name="i-lucide-link"
                       class="w-3 h-3 opacity-60 mt-0.5"
                     />
-                    <span class="opacity-75">Path:</span>
-                    <code class="px-1.5 py-0.5 bg-black/5 dark:bg-white/5 rounded text-[10px] flex-1">{{ item.step.awaitConfig.path }}</code>
-                  </div>
-                  <div
-                    v-if="item.step.webhookUrl"
-                    class="flex items-start gap-1.5 pt-1"
-                  >
-                    <UIcon
-                      name="i-lucide-globe"
-                      class="w-3 h-3 opacity-60 mt-1"
-                    />
-                    <span class="opacity-75 mt-0.5">URL:</span>
+                    <span class="opacity-75">URL:</span>
                     <div class="flex-1 flex items-start gap-1">
-                      <code class="px-1.5 py-0.5 bg-black/5 dark:bg-white/5 rounded text-[10px] flex-1 break-all">{{ item.step.webhookUrl }}</code>
+                      <code class="px-1.5 py-0.5 bg-black/5 dark:bg-white/5 rounded text-[10px] flex-1 break-all">{{ item.step.awaitData.webhookUrl }}</code>
                       <button
                         type="button"
                         class="flex-shrink-0 p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded transition-colors"
-                        :title="copiedUrl === item.step.webhookUrl ? 'Copied!' : 'Copy URL'"
-                        @click.stop="copyToClipboard(item.step.webhookUrl)"
+                        :title="copiedUrl === item.step.awaitData.webhookUrl ? 'Copied!' : 'Copy URL'"
+                        @click.stop="copyToClipboard(item.step.awaitData.webhookUrl)"
                       >
                         <UIcon
-                          :name="copiedUrl === item.step.webhookUrl ? 'i-lucide-check' : 'i-lucide-copy'"
+                          :name="copiedUrl === item.step.awaitData.webhookUrl ? 'i-lucide-check' : 'i-lucide-copy'"
                           class="w-3 h-3"
-                          :class="copiedUrl === item.step.webhookUrl ? 'text-emerald-600 dark:text-emerald-400' : 'opacity-60'"
+                          :class="copiedUrl === item.step.awaitData.webhookUrl ? 'text-emerald-600 dark:text-emerald-400' : 'opacity-60'"
                         />
                       </button>
                     </div>
+                  </div>
+                  <div
+                    v-else-if="item.step.awaitConfig?.path"
+                    class="flex items-start gap-1.5"
+                  >
+                    <UIcon
+                      name="i-lucide-route"
+                      class="w-3 h-3 opacity-60 mt-0.5"
+                    />
+                    <span class="opacity-75">Path:</span>
+                    <code class="px-1.5 py-0.5 bg-black/5 dark:bg-white/5 rounded text-[10px] flex-1">{{ item.step.awaitConfig.path }}</code>
                   </div>
                 </div>
 
                 <!-- Event specific -->
                 <div
-                  v-if="item.step.awaitType === 'event' && item.step.awaitConfig?.event"
-                  class="flex items-center gap-1.5"
+                  v-if="item.step.awaitType === 'event'"
+                  class="space-y-1"
                 >
-                  <UIcon
-                    name="i-lucide-radio"
-                    class="w-3 h-3 opacity-60"
-                  />
-                  <span class="opacity-75">Event:</span>
-                  <code class="px-1.5 py-0.5 bg-black/5 dark:bg-white/5 rounded text-xs">{{ item.step.awaitConfig.event }}</code>
+                  <div
+                    v-if="item.step.awaitConfig?.event || item.step.awaitData?.eventName"
+                    class="flex items-center gap-1.5"
+                  >
+                    <UIcon
+                      name="i-lucide-zap"
+                      class="w-3 h-3 opacity-60"
+                    />
+                    <span class="opacity-75">Event:</span>
+                    <code class="px-1.5 py-0.5 bg-black/5 dark:bg-white/5 rounded text-[10px]">{{ item.step.awaitData?.eventName || item.step.awaitConfig?.event }}</code>
+                  </div>
+                  <div
+                    v-if="item.step.awaitConfig?.filterKey || item.step.awaitData?.filterKey"
+                    class="flex items-center gap-1.5"
+                  >
+                    <UIcon
+                      name="i-lucide-filter"
+                      class="w-3 h-3 opacity-60"
+                    />
+                    <span class="opacity-75">Filter:</span>
+                    <code class="px-1.5 py-0.5 bg-black/5 dark:bg-white/5 rounded text-[10px]">{{ item.step.awaitData?.filterKey || item.step.awaitConfig?.filterKey }}</code>
+                  </div>
                 </div>
 
                 <!-- Time specific -->
                 <div
                   v-if="item.step.awaitType === 'time' && item.step.awaitConfig?.delay"
+                  class="space-y-1"
+                >
+                  <div class="flex items-center gap-1.5">
+                    <UIcon
+                      name="i-lucide-timer"
+                      class="w-3 h-3 opacity-60"
+                    />
+                    <span class="opacity-75">Delay:</span>
+                    <span class="font-medium">{{ formatDuration(item.step.awaitConfig.delay) }}</span>
+                  </div>
+                  <div
+                    v-if="item.step.scheduledTriggerAt"
+                    class="flex items-center gap-1.5"
+                  >
+                    <UIcon
+                      name="i-lucide-calendar-clock"
+                      class="w-3 h-3 opacity-60"
+                    />
+                    <span class="opacity-75">Triggers at:</span>
+                    <span class="font-medium">{{ formatScheduledTime(item.step.scheduledTriggerAt) }}</span>
+                  </div>
+                </div>
+
+                <!-- Schedule specific -->
+                <div
+                  v-if="item.step.awaitType === 'schedule' && item.step.awaitConfig?.cron"
+                  class="space-y-1"
+                >
+                  <div class="flex items-center gap-1.5">
+                    <UIcon
+                      name="i-lucide-calendar-cog"
+                      class="w-3 h-3 opacity-60"
+                    />
+                    <span class="opacity-75">Cron:</span>
+                    <code class="px-1.5 py-0.5 bg-black/5 dark:bg-white/5 rounded text-[10px]">{{ item.step.awaitConfig.cron }}</code>
+                  </div>
+                  <div
+                    v-if="item.step.scheduledTriggerAt"
+                    class="flex items-center gap-1.5"
+                  >
+                    <UIcon
+                      name="i-lucide-calendar-check"
+                      class="w-3 h-3 opacity-60"
+                    />
+                    <span class="opacity-75">Next trigger:</span>
+                    <span class="font-medium">{{ formatScheduledTime(item.step.scheduledTriggerAt) }}</span>
+                  </div>
+                </div>
+
+                <!-- Timeout -->
+                <div
+                  v-if="item.step.awaitConfig?.timeout || item.step.awaitData?.timeout"
                   class="flex items-center gap-1.5"
                 >
                   <UIcon
                     name="i-lucide-hourglass"
                     class="w-3 h-3 opacity-60"
                   />
-                  <span class="opacity-75">Delay:</span>
-                  <span class="font-medium">{{ formatDuration(item.step.awaitConfig.delay) }}</span>
-                </div>
-
-                <!-- Timeout -->
-                <div
-                  v-if="item.step.awaitConfig?.timeout"
-                  class="flex items-center gap-1.5"
-                >
-                  <UIcon
-                    name="i-lucide-clock-alert"
-                    class="w-3 h-3 opacity-60"
-                  />
                   <span class="opacity-75">Timeout:</span>
-                  <span class="font-medium">{{ formatDuration(item.step.awaitConfig.timeout) }}</span>
+                  <span class="font-medium">{{ formatDuration(item.step.awaitData?.timeout || item.step.awaitConfig?.timeout) }}</span>
                 </div>
 
                 <!-- Timeout Action -->
                 <div
-                  v-if="item.step.awaitConfig?.timeoutAction"
+                  v-if="item.step.awaitConfig?.timeoutAction || item.step.awaitData?.timeoutAction"
                   class="flex items-center gap-1.5"
                 >
                   <UIcon
-                    name="i-lucide-zap"
+                    name="i-lucide-shield-alert"
                     class="w-3 h-3 opacity-60"
                   />
                   <span class="opacity-75">On Timeout:</span>
                   <UBadge
                     size="xs"
-                    :color="getTimeoutActionColor(item.step.awaitConfig.timeoutAction)"
+                    :color="getTimeoutActionColor(item.step.awaitData?.timeoutAction || item.step.awaitConfig?.timeoutAction)"
                     variant="subtle"
                   >
-                    {{ item.step.awaitConfig.timeoutAction }}
+                    {{ item.step.awaitData?.timeoutAction || item.step.awaitConfig?.timeoutAction }}
                   </UBadge>
                 </div>
               </div>
@@ -551,5 +618,18 @@ const formatDuration = (ms: number) => {
     return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
   }
   return `${seconds}s`
+}
+
+const formatScheduledTime = (timestamp: string | number | Date) => {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return 'No schedule'
+  
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  })
 }
 </script>

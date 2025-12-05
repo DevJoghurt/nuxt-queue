@@ -6,6 +6,9 @@
 
 import { defineNuxtModule, useLogger, addServerPlugin, createResolver } from '@nuxt/kit'
 import type { PostgresQueueAdapterOptions } from './runtime/adapter'
+import { readFileSync } from 'node:fs'
+
+const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'))
 
 export interface ModuleOptions extends PostgresQueueAdapterOptions {
   /**
@@ -18,6 +21,7 @@ export interface ModuleOptions extends PostgresQueueAdapterOptions {
 export default defineNuxtModule<ModuleOptions>({
   meta: {
     name: '@nvent/adapter-queue-postgres',
+    version: packageJson.version,
     configKey: 'nventQueuePostgres',
   },
   defaults: {

@@ -116,6 +116,14 @@ export interface FlowConfig {
     mode?: 'auto' | 'manual'
   }
   /**
+   * Step execution timeout in milliseconds (v0.5.1)
+   * Overrides global flow.stepTimeout and queue.defaultJobOptions.timeout for this specific step
+   * 
+   * @example 600000 // 10 minutes
+   * @example 3600000 // 1 hour
+   */
+  stepTimeout?: number
+  /**
    * Await pattern: Wait BEFORE step execution (v0.5)
    * Step won't execute until trigger fires
    */
@@ -129,63 +137,122 @@ export interface FlowConfig {
 
 /**
  * Await configuration (run-scoped triggers)
- * Declared in config, no functions allowed (AST-parsed)
+ *
+ * Pauses flow execution until a specific condition is met. Can be used with:
+ * - `awaitBefore`: Wait before step execution starts
+ * - `awaitAfter`: Wait after step completes before triggering next steps
+ *
+ * Declared in config, no functions allowed (AST-parsed at build time)
  */
 export interface AwaitConfig {
   /**
-   * Trigger type
+   * Type of trigger to wait for
+   * - `webhook`: Wait for HTTP request to specific endpoint
+   * - `event`: Wait for custom event with optional data matching
+   * - `schedule`: Wait until specific cron schedule time
+   * - `time`: Wait for fixed time delay
    */
   type: 'webhook' | 'event' | 'schedule' | 'time'
 
-  // Webhook-specific
   /**
-   * URL path for webhook (supports template variables: {runId}, {stepId})
+   * URL path for webhook trigger (supports template variables)
+   *
+   * Only used when `type: 'webhook'`
+   *
+   * Template variables available:
+   * - `{runId}`: Current flow run ID
+   * - `{stepId}`: Current step execution ID
+   *
+   * @example '/webhooks/approve/{runId}'
+   * @example '/api/confirm/{stepId}'
    */
   path?: string
+
   /**
-   * HTTP method for webhook
+   * HTTP method for webhook endpoint
+   *
+   * Only used when `type: 'webhook'`
+   *
+   * @default 'POST'
    */
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
 
-  // Event-specific
   /**
    * Event name to wait for
+   *
+   * Only used when `type: 'event'`
+   *
+   * @example 'payment.completed'
+   * @example 'order.shipped'
    */
   event?: string
+
   /**
-   * Key to match between event and step data
-   * e.g., 'orderId' matches event.orderId === step.orderId
-   * Supports nested paths: 'order.id' matches event.order.id === step.order.id
+   * Key to match between event data and step output
+   *
+   * Only used when `type: 'event'`
+   *
+   * Matches incoming event data against step output data.
+   * Supports nested paths using dot notation.
+   *
+   * @example 'orderId' - matches event.orderId === stepOutput.orderId
+   * @example 'order.id' - matches event.order.id === stepOutput.order.id
    */
   filterKey?: string
 
-  // Schedule-specific
   /**
-   * Cron expression (e.g., '0 9 * * *' for 9 AM daily)
+   * Cron expression defining when to trigger (one-time schedule)
+   *
+   * Only used when `type: 'schedule'`
+   *
+   * Note: This is a one-time trigger, not recurring. The next occurrence
+   * of the cron expression after step completion will trigger continuation.
+   *
+   * @example '0 9 * * *' - 9 AM daily (triggers at next 9 AM occurrence)
+   * @example '0 0 * * MON' - Midnight every Monday
    */
   cron?: string
+
   /**
-   * Hours to add after step completion before calculating next cron occurrence
-   */
-  nextAfterHours?: number
-  /**
-   * Timezone for cron expression
+   * Timezone for cron expression evaluation
+   *
+   * Only used when `type: 'schedule'`
+   *
+   * @example 'America/New_York'
+   * @example 'Europe/Berlin'
+   * @default 'UTC'
    */
   timezone?: string
 
-  // Time-specific
   /**
-   * Delay in milliseconds
+   * Fixed delay in milliseconds before continuation
+   *
+   * Only used when `type: 'time'`
+   *
+   * @example 60000 - 1 minute
+   * @example 3600000 - 1 hour
    */
   delay?: number
 
-  // Common options
   /**
-   * Maximum wait time in milliseconds
+   * Maximum wait time in milliseconds before timeout
+   *
+   * Applies to all trigger types. If the trigger doesn't fire within
+   * this duration, the timeout action will be taken.
+   *
+   * @example 86400000 - 24 hours
+   * @example 604800000 - 7 days
    */
   timeout?: number
+
   /**
-   * Action to take on timeout
+   * Action to take when timeout is reached
+   *
+   * - `fail`: Mark step/flow as failed
+   * - `continue`: Continue flow execution anyway
+   * - `retry`: Retry waiting (reset timeout)
+   *
+   * @default 'fail'
    */
   timeoutAction?: 'fail' | 'continue' | 'retry'
 }

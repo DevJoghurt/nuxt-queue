@@ -69,6 +69,10 @@ export function getServerImports(resolverFn: (path: string) => string, buildDir:
       name: 'defineAwaitResolveHook',
       from: resolverFn('./runtime/nitro/utils/defineHooks'),
     },
+    {
+      name: 'defineAwaitTimeoutHook',
+      from: resolverFn('./runtime/nitro/utils/defineHooks'),
+    },
 
     // Adapter composables
     {

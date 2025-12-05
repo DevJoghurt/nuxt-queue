@@ -17,10 +17,13 @@ import { getServerImports } from './utils/serverImports'
 import { normalizeModuleOptions, toRuntimeConfig, getRedisStorageConfig } from './runtime/config'
 import type { ModuleOptions, ModuleConfig } from './runtime/config/types'
 import type {} from '@nuxt/schema'
+import { readFileSync } from 'node:fs'
+
+const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'))
 
 const meta = {
   name: 'nvent',
-  version: '0.4.1',
+  version: packageJson.version,
   configKey: 'nvent',
 }
 
@@ -91,6 +94,10 @@ export default defineNuxtModule<ModuleOptions>().with({
       runner: { ts: { isolate: 'inprocess' }, py: { enabled: false, cmd: 'python3', importMode: 'file' } },
       flows: {},
       eventIndex: {},
+      config: {
+        flow: config.flow,
+        queue: config.queue,
+      },
     })
     // Ensure plain JSON snapshot to avoid readonly/proxy issues in Nitro normalization
     const compiledSnapshot = JSON.parse(JSON.stringify(compiledWithMeta))
@@ -174,6 +181,10 @@ export default defineNuxtModule<ModuleOptions>().with({
         runner: { ts: { isolate: 'inprocess' }, py: { enabled: false, cmd: 'python3', importMode: 'file' } },
         flows: {},
         eventIndex: {},
+        config: {
+          flow: config.flow,
+          queue: config.queue,
+        },
       })))
 
       console.log(`[nvent] registry refreshed (${reason})`, changedPath || '')

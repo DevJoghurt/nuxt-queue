@@ -7,7 +7,7 @@ import { ref, computed, type Ref } from '#imports'
  */
 
 export interface FlowState {
-  status: 'running' | 'completed' | 'failed' | 'canceled' | 'stalled'
+  status: 'running' | 'completed' | 'failed' | 'canceled' | 'stalled' | 'awaiting'
   startedAt?: string
   completedAt?: string
   steps: Record<string, StepState>
@@ -20,6 +20,7 @@ export interface StepState {
   attempt: number
   startedAt?: string
   completedAt?: string
+  scheduledTriggerAt?: string // When await is scheduled to trigger (for time/schedule awaits)
   error?: string
   awaitType?: 'time' | 'event' | 'trigger'
   awaitData?: any
@@ -68,6 +69,7 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
         if (e.flowName) state.meta = { ...state.meta, flowName: e.flowName }
         if (e.data?.flowName) state.meta = { ...state.meta, flowName: e.data.flowName }
         if (e.data?.input) state.meta = { ...state.meta, input: e.data.input }
+        if (e.data?.stallTimeout) state.meta = { ...state.meta, stallTimeout: e.data.stallTimeout }
         if (e.data?.trigger) {
           state.meta = {
             ...state.meta,
@@ -99,7 +101,6 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
       case 'flow.stalled':
         state.status = 'stalled'
         if (e.data?.lastActivityAt) state.meta = { ...state.meta, lastActivityAt: e.data.lastActivityAt }
-        if (e.data?.stallTimeout) state.meta = { ...state.meta, stallTimeout: e.data.stallTimeout }
         break
 
       case 'step.started': {
@@ -193,73 +194,53 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
 
       case 'await.registered': {
         if (!stepKey) break
-        // Create entries for both possible positions since we don't know which one applies
-        // The diagram will only show the one that matches the flow configuration
-        const awaitKeyAfter = `${stepKey}:await-after`
-        const awaitKeyBefore = `${stepKey}:await-before`
+        // Use the position from event data to create the correct await entry
+        const position = e.data?.position || 'after' // Default to 'after' for backward compatibility
+        const awaitKey = `${stepKey}:await-${position}`
 
-        // Set both to waiting - only the one that exists in the flow config will be shown
-        if (!state.steps[awaitKeyAfter]) {
-          state.steps[awaitKeyAfter] = { status: 'waiting', attempt: 1 }
+        if (!state.steps[awaitKey]) {
+          state.steps[awaitKey] = { status: 'waiting', attempt: 1 }
         }
-        state.steps[awaitKeyAfter].status = 'waiting'
-        state.steps[awaitKeyAfter].awaitType = e.data?.awaitType
-        state.steps[awaitKeyAfter].awaitData = e.data
-
-        if (!state.steps[awaitKeyBefore]) {
-          state.steps[awaitKeyBefore] = { status: 'waiting', attempt: 1 }
+        state.steps[awaitKey].status = 'waiting'
+        state.steps[awaitKey].awaitType = e.data?.awaitType
+        state.steps[awaitKey].awaitData = e.data
+        // Capture scheduled trigger time from event data
+        const scheduledAt = e.data?.resolveAt || e.data?.nextOccurrence
+        if (scheduledAt) {
+          state.steps[awaitKey].scheduledTriggerAt = new Date(scheduledAt).toISOString()
         }
-        state.steps[awaitKeyBefore].status = 'waiting'
-        state.steps[awaitKeyBefore].awaitType = e.data?.awaitType
-        state.steps[awaitKeyBefore].awaitData = e.data
         break
       }
 
       case 'await.resolved': {
         if (!stepKey) break
-        // Update both possible positions
-        const awaitKeyAfter = `${stepKey}:await-after`
-        const awaitKeyBefore = `${stepKey}:await-before`
+        // Use the position from event data to update the correct await entry
+        const position = e.data?.position || 'after' // Default to 'after' for backward compatibility
+        const awaitKey = `${stepKey}:await-${position}`
 
-        if (!state.steps[awaitKeyAfter]) {
-          state.steps[awaitKeyAfter] = { status: 'completed', attempt: 1 }
+        if (!state.steps[awaitKey]) {
+          state.steps[awaitKey] = { status: 'completed', attempt: 1 }
         }
-        state.steps[awaitKeyAfter].status = 'completed'
-        state.steps[awaitKeyAfter].completedAt = e.ts
-        state.steps[awaitKeyAfter].awaitType = e.data?.awaitType
-        if (e.data?.triggerData) state.steps[awaitKeyAfter].result = e.data.triggerData
-
-        if (!state.steps[awaitKeyBefore]) {
-          state.steps[awaitKeyBefore] = { status: 'completed', attempt: 1 }
-        }
-        state.steps[awaitKeyBefore].status = 'completed'
-        state.steps[awaitKeyBefore].completedAt = e.ts
-        state.steps[awaitKeyBefore].awaitType = e.data?.awaitType
-        if (e.data?.triggerData) state.steps[awaitKeyBefore].result = e.data.triggerData
+        state.steps[awaitKey].status = 'completed'
+        state.steps[awaitKey].completedAt = e.ts
+        state.steps[awaitKey].awaitType = e.data?.awaitType
+        if (e.data?.triggerData) state.steps[awaitKey].result = e.data.triggerData
         break
       }
 
       case 'await.timeout': {
         if (!stepKey) break
-        // Update both possible positions
-        const awaitKeyAfter = `${stepKey}:await-after`
-        const awaitKeyBefore = `${stepKey}:await-before`
+        // Use the position from event data to update the correct await entry
+        const position = e.data?.position || 'after' // Default to 'after' for backward compatibility
+        const awaitKey = `${stepKey}:await-${position}`
 
-        if (!state.steps[awaitKeyAfter]) {
-          state.steps[awaitKeyAfter] = { status: 'timeout', attempt: 1 }
+        if (!state.steps[awaitKey]) {
+          state.steps[awaitKey] = { status: 'timeout', attempt: 1 }
         }
-        state.steps[awaitKeyAfter].status = 'timeout'
-        state.steps[awaitKeyAfter].error = `Await timeout`
-        state.steps[awaitKeyAfter].completedAt = e.ts
-        state.steps[awaitKeyAfter].awaitType = e.data?.awaitType
-
-        if (!state.steps[awaitKeyBefore]) {
-          state.steps[awaitKeyBefore] = { status: 'timeout', attempt: 1 }
-        }
-        state.steps[awaitKeyBefore].status = 'timeout'
-        state.steps[awaitKeyBefore].error = `Await timeout`
-        state.steps[awaitKeyBefore].completedAt = e.ts
-        state.steps[awaitKeyBefore].awaitType = e.data?.awaitType
+        state.steps[awaitKey].status = 'timeout'
+        state.steps[awaitKey].error = `Await timeout`
+        state.steps[awaitKey].completedAt = e.ts
+        state.steps[awaitKey].awaitType = e.data?.awaitType
         break
       }
 
@@ -294,22 +275,26 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
     state.startedAt = events[0].ts
   }
 
-  // Infer flow completion if no explicit flow.completed event was found
-  // A flow is considered complete if:
+  // Infer flow status based on step states
+  // A flow status is determined by:
   // 1. It has started
   // 2. It has at least one step
-  // 3. All steps have a terminal status (completed, failed, or timeout)
-  // 4. No steps are running, retrying, or waiting
   if (state.status === 'running' && state.startedAt && Object.keys(state.steps).length > 0) {
-    const hasRunningSteps = Object.values(state.steps).some(
-      s => s.status === 'running' || s.status === 'retrying' || s.status === 'waiting',
+    const hasActiveRunningSteps = Object.values(state.steps).some(
+      s => s.status === 'running' || s.status === 'retrying',
     )
+    const hasWaitingSteps = Object.values(state.steps).some(s => s.status === 'waiting')
     const hasFailedSteps = Object.values(state.steps).some(s => s.status === 'failed')
     const allStepsTerminal = Object.values(state.steps).every(
       s => s.status === 'completed' || s.status === 'failed' || s.status === 'timeout',
     )
 
-    if (!hasRunningSteps && allStepsTerminal) {
+    // If there are waiting steps and no actively running steps, set status to 'awaiting'
+    if (hasWaitingSteps && !hasActiveRunningSteps) {
+      state.status = 'awaiting'
+    }
+    // If all steps are terminal (no running, retrying, or waiting), infer completion
+    else if (allStepsTerminal) {
       // Infer completion status
       if (hasFailedSteps) {
         state.status = 'failed'
@@ -369,6 +354,7 @@ export function useFlowState(initialEvents: EventRecord[] = []) {
   const isFailed = computed(() => state.value.status === 'failed')
   const isCanceled = computed(() => state.value.status === 'canceled')
   const isStalled = computed(() => state.value.status === 'stalled')
+  const isAwaiting = computed(() => state.value.status === 'awaiting')
 
   const stepList = computed(() => {
     return Object.entries(state.value.steps).map(([key, step]) => ({
@@ -409,6 +395,7 @@ export function useFlowState(initialEvents: EventRecord[] = []) {
     isFailed,
     isCanceled,
     isStalled,
+    isAwaiting,
     stepList,
     runningSteps,
     waitingSteps,

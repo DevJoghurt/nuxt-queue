@@ -269,6 +269,54 @@ export interface FlowConfig {
      */
     enablePeriodicCheck?: boolean
   }
+
+  /**
+   * Default timeout values for await patterns
+   * These are used when developers don't specify explicit timeouts
+   * @since v0.5.0
+   */
+  awaitDefaults?: {
+    /**
+     * Default timeout for webhook await patterns in milliseconds
+     * @default 86400000 (24 hours)
+     */
+    webhookTimeout?: number
+
+    /**
+     * Default timeout for event await patterns in milliseconds
+     * @default 86400000 (24 hours)
+     */
+    eventTimeout?: number
+
+    /**
+     * Default timeout for time await patterns in milliseconds
+     * Time awaits typically don't need a timeout since they resolve based on delay
+     * @default undefined (no timeout)
+     */
+    timeTimeout?: number
+
+    /**
+     * Default timeout for schedule await patterns in milliseconds
+     * Schedule awaits typically don't need a timeout since they resolve based on cron
+     * @default undefined (no timeout)
+     */
+    scheduleTimeout?: number
+
+    /**
+     * Default timeout action when await times out
+     * @default 'fail'
+     */
+    timeoutAction?: 'fail' | 'continue' | 'retry'
+  }
+
+  /**
+   * Default step execution timeout in milliseconds
+   * This is the maximum time a step function can run before timing out
+   * Priority: defineFunctionConfig > flow.stepTimeout > queue.defaultJobOptions.timeout
+   * @default 300000 (5 minutes)
+   * @since v0.5.0
+   */
+  stepTimeout?: number
 }
 
 /**

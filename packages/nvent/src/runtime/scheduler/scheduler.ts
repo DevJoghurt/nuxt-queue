@@ -11,7 +11,8 @@ import type { StoreAdapter } from '../adapters/interfaces/store'
 import { getEventBus } from '../events/eventBus'
 import { resolveTimeAwait } from '../nitro/utils/awaitPatterns/time'
 import { resolveScheduleAwait } from '../nitro/utils/awaitPatterns/schedule'
-import { useNventLogger } from '#imports'
+import { useNventLogger, useStoreAdapter, useRuntimeConfig } from '#imports'
+import { createStallDetector } from '../events/utils/stallDetector'
 
 export interface SchedulerOptions {
   /**
@@ -56,6 +57,7 @@ export class Scheduler implements SchedulerAdapter {
   private lockRenewalTimers = new Map<string, NodeJS.Timeout>()
   private started = false
   private logger = useNventLogger('scheduler')
+  private syncSubscription?: () => void
 
   constructor(options: SchedulerOptions) {
     this.store = options.store
@@ -69,6 +71,9 @@ export class Scheduler implements SchedulerAdapter {
     // Store job config
     this.jobConfigs.set(job.id, job)
     await this.persistJob(job)
+
+    // Note: Other instances will discover this job via periodic polling
+    // See startJobSyncPolling() for distributed synchronization
 
     if (job.type === 'cron' && job.cron) {
       const cronJob = new CronJob(
@@ -308,6 +313,66 @@ export class Scheduler implements SchedulerAdapter {
   }
 
   /**
+   * Poll for new jobs created by other instances
+   * This ensures all instances have the same jobs in-memory
+   *
+   * NOTE: This is a simple but not optimal solution for distributed systems.
+   * TODO: For production multi-instance deployments, consider:
+   * - Pub/Sub notifications (Redis PUBSUB, Postgres NOTIFY/LISTEN)
+   * - Dedicated scheduler instance with queue-based execution
+   * - Service mesh with leader election
+   * See specs/distributed-scheduler.md for detailed architecture
+   */
+  private startJobSyncPolling(): void {
+    // Poll every 30 seconds for new jobs
+    const pollInterval = setInterval(async () => {
+      if (!this.started) {
+        clearInterval(pollInterval)
+        return
+      }
+
+      try {
+        // Get all persisted jobs from store
+        if (!this.store.index.read) {
+          // No index support - can't efficiently sync
+          return
+        }
+
+        const jobIndex = `${this.keyPrefix}:jobs`
+        const entries = await this.store.index.read(jobIndex, { limit: 10000 })
+
+        // Recover any that we don't have in memory
+        let syncedCount = 0
+        for (const entry of entries) {
+          const jobData = entry.metadata as ScheduledJob
+          if (jobData && !this.jobs.has(jobData.id) && jobData.enabled !== false) {
+            this.logger.debug('Syncing job from another instance', {
+              jobId: jobData.id,
+            })
+            await this.recoverJob(jobData)
+            syncedCount++
+          }
+        }
+
+        if (syncedCount > 0) {
+          this.logger.info('Synced jobs from other instances', {
+            count: syncedCount,
+            totalJobs: this.jobs.size,
+          })
+        }
+      }
+      catch (error) {
+        this.logger.error('Error during job sync polling', {
+          error: (error as Error).message,
+        })
+      }
+    }, 30000) // 30 seconds
+
+    // Store for cleanup
+    this.syncSubscription = () => clearInterval(pollInterval)
+  }
+
+  /**
    * Start periodic lock renewal (for long-running jobs)
    */
   private startLockRenewal(jobId: string): void {
@@ -516,6 +581,14 @@ export class Scheduler implements SchedulerAdapter {
         return
       }
 
+      // CRITICAL: Ensure numeric fields are numbers (Postgres JSONB may deserialize as strings)
+      if (jobData.executeAt && typeof jobData.executeAt === 'string') {
+        jobData.executeAt = new Date(jobData.executeAt).getTime()
+      }
+      if (jobData.interval && typeof jobData.interval === 'string') {
+        jobData.interval = Number(jobData.interval)
+      }
+
       // Check if this is a schedule trigger job that needs handler reconstruction
       if (jobData.metadata?.type === 'schedule-trigger' && jobData.metadata?.triggerName) {
         // Reconstruct handler from metadata
@@ -630,6 +703,26 @@ export class Scheduler implements SchedulerAdapter {
           runId,
         })
       }
+      else if (jobData.metadata?.component === 'stall-detector') {
+        // Reconstruct stall detector handler from metadata
+        const { flowName, runId } = jobData.metadata
+
+        jobData.handler = async () => {
+          // Recreate stall detector to mark flow as stalled
+
+          const store = useStoreAdapter()
+          const config = useRuntimeConfig()
+          const stallDetector = createStallDetector(store, config.nvent?.flow?.stallDetection)
+
+          this.logger.info(`Per-flow stall timeout fired for '${flowName}' runId '${runId}'`)
+          await stallDetector.markAsStalled(flowName, runId, 'Stall timeout reached')
+        }
+
+        this.logger.info('Reconstructed stall detector handler', {
+          flowName,
+          runId,
+        })
+      }
       else if (!jobData.handler) {
         // Job has no handler and can't be reconstructed
         // Keep it in storage - the component that created it will re-register with handler
@@ -671,10 +764,105 @@ export class Scheduler implements SchedulerAdapter {
         this.logger.info('Recovered interval job', { jobId: jobData.id })
       }
       else if (jobData.type === 'one-time' && jobData.executeAt) {
-        const delay = jobData.executeAt - Date.now()
+        const now = Date.now()
+        const delay = jobData.executeAt - now
         const isAwaitPattern = jobData.metadata?.component === 'await-pattern'
+        const isStallDetector = jobData.metadata?.component === 'stall-detector'
+        const awaitType = jobData.metadata?.awaitType
 
-        if (delay > 0) {
+        // Debug logging to understand timing
+        this.logger.debug('Recovering one-time job', {
+          jobId: jobData.id,
+          component: jobData.metadata?.component,
+          awaitType,
+          executeAt: jobData.executeAt,
+          executeAtISO: new Date(jobData.executeAt).toISOString(),
+          now,
+          nowISO: new Date(now).toISOString(),
+          delay,
+          delayHours: (delay / 1000 / 60 / 60).toFixed(2),
+        })
+
+        // Special handling for webhook/event await timeouts and stall detection
+        // These should ALWAYS be rescheduled, even if technically "overdue"
+        if (isAwaitPattern && (awaitType === 'webhook' || awaitType === 'event')) {
+          if (delay > 0) {
+            // Still time remaining - reschedule normally
+            const timeoutId = setTimeout(
+              async () => {
+                await this.executeWithLock(jobData)
+                await this.unschedule(jobData.id)
+              },
+              delay,
+            )
+
+            this.jobs.set(jobData.id, timeoutId)
+            this.logger.info('Recovered webhook/event await timeout', {
+              jobId: jobData.id,
+              awaitType,
+              flowName: jobData.metadata?.flowName,
+              remainingMs: delay,
+            })
+          }
+          else {
+            // Overdue - DO NOT execute, just log that flow is likely stalled
+            // The webhook/event might still arrive, so don't trigger timeout
+            this.logger.warn('Webhook/event await timeout is overdue - flow may be stalled or orphaned', {
+              jobId: jobData.id,
+              awaitType,
+              flowName: jobData.metadata?.flowName,
+              stepName: jobData.metadata?.stepName,
+              runId: jobData.metadata?.runId,
+              scheduledFor: new Date(jobData.executeAt).toISOString(),
+              overdueBy: Math.abs(delay),
+            })
+            // Clean up - the timeout has passed, flow needs manual intervention
+            await this.unschedule(jobData.id)
+          }
+        }
+        else if (isStallDetector) {
+          if (delay > 0) {
+            // Still time remaining - reschedule normally
+            const timeoutId = setTimeout(
+              async () => {
+                await this.executeWithLock(jobData)
+                await this.unschedule(jobData.id)
+              },
+              delay,
+            )
+
+            this.jobs.set(jobData.id, timeoutId)
+            this.logger.info('Recovered stall detection timeout', {
+              jobId: jobData.id,
+              flowName: jobData.metadata?.flowName,
+              remainingMs: delay,
+            })
+          }
+          else {
+            // Overdue - execute immediately to mark flow as stalled
+            this.logger.info('Executing overdue stall detection immediately', {
+              jobId: jobData.id,
+              flowName: jobData.metadata?.flowName,
+              runId: jobData.metadata?.runId,
+              overdueBy: Math.abs(delay),
+            })
+
+            setImmediate(async () => {
+              try {
+                await jobData.handler()
+                await this.unschedule(jobData.id)
+              }
+              catch (error) {
+                this.logger.error('Failed to execute overdue stall detection', {
+                  jobId: jobData.id,
+                  error: (error as Error).message,
+                })
+              }
+            })
+          }
+        }
+        else if (delay > 0) {
+          // All other one-time jobs (including time/schedule awaits)
           const timeoutId = setTimeout(
             async () => {
               await this.executeWithLock(jobData)
@@ -684,18 +872,17 @@ export class Scheduler implements SchedulerAdapter {
           )
 
           this.jobs.set(jobData.id, timeoutId)
-          this.logger.info('Recovered one-time job', { jobId: jobData.id })
+          this.logger.info('Recovered one-time job', { jobId: jobData.id, remainingMs: delay })
         }
-        else if (isAwaitPattern) {
-          // Await patterns that expired during downtime should execute immediately
-          // The flow has been waiting and needs to continue
-          this.logger.info('Executing overdue await pattern immediately', {
+        else if (isAwaitPattern && (awaitType === 'time' || awaitType === 'schedule')) {
+          // Time/schedule awaits that are overdue should execute immediately
+          this.logger.info('Executing overdue time/schedule await immediately', {
             jobId: jobData.id,
-            awaitType: jobData.metadata?.awaitType,
+            awaitType,
             flowName: jobData.metadata?.flowName,
+            overdueBy: Math.abs(delay),
           })
 
-          // Execute immediately without lock (already waited long enough)
           setImmediate(async () => {
             try {
               await jobData.handler()
@@ -762,11 +949,20 @@ export class Scheduler implements SchedulerAdapter {
     // CRITICAL: Recover persisted jobs (they will be created in started state)
     await this.recoverJobs()
 
+    // Start polling for jobs from other instances (distributed sync)
+    this.startJobSyncPolling()
+
     this.logger.info('Started with active jobs', { count: this.jobs.size })
   }
 
   async stop(): Promise<void> {
     this.started = false
+
+    // Stop job sync polling
+    if (this.syncSubscription) {
+      this.syncSubscription()
+      this.syncSubscription = undefined
+    }
 
     // Stop all jobs
     for (const job of this.jobs.values()) {
@@ -803,6 +999,38 @@ export class Scheduler implements SchedulerAdapter {
 
   async getScheduledJobs(): Promise<ScheduledJob[]> {
     return Array.from(this.jobConfigs.values())
+  }
+
+  /**
+   * Get jobs by pattern (e.g., by runId)
+   * This queries the persisted store, not just in-memory jobs
+   * Works across all instances in a distributed setup
+   */
+  async getJobsByPattern(pattern: string): Promise<ScheduledJob[]> {
+    const jobs: ScheduledJob[] = []
+
+    try {
+      if (this.store.index.read) {
+        const jobIndex = `${this.keyPrefix}:jobs`
+        const entries = await this.store.index.read(jobIndex, { limit: 10000 })
+
+        for (const entry of entries) {
+          if (entry.metadata && entry.id.includes(pattern)) {
+            jobs.push(entry.metadata as ScheduledJob)
+          }
+        }
+      }
+      else {
+        // Fallback to in-memory jobs if store doesn't support index read
+        this.logger.warn('Store does not support index read, falling back to in-memory jobs')
+        return Array.from(this.jobConfigs.values()).filter(job => job.id.includes(pattern))
+      }
+    }
+    catch (error) {
+      this.logger.error('Error getting jobs by pattern', { pattern, error: (error as Error).message })
+    }
+
+    return jobs
   }
 
   /**

@@ -53,10 +53,10 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Check flow status
+  // Check flow status - allow both 'running' and 'awaiting'
   const status = flowEntry.metadata?.status
-  if (status && status !== 'running') {
-    logger.warn(`Flow is not running`, { flowName, runId, stepName, status })
+  if (status && status !== 'running' && status !== 'awaiting') {
+    logger.warn(`Flow is not running or awaiting`, { flowName, runId, stepName, status })
     setResponseStatus(event, 410)
     throw createError({
       statusCode: 410,
@@ -66,9 +66,41 @@ export default defineEventHandler(async (event) => {
   }
 
   // Check if step is actually awaiting
-  const awaitState = flowEntry.metadata?.awaitingSteps?.[stepName]
-  if (!awaitState || awaitState.status !== 'awaiting') {
-    logger.warn(`Step is not awaiting`, { flowName, runId, stepName, awaitState })
+  // Try both composite keys (stepName:before and stepName:after) to find the awaiting webhook
+  const awaitingSteps = flowEntry.metadata?.awaitingSteps || {}
+  const awaitKeyBefore = `${stepName}:before`
+  const awaitKeyAfter = `${stepName}:after`
+  
+  let awaitState = null
+  let position: 'before' | 'after' = 'before'
+  
+  // Check 'before' position if it's awaiting
+  const awaitStateBefore = awaitingSteps[awaitKeyBefore]
+  if (awaitStateBefore && awaitStateBefore.status === 'awaiting') {
+    awaitState = awaitStateBefore
+    position = 'before'
+  }
+  
+  // If not found in 'before', check 'after' position if it's awaiting
+  if (!awaitState) {
+    const awaitStateAfter = awaitingSteps[awaitKeyAfter]
+    if (awaitStateAfter && awaitStateAfter.status === 'awaiting') {
+      awaitState = awaitStateAfter
+      position = 'after'
+    }
+  }
+  
+  // Fallback: try old format without position (backward compatibility)
+  if (!awaitState) {
+    const legacyAwaitState = awaitingSteps[stepName]
+    if (legacyAwaitState && legacyAwaitState.status === 'awaiting') {
+      awaitState = legacyAwaitState
+      position = 'after' // Old system only supported awaitAfter
+    }
+  }
+  
+  if (!awaitState) {
+    logger.warn(`Step is not awaiting`, { flowName, runId, stepName, awaitingSteps })
     setResponseStatus(event, 410)
     throw createError({
       statusCode: 410,
@@ -98,8 +130,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Get position (before/after)
-  const position = awaitState.position || 'after'
+  // Position was already determined when finding awaitState above
 
   // Get webhook payload
   let webhookData: any

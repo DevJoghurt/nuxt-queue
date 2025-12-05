@@ -87,7 +87,6 @@ export interface FlowStalledEvent extends BaseEvent {
   type: 'flow.stalled'
   data?: {
     lastActivityAt?: number
-    stallTimeout?: number
   }
 }
 

@@ -1,10 +1,9 @@
 <template>
   <UCard
-    class="min-w-[220px] max-w-[300px]"
+    class="min-w-[260px] max-w-[340px]"
     :ui="{
       body: 'p-0',
       header: headerClass,
-      footer: footerClass,
     }"
   >
     <template #header>
@@ -23,24 +22,49 @@
             {{ data?.label }}
           </p>
         </div>
-        <UBadge
-          :label="(data?.status || 'idle').toUpperCase()"
-          size="xs"
-          :color="statusColor(data?.status)"
-        />
+        <div class="flex items-center gap-2">
+          <span
+            v-if="data?.stepTimeout !== undefined && data.stepTimeout > 0"
+            class="flex items-center gap-1 text-xs opacity-80"
+            :title="`Step Execution Timeout: ${formatStepTimeout(data.stepTimeout)}`"
+          >
+            <UIcon
+              name="i-heroicons-clock-20-solid"
+              class="size-3"
+            />
+            <span>{{ formatStepTimeout(data.stepTimeout) }}</span>
+          </span>
+          <UBadge
+            :label="(data?.status || 'idle').toUpperCase()"
+            size="xs"
+            :color="statusColor(data?.status)"
+          />
+        </div>
       </div>
     </template>
 
     <div class="px-3 py-2 text-xs space-y-1">
       <div class="flex items-center justify-between">
-        <span class="text-gray-500 dark:text-gray-400">Queue</span>
+        <span class="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+          <UIcon
+            name="i-heroicons-queue-list-20-solid"
+            class="size-3"
+          />
+          Queue
+        </span>
         <span
           class="truncate ml-2 font-mono"
           :title="data?.queue"
         >{{ data?.queue || '-' }}</span>
       </div>
       <div class="flex items-center justify-between">
-        <span class="text-gray-500 dark:text-gray-400">Worker</span>
+        <span class="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+          <UIcon
+            name="i-heroicons-cpu-chip-20-solid"
+            class="size-3"
+          />
+          Worker
+        </span>
         <span
           class="truncate ml-2 font-mono"
           :title="data?.workerId"
@@ -59,10 +83,38 @@
         />
       </div>
       <div
+        v-if="data?.subscribes && data.subscribes.length > 0"
+        class="flex items-start justify-between gap-2"
+      >
+        <span class="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+          <UIcon
+            name="i-heroicons-arrow-down-on-square-stack-20-solid"
+            class="size-3"
+          />
+          Subscribes
+        </span>
+        <div class="flex flex-wrap gap-1 justify-end">
+          <UBadge
+            v-for="event in data.subscribes"
+            :key="event"
+            :label="event"
+            size="xs"
+            color="blue"
+            variant="soft"
+          />
+        </div>
+      </div>
+      <div
         v-if="data?.emits && data.emits.length > 0"
         class="flex items-start justify-between gap-2"
       >
-        <span class="text-gray-500 dark:text-gray-400">Emits</span>
+        <span class="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+          <UIcon
+            name="i-heroicons-arrow-up-on-square-stack-20-solid"
+            class="size-3"
+          />
+          Emits
+        </span>
         <div class="flex flex-wrap gap-1 justify-end">
           <UBadge
             v-for="event in data.emits"
@@ -73,6 +125,42 @@
             variant="soft"
           />
         </div>
+      </div>
+      <div
+        v-if="data?.awaitBefore"
+        class="flex items-center justify-between"
+      >
+        <span class="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+          <UIcon
+            name="i-heroicons-clock-20-solid"
+            class="size-3"
+          />
+          Await Before
+        </span>
+        <UBadge
+          :label="data.awaitBefore.type"
+          size="xs"
+          color="violet"
+          variant="soft"
+        />
+      </div>
+      <div
+        v-if="data?.awaitAfter"
+        class="flex items-center justify-between"
+      >
+        <span class="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+          <UIcon
+            name="i-heroicons-clock-20-solid"
+            class="size-3"
+          />
+          Await After
+        </span>
+        <UBadge
+          :label="data.awaitAfter.type"
+          size="xs"
+          color="violet"
+          variant="soft"
+        />
       </div>
       <div
         v-if="data?.attempt && data.attempt > 1"
@@ -95,25 +183,6 @@
         </span>
       </div>
     </div>
-
-    <template #footer>
-      <div class="flex items-center justify-center gap-2 w-full">
-        <UButton
-          size="xs"
-          color="neutral"
-          label="Logs"
-          icon="i-heroicons-document-text-20-solid"
-          @click="handleAction('logs')"
-        />
-        <UButton
-          size="xs"
-          color="neutral"
-          label="Details"
-          icon="i-heroicons-information-circle-20-solid"
-          @click="handleAction('details')"
-        />
-      </div>
-    </template>
   </UCard>
 </template>
 
@@ -121,6 +190,16 @@
 import { computed } from '#imports'
 
 type Status = 'idle' | 'running' | 'error' | 'done' | 'canceled' | string | undefined
+
+interface AwaitConfig {
+  type: 'time' | 'event' | 'webhook' | 'schedule'
+  delay?: number
+  event?: string
+  method?: string
+  timeout?: number
+  timeoutAction?: 'fail' | 'continue'
+  cron?: string
+}
 
 const props = defineProps<{
   id: string
@@ -133,26 +212,18 @@ const props = defineProps<{
     error?: string
     runtime?: 'nodejs' | 'python'
     runtype?: 'inprocess' | 'task'
+    subscribes?: string[]
     emits?: string[]
+    awaitBefore?: AwaitConfig
+    awaitAfter?: AwaitConfig
+    stepTimeout?: number
   }
   kind?: 'entry' | 'step'
 }>()
 
-const emit = defineEmits<{
-  (e: 'action', payload: { id: string, action: 'run' | 'logs' | 'details' }): void
-}>()
-
-function handleAction(action: 'run' | 'logs' | 'details') {
-  emit('action', { id: props.id, action })
-}
-
 const headerClass = computed(() => props.kind === 'entry'
   ? 'px-3 py-2 bg-gradient-to-br from-emerald-800 to-emerald-700 text-emerald-50 rounded-t'
   : 'px-3 py-2 bg-gradient-to-br from-gray-800 to-gray-700 text-gray-100 rounded-t')
-
-const footerClass = computed(() => props.kind === 'entry'
-  ? 'px-3 pb-2 pt-1'
-  : 'px-3 pb-2 pt-1')
 
 const runnerIcon = computed(() => {
   // Use explicit runtime field if available
@@ -175,6 +246,28 @@ function statusColor(status: Status) {
     case 'canceled': return 'orange'
     default: return 'neutral'
   }
+}
+
+function formatStepTimeout(ms: number): string {
+  if (!ms || ms === 0) return 'None'
+  const seconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (days > 0) {
+    const remainingHours = hours % 24
+    return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`
+  }
+  if (hours > 0) {
+    const remainingMinutes = minutes % 60
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
+  }
+  if (minutes > 0) {
+    const remainingSeconds = seconds % 60
+    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
+  }
+  return `${seconds}s`
 }
 </script>
 

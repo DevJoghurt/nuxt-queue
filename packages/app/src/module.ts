@@ -10,8 +10,10 @@ import {
 } from '@nuxt/kit'
 import defu from 'defu'
 import type {} from '@nuxt/schema'
+import { readFileSync } from 'node:fs'
 
 const resolver = createResolver(import.meta.url)
+const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'))
 
 interface ModuleOptions {
   /**
@@ -36,7 +38,7 @@ interface ModuleOptions {
 export default defineNuxtModule<ModuleOptions>({
   meta: {
     name: 'nventapp',
-    version: '0.1',
+    version: packageJson.version,
     configKey: 'nventapp',
   },
   defaults: {
@@ -51,6 +53,14 @@ export default defineNuxtModule<ModuleOptions>({
   },
   async setup(options, nuxt) {
     const { resolve } = resolver
+
+    // Make module options available at runtime
+    nuxt.options.runtimeConfig.public.nventapp = defu(
+      nuxt.options.runtimeConfig.public.nventapp as any,
+      {
+        routePath: options.routePath,
+      },
+    )
 
     // Add vueflow CSS
     nuxt.options.css = nuxt.options.css || []

@@ -1,5 +1,8 @@
 import { defineNuxtModule, createResolver, addServerPlugin } from '@nuxt/kit'
 import type { PoolConfig } from 'pg'
+import { readFileSync } from 'node:fs'
+
+const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'))
 
 export interface ModuleOptions {
   connection?: PoolConfig | string
@@ -11,6 +14,7 @@ export interface ModuleOptions {
 export default defineNuxtModule<ModuleOptions>({
   meta: {
     name: '@nvent-addon/adapter-store-postgres',
+    version: packageJson.version,
     configKey: 'nventStorePostgres',
   },
   defaults: {

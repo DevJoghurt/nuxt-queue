@@ -52,11 +52,22 @@ export function useFlow() {
 
       // Generate a flowId for the entire run
       const flowId = randomUUID()
-      const id = await queueAdapter.enqueue(queueName, { name: flow.entry.step, data: { ...payload, flowId, flowName }, opts })
+      const id = await queueAdapter.enqueue(queueName, {
+        name: flow.entry.step,
+        data: { ...payload, flowId, flowName },
+        opts,
+      })
 
       // Emit flow.start event
       try {
-        await eventsManager.publishBus({ type: 'flow.start', runId: flowId, flowName, data: { input: payload } })
+        await eventsManager.publishBus({
+          type: 'flow.start',
+          runId: flowId,
+          flowName,
+          data: {
+            input: payload,
+          },
+        })
       }
       catch { /* best-effort */ }
 

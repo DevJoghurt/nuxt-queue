@@ -41,6 +41,11 @@ export async function registerEventAwait(
     unsubscribe() // Clean up subscription
   })
 
+  // Calculate timeout with configurable default
+  const { useAwaitDefaults } = await import('../useAwait')
+  const { eventTimeout: defaultTimeout, timeoutAction: defaultTimeoutAction } = useAwaitDefaults()
+  const timeoutMs = config.timeout && config.timeout > 0 ? config.timeout : defaultTimeout
+
   // Emit await.registered event (wiring will handle storage)
   eventBus.publish({
     type: 'await.registered',
@@ -51,74 +56,75 @@ export async function registerEventAwait(
     position,
     config,
     data: {
+      position, // Store position in data for database persistence
       eventName: config.event,
       filterKey: config.filterKey,
-      timeout: config.timeout,
+      timeout: timeoutMs, // Store resolved timeout (with default)
       registeredAt: Date.now(),
+      timeoutAction: config.timeoutAction || defaultTimeoutAction,
     },
   } as any)
 
-  // Schedule timeout if configured
-  if (config.timeout && config.timeout > 0) {
-    const scheduler = useScheduler()
-    const timeoutAt = Date.now() + config.timeout
-    const jobId = `await-event-timeout-${runId}-${stepName}-${position}`
+  // Schedule timeout using the already calculated timeoutMs
+  const scheduler = useScheduler()
+  const timeoutAt = Date.now() + timeoutMs
+  const jobId = `await-event-timeout-${runId}-${stepName}-${position}`
 
-    await scheduler.schedule({
-      id: jobId,
-      name: `Event Await Timeout: ${flowName} - ${stepName}`,
-      type: 'one-time',
-      executeAt: timeoutAt,
-      handler: async () => {
-        logger.warn('Event await timeout', {
-          runId,
-          stepName,
-          flowName,
-          eventName: config.event,
-          timeout: config.timeout,
-          timeoutAction: config.timeoutAction || 'fail',
-        })
-
-        // Emit timeout event
-        eventBus.publish({
-          type: 'await.timeout',
-          flowName,
-          runId,
-          stepName,
-          position,
-          awaitType: 'event',
-          timeoutAction: config.timeoutAction || 'fail',
-          data: {
-            eventName: config.event,
-            timeout: config.timeout,
-            registeredAt: Date.now() - (config.timeout || 0),
-            timedOutAt: Date.now(),
-          },
-        } as any)
-
-        // Clean up the event subscription
-        unsubscribe()
-      },
-      metadata: {
-        component: 'await-pattern',
-        awaitType: 'event',
+  await scheduler.schedule({
+    id: jobId,
+    name: `Event Await Timeout: ${flowName} - ${stepName}`,
+    type: 'one-time',
+    executeAt: timeoutAt,
+    handler: async () => {
+      logger.warn('Event await timeout', {
         runId,
         stepName,
         flowName,
-        position,
-        timeout: config.timeout,
         eventName: config.event,
-      },
-    })
+        timeout: timeoutMs,
+        timeoutAction: config.timeoutAction || 'fail',
+      })
 
-    logger.debug(`Event timeout scheduled`, {
+      // Emit timeout event
+      eventBus.publish({
+        type: 'await.timeout',
+        flowName,
+        runId,
+        stepName,
+        position,
+        awaitType: 'event',
+        timeoutAction: config.timeoutAction || 'fail',
+        data: {
+          eventName: config.event,
+          timeout: timeoutMs,
+          registeredAt: Date.now() - timeoutMs,
+          timedOutAt: Date.now(),
+        },
+      } as any)
+
+      // Clean up the event subscription
+      unsubscribe()
+    },
+    metadata: {
+      component: 'await-pattern',
+      awaitType: 'event',
       runId,
       stepName,
+      flowName,
+      position,
+      timeout: timeoutMs,
       eventName: config.event,
-      timeout: config.timeout,
-      timeoutAction: config.timeoutAction,
-    })
-  }
+    },
+  })
+
+  logger.debug(`Event timeout scheduled`, {
+    runId,
+    stepName,
+    eventName: config.event,
+    timeout: timeoutMs,
+    timeoutAction: config.timeoutAction,
+    isDefault: !config.timeout || config.timeout <= 0,
+  })
 
   logger.debug(`Event await registered: ${config.event}`, { runId, stepName })
 
@@ -164,6 +170,7 @@ export async function resolveEventAwait(
     position,
     triggerData: eventData,
     data: {
+      position, // Store position in data for database persistence
       resolvedAt: Date.now(),
     },
   } as any)

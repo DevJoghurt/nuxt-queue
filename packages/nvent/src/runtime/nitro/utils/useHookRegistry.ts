@@ -6,12 +6,12 @@
 export interface LifecycleHooks {
   /**
    * Called when await pattern is registered
-   * @param webhookUrl - Generated webhook URL (for webhook awaits) or event/schedule info
+   * @param hookData - Type-safe data based on await type (webhookUrl, eventName, etc.)
    * @param stepData - Current step data
-   * @param ctx - Worker context
+   * @param ctx - Worker context with awaitType and awaitConfig
    */
   onAwaitRegister?: (
-    webhookUrl: string,
+    hookData: any,
     stepData: any,
     ctx: any,
   ) => Promise<void>
@@ -20,10 +20,20 @@ export interface LifecycleHooks {
    * Called when await pattern is resolved
    * @param resolvedData - Data from the trigger that resolved the await
    * @param stepData - Current step data
-   * @param ctx - Worker context
+   * @param ctx - Worker context with awaitType
    */
   onAwaitResolve?: (
     resolvedData: any,
+    stepData: any,
+    ctx: any,
+  ) => Promise<void>
+
+  /**
+   * Called when await pattern times out
+   * @param stepData - Current step data
+   * @param ctx - Worker context with awaitType and timeoutAction
+   */
+  onAwaitTimeout?: (
     stepData: any,
     ctx: any,
   ) => Promise<void>
