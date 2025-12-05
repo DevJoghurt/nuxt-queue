@@ -57,6 +57,7 @@ export class Scheduler implements SchedulerAdapter {
   private lockRenewalTimers = new Map<string, NodeJS.Timeout>()
   private started = false
   private logger = useNventLogger('scheduler')
+  private syncSubscription?: () => void
 
   constructor(options: SchedulerOptions) {
     this.store = options.store
@@ -70,6 +71,9 @@ export class Scheduler implements SchedulerAdapter {
     // Store job config
     this.jobConfigs.set(job.id, job)
     await this.persistJob(job)
+
+    // Note: Other instances will discover this job via periodic polling
+    // See startJobSyncPolling() for distributed synchronization
 
     if (job.type === 'cron' && job.cron) {
       const cronJob = new CronJob(
@@ -306,6 +310,66 @@ export class Scheduler implements SchedulerAdapter {
       const lockKey = `${this.keyPrefix}:lock:${jobId}`
       await this.store.kv.delete(lockKey)
     }
+  }
+
+  /**
+   * Poll for new jobs created by other instances
+   * This ensures all instances have the same jobs in-memory
+   *
+   * NOTE: This is a simple but not optimal solution for distributed systems.
+   * TODO: For production multi-instance deployments, consider:
+   * - Pub/Sub notifications (Redis PUBSUB, Postgres NOTIFY/LISTEN)
+   * - Dedicated scheduler instance with queue-based execution
+   * - Service mesh with leader election
+   * See specs/distributed-scheduler.md for detailed architecture
+   */
+  private startJobSyncPolling(): void {
+    // Poll every 30 seconds for new jobs
+    const pollInterval = setInterval(async () => {
+      if (!this.started) {
+        clearInterval(pollInterval)
+        return
+      }
+
+      try {
+        // Get all persisted jobs from store
+        if (!this.store.index.read) {
+          // No index support - can't efficiently sync
+          return
+        }
+
+        const jobIndex = `${this.keyPrefix}:jobs`
+        const entries = await this.store.index.read(jobIndex, { limit: 10000 })
+
+        // Recover any that we don't have in memory
+        let syncedCount = 0
+        for (const entry of entries) {
+          const jobData = entry.metadata as ScheduledJob
+          if (jobData && !this.jobs.has(jobData.id) && jobData.enabled !== false) {
+            this.logger.debug('Syncing job from another instance', {
+              jobId: jobData.id,
+            })
+            await this.recoverJob(jobData)
+            syncedCount++
+          }
+        }
+
+        if (syncedCount > 0) {
+          this.logger.info('Synced jobs from other instances', {
+            count: syncedCount,
+            totalJobs: this.jobs.size,
+          })
+        }
+      }
+      catch (error) {
+        this.logger.error('Error during job sync polling', {
+          error: (error as Error).message,
+        })
+      }
+    }, 30000) // 30 seconds
+
+    // Store for cleanup
+    this.syncSubscription = () => clearInterval(pollInterval)
   }
 
   /**
@@ -885,11 +949,20 @@ export class Scheduler implements SchedulerAdapter {
     // CRITICAL: Recover persisted jobs (they will be created in started state)
     await this.recoverJobs()
 
+    // Start polling for jobs from other instances (distributed sync)
+    this.startJobSyncPolling()
+
     this.logger.info('Started with active jobs', { count: this.jobs.size })
   }
 
   async stop(): Promise<void> {
     this.started = false
+
+    // Stop job sync polling
+    if (this.syncSubscription) {
+      this.syncSubscription()
+      this.syncSubscription = undefined
+    }
 
     // Stop all jobs
     for (const job of this.jobs.values()) {
