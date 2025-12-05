@@ -458,8 +458,9 @@ export function analyzeFlow(flow: FlowMeta, config?: AnalyzerConfig): AnalyzedFl
       triggers: findTriggeredSteps(stepName, step, steps),
       level: levels[stepName] ?? 1,
       hasAwaitPattern,
-      stepTimeout: undefined as number | undefined, // Step execution timeout from config
+      // stepTimeout from ...step spread above (per-function config)
     }
+    // Apply config priority: defineFunctionConfig > flow.stepTimeout > queue.defaultJobOptions.timeout
     analyzedStep.stepTimeout = getStepExecutionTimeout(analyzedStep, config)
     analyzedSteps[stepName] = analyzedStep
   }

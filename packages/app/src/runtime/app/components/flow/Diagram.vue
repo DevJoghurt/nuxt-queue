@@ -207,8 +207,8 @@ const nodes = computed<FlowNode[]>(() => {
     const entryState = states[f.entry.step]
     const status = mapStatusToNodeStatus(entryState?.status)
 
-    // Get stepTimeout from analyzed flow metadata (static data)
-    const entryStepTimeout = (f.entry as any).stepTimeout
+    // Get stepTimeout from analyzed flow metadata (includes config priority)
+    const entryStepTimeout = f.analyzed?.steps?.[f.entry.step]?.stepTimeout
 
     out.push({
       id: `entry:${f.entry.step}`,

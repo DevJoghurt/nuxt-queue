@@ -627,14 +627,9 @@ const enhancedStepList = computed(() => {
   if (!flowMeta?.analyzed?.steps) return steps
 
   // Create a map of stepName -> stepTimeout from analyzed flows
+  // analyzed.steps includes ALL steps (entry + regular steps) with config priority applied
   const stepTimeoutMap = new Map<string, number>()
 
-  // Add entry step timeout if exists
-  if (flowMeta.entry?.stepTimeout !== undefined) {
-    stepTimeoutMap.set(flowMeta.entry.step, flowMeta.entry.stepTimeout)
-  }
-
-  // Add all other step timeouts from analyzed.steps (it's an object, not array)
   for (const [stepName, analyzedStep] of Object.entries(flowMeta.analyzed.steps)) {
     if ((analyzedStep as any).stepTimeout !== undefined) {
       stepTimeoutMap.set(stepName, (analyzedStep as any).stepTimeout)

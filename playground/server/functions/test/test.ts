@@ -8,7 +8,7 @@ export const config = defineFunctionConfig({
     name: 'test-flow',
     role: 'entry',
     step: 'test-step',
-    stepTimeout: 600000, // Step execution timeout in ms (10 minutes)
+    // stepTimeout: 600000, // Step execution timeout in ms (10 minutes)
     emits: ['entry.done'],
     awaitAfter: {
       type: 'time',

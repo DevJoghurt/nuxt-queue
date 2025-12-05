@@ -18,6 +18,7 @@ export const config = defineFunctionConfig({
       type: 'webhook',
       method: 'GET',
     },
+    stepTimeout: 1200000, // Step execution timeout in ms (20 minutes)
   },
 })
 
