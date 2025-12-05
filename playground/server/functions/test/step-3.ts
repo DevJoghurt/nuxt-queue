@@ -12,6 +12,6 @@ export const config = defineFunctionConfig({
   },
 })
 
-export default defineFunction(async (input, ctx) => {
+export default defineFunction(async (_input, _ctx) => {
 
 })

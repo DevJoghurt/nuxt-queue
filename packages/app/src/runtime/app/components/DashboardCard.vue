@@ -23,7 +23,7 @@
         class="w-5 h-5 opacity-60"
       />
     </div>
-    
+
     <!-- Primary Stats (Live Data - Large) -->
     <div class="flex items-baseline gap-4 mb-4 flex-wrap min-h-[3rem]">
       <div
@@ -39,7 +39,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- Secondary Stats (Static/Context - Small) -->
     <div class="flex items-center gap-3 text-xs opacity-75">
       <div

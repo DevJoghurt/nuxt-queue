@@ -206,7 +206,7 @@ const nodes = computed<FlowNode[]>(() => {
   if (f.entry) {
     const entryState = states[f.entry.step]
     const status = mapStatusToNodeStatus(entryState?.status)
-    
+
     // Get stepTimeout from analyzed flow metadata (static data)
     const entryStepTimeout = (f.entry as any).stepTimeout
 
@@ -484,7 +484,7 @@ const edges = computed<FlowEdge[]>(() => {
       // - 'await:entry-after:step-name' -> states['step-name:await-after']
       // - 'await:step-before:step-name' -> states['step-name:await-before']
       // - 'await:step-after:step-name' -> states['step-name:await-after']
-      
+
       if (nodeId.startsWith('await:entry-after:')) {
         const stepName = nodeId.replace('await:entry-after:', '')
         return states[`${stepName}:await-after`]

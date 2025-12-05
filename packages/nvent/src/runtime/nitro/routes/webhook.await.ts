@@ -70,17 +70,17 @@ export default defineEventHandler(async (event) => {
   const awaitingSteps = flowEntry.metadata?.awaitingSteps || {}
   const awaitKeyBefore = `${stepName}:before`
   const awaitKeyAfter = `${stepName}:after`
-  
+
   let awaitState = null
   let position: 'before' | 'after' = 'before'
-  
+
   // Check 'before' position if it's awaiting
   const awaitStateBefore = awaitingSteps[awaitKeyBefore]
   if (awaitStateBefore && awaitStateBefore.status === 'awaiting') {
     awaitState = awaitStateBefore
     position = 'before'
   }
-  
+
   // If not found in 'before', check 'after' position if it's awaiting
   if (!awaitState) {
     const awaitStateAfter = awaitingSteps[awaitKeyAfter]
@@ -89,7 +89,7 @@ export default defineEventHandler(async (event) => {
       position = 'after'
     }
   }
-  
+
   // Fallback: try old format without position (backward compatibility)
   if (!awaitState) {
     const legacyAwaitState = awaitingSteps[stepName]
@@ -98,7 +98,7 @@ export default defineEventHandler(async (event) => {
       position = 'after' // Old system only supported awaitAfter
     }
   }
-  
+
   if (!awaitState) {
     logger.warn(`Step is not awaiting`, { flowName, runId, stepName, awaitingSteps })
     setResponseStatus(event, 410)

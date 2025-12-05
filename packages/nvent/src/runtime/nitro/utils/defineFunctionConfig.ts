@@ -118,7 +118,7 @@ export interface FlowConfig {
   /**
    * Step execution timeout in milliseconds (v0.5.1)
    * Overrides global flow.stepTimeout and queue.defaultJobOptions.timeout for this specific step
-   * 
+   *
    * @example 600000 // 10 minutes
    * @example 3600000 // 1 hour
    */

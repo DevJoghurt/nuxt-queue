@@ -628,12 +628,12 @@ const enhancedStepList = computed(() => {
 
   // Create a map of stepName -> stepTimeout from analyzed flows
   const stepTimeoutMap = new Map<string, number>()
-  
+
   // Add entry step timeout if exists
   if (flowMeta.entry?.stepTimeout !== undefined) {
     stepTimeoutMap.set(flowMeta.entry.step, flowMeta.entry.stepTimeout)
   }
-  
+
   // Add all other step timeouts from analyzed.steps (it's an object, not array)
   for (const [stepName, analyzedStep] of Object.entries(flowMeta.analyzed.steps)) {
     if ((analyzedStep as any).stepTimeout !== undefined) {
@@ -644,10 +644,10 @@ const enhancedStepList = computed(() => {
   // Merge stepTimeout into runtime step states
   return steps.map((step: any) => {
     // Extract base step name (remove :await-before or :await-after suffix)
-    const baseStepName = step.key.includes(':await-') 
-      ? step.key.split(':await-')[0] 
+    const baseStepName = step.key.includes(':await-')
+      ? step.key.split(':await-')[0]
       : step.key
-    
+
     const staticTimeout = stepTimeoutMap.get(baseStepName)
     if (staticTimeout !== undefined) {
       return { ...step, stepTimeout: staticTimeout }

@@ -43,7 +43,7 @@
             Delay:
           </span>
           <span class="font-mono text-gray-900 dark:text-gray-100 text-right">{{ formatDelay(data.awaitConfig.delay) }}</span>
-          
+
           <template v-if="nextTriggerTime">
             <span class="text-gray-600 dark:text-gray-400 font-medium flex items-center gap-1">
               <UIcon
@@ -74,7 +74,7 @@
             {{ data.awaitData?.eventName || data.awaitConfig?.event }}
           </span>
         </template>
-        
+
         <template v-if="data.awaitConfig?.filterKey || data.awaitData?.filterKey">
           <span class="text-gray-600 dark:text-gray-400 font-medium flex items-center gap-1">
             <UIcon
@@ -108,7 +108,7 @@
                 color="primary"
               />
             </div>
-            
+
             <template v-if="data.awaitData?.webhookUrl">
               <span class="text-gray-600 dark:text-gray-400 font-medium flex items-center gap-1">
                 <UIcon
@@ -135,7 +135,7 @@
                 </button>
               </div>
             </template>
-            
+
             <template v-else-if="data.awaitConfig?.path">
               <span class="text-gray-600 dark:text-gray-400 font-medium flex items-center gap-1">
                 <UIcon
@@ -168,7 +168,7 @@
             </span>
             <span class="font-mono text-gray-900 dark:text-gray-100 text-right">{{ data.awaitConfig.cron }}</span>
           </template>
-          
+
           <template v-if="cronDescription">
             <span class="text-gray-600 dark:text-gray-400 font-medium flex items-center gap-1">
               <UIcon
@@ -179,7 +179,7 @@
             </span>
             <span class="text-gray-500 dark:text-gray-400 text-right">{{ cronDescription }}</span>
           </template>
-          
+
           <template v-if="nextCronTime">
             <span class="text-gray-600 dark:text-gray-400 font-medium flex items-center gap-1">
               <UIcon
@@ -190,7 +190,7 @@
             </span>
             <span class="text-gray-900 dark:text-gray-100 font-medium text-right">{{ nextCronTime }}</span>
           </template>
-          
+
           <template v-if="data.awaitConfig?.timezone">
             <span class="text-gray-600 dark:text-gray-400 font-medium flex items-center gap-1">
               <UIcon
@@ -362,7 +362,7 @@ function formatDelay(ms?: number): string {
 // Display trigger time for time-based awaits
 const nextTriggerTime = computed(() => {
   if (props.data.awaitType !== 'time' || !props.data.awaitConfig?.delay) return null
-  
+
   // Use scheduled trigger time from backend if available
   if (props.data.scheduledTriggerAt) {
     const triggerTime = new Date(props.data.scheduledTriggerAt)
@@ -375,7 +375,7 @@ const nextTriggerTime = computed(() => {
       })
     }
   }
-  
+
   return 'No schedule'
 })
 

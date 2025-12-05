@@ -623,7 +623,7 @@ const formatDuration = (ms: number) => {
 const formatScheduledTime = (timestamp: string | number | Date) => {
   const date = new Date(timestamp)
   if (Number.isNaN(date.getTime())) return 'No schedule'
-  
+
   return date.toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',

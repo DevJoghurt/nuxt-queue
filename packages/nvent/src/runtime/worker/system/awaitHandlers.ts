@@ -3,7 +3,7 @@
  * These handlers run in job context to handle await registration, resolution, and timeout
  */
 
-import { useAwait, useHookRegistry, useNventLogger, useQueueAdapter, $useFunctionRegistry, useEventManager } from '#imports'
+import { useAwait, useHookRegistry, useNventLogger, $useFunctionRegistry, useEventManager } from '#imports'
 import type { QueueJob } from '../node/runner'
 
 const logger = useNventLogger('system-await-handlers')

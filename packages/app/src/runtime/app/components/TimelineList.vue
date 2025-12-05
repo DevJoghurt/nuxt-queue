@@ -446,7 +446,7 @@ function levelColor(level?: string) {
 
 function eventTypeColor(type: string) {
   if (!type) return 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-  
+
   // Flow events
   if (type.startsWith('flow.')) {
     if (type === 'flow.start') return 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300'
@@ -454,27 +454,27 @@ function eventTypeColor(type: string) {
     if (type === 'flow.failed') return 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300'
     return 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300'
   }
-  
+
   // Step events
   if (type.startsWith('step.')) {
     if (type === 'step.completed') return 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300'
     if (type === 'step.failed') return 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300'
     return 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300'
   }
-  
+
   // Await events
   if (type.startsWith('await.')) {
     if (type === 'await.resolved') return 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300'
     if (type === 'await.timeout') return 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300'
     return 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
   }
-  
+
   // Log events
   if (type === 'log') return 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300'
-  
+
   // Emit events
   if (type === 'emit') return 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
-  
+
   // Default
   return 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
 }
