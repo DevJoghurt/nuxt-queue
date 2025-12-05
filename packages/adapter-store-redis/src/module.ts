@@ -1,4 +1,7 @@
 import { defineNuxtModule, createResolver, addServerPlugin } from '@nuxt/kit'
+import { readFileSync } from 'node:fs'
+
+const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'))
 
 export interface ModuleOptions {
   connection?: {
@@ -22,6 +25,7 @@ export interface ModuleOptions {
 export default defineNuxtModule<ModuleOptions>({
   meta: {
     name: '@nvent/adapter-store-redis',
+    version: packageJson.version,
     configKey: 'nventStoreRedis',
   },
   defaults: {

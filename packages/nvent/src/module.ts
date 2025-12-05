@@ -17,10 +17,13 @@ import { getServerImports } from './utils/serverImports'
 import { normalizeModuleOptions, toRuntimeConfig, getRedisStorageConfig } from './runtime/config'
 import type { ModuleOptions, ModuleConfig } from './runtime/config/types'
 import type {} from '@nuxt/schema'
+import { readFileSync } from 'node:fs'
+
+const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'))
 
 const meta = {
   name: 'nvent',
-  version: '0.4.1',
+  version: packageJson.version,
   configKey: 'nvent',
 }
 
