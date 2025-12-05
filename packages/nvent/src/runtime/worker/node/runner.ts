@@ -5,6 +5,7 @@ import {
   useEventManager,
   useNventLogger,
   $useFunctionRegistry,
+  $useAnalyzedFlows,
   useStateAdapter,
   useQueueAdapter,
 } from '#imports'
@@ -233,6 +234,7 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
         ctx.logger.log(level, msg, enriched)
       },
     }
+
     // Emit step.started event
     try {
       await eventMgr.publishBus({
@@ -242,7 +244,11 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
         stepName: job.name,
         stepId: stepRunId,
         attempt,
-        data: { jobId: job.id, name: job.name, queue: queueName } as any,
+        data: {
+          jobId: job.id,
+          name: job.name,
+          queue: queueName,
+        } as any,
       })
     }
     catch {
@@ -347,6 +353,13 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
         const queue = useQueueAdapter()
 
         // Enqueue system handler to register await pattern in the same queue
+        // System handlers execute user-defined lifecycle hooks, so they need timeout
+        // Use the same stepTimeout as the step itself since they're part of the step lifecycle
+        const analyzedFlows = $useAnalyzedFlows()
+        const flowDef = analyzedFlows.find((f: any) => f.id === flowName) as any
+        const analyzedAwaitStep = flowDef?.analyzed?.steps?.[job.name]
+        const awaitStepTimeout = analyzedAwaitStep?.stepTimeout
+
         await queue.enqueue(queueName, {
           name: SYSTEM_HANDLERS.AWAIT_REGISTER,
           data: {
@@ -357,7 +370,7 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
             awaitConfig: awaitAfter,
             input: { ...job.data, result },
           },
-          opts: { jobId: `${flowId}__${job.name}__await-register-after` },
+          opts: { jobId: `${flowId}__${job.name}__await-register-after`, timeout: awaitStepTimeout },
         })
       }
       catch (err) {

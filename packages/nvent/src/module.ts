@@ -91,6 +91,10 @@ export default defineNuxtModule<ModuleOptions>().with({
       runner: { ts: { isolate: 'inprocess' }, py: { enabled: false, cmd: 'python3', importMode: 'file' } },
       flows: {},
       eventIndex: {},
+      config: {
+        flow: config.flow,
+        queue: config.queue,
+      },
     })
     // Ensure plain JSON snapshot to avoid readonly/proxy issues in Nitro normalization
     const compiledSnapshot = JSON.parse(JSON.stringify(compiledWithMeta))
@@ -174,6 +178,10 @@ export default defineNuxtModule<ModuleOptions>().with({
         runner: { ts: { isolate: 'inprocess' }, py: { enabled: false, cmd: 'python3', importMode: 'file' } },
         flows: {},
         eventIndex: {},
+        config: {
+          flow: config.flow,
+          queue: config.queue,
+        },
       })))
 
       console.log(`[nvent] registry refreshed (${reason})`, changedPath || '')

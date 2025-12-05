@@ -26,6 +26,7 @@ export function buildFlows(flowSources: FlowSource[]) {
             queue,
             workerId: id,
             emits: f.emits,
+            stepTimeout: f.stepTimeout,
             awaitBefore: f.awaitBefore,
             awaitAfter: f.awaitAfter,
           }
@@ -39,6 +40,7 @@ export function buildFlows(flowSources: FlowSource[]) {
             workerId: id,
             subscribes: f.subscribes,
             emits: f.emits,
+            stepTimeout: f.stepTimeout,
             awaitBefore: f.awaitBefore,
             awaitAfter: f.awaitAfter,
           }
@@ -54,6 +56,7 @@ export function buildFlows(flowSources: FlowSource[]) {
             workerId: id,
             subscribes: f.subscribes,
             emits: f.emits,
+            stepTimeout: f.stepTimeout,
             awaitBefore: f.awaitBefore,
             awaitAfter: f.awaitAfter,
           }

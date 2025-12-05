@@ -7,7 +7,7 @@ import { ref, computed, type Ref } from '#imports'
  */
 
 export interface FlowState {
-  status: 'running' | 'completed' | 'failed' | 'canceled' | 'stalled'
+  status: 'running' | 'completed' | 'failed' | 'canceled' | 'stalled' | 'awaiting'
   startedAt?: string
   completedAt?: string
   steps: Record<string, StepState>
@@ -69,6 +69,7 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
         if (e.flowName) state.meta = { ...state.meta, flowName: e.flowName }
         if (e.data?.flowName) state.meta = { ...state.meta, flowName: e.data.flowName }
         if (e.data?.input) state.meta = { ...state.meta, input: e.data.input }
+        if (e.data?.stallTimeout) state.meta = { ...state.meta, stallTimeout: e.data.stallTimeout }
         if (e.data?.trigger) {
           state.meta = {
             ...state.meta,
@@ -100,7 +101,6 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
       case 'flow.stalled':
         state.status = 'stalled'
         if (e.data?.lastActivityAt) state.meta = { ...state.meta, lastActivityAt: e.data.lastActivityAt }
-        if (e.data?.stallTimeout) state.meta = { ...state.meta, stallTimeout: e.data.stallTimeout }
         break
 
       case 'step.started': {
@@ -275,22 +275,26 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
     state.startedAt = events[0].ts
   }
 
-  // Infer flow completion if no explicit flow.completed event was found
-  // A flow is considered complete if:
+  // Infer flow status based on step states
+  // A flow status is determined by:
   // 1. It has started
   // 2. It has at least one step
-  // 3. All steps have a terminal status (completed, failed, or timeout)
-  // 4. No steps are running, retrying, or waiting
   if (state.status === 'running' && state.startedAt && Object.keys(state.steps).length > 0) {
-    const hasRunningSteps = Object.values(state.steps).some(
-      s => s.status === 'running' || s.status === 'retrying' || s.status === 'waiting',
+    const hasActiveRunningSteps = Object.values(state.steps).some(
+      s => s.status === 'running' || s.status === 'retrying',
     )
+    const hasWaitingSteps = Object.values(state.steps).some(s => s.status === 'waiting')
     const hasFailedSteps = Object.values(state.steps).some(s => s.status === 'failed')
     const allStepsTerminal = Object.values(state.steps).every(
       s => s.status === 'completed' || s.status === 'failed' || s.status === 'timeout',
     )
 
-    if (!hasRunningSteps && allStepsTerminal) {
+    // If there are waiting steps and no actively running steps, set status to 'awaiting'
+    if (hasWaitingSteps && !hasActiveRunningSteps) {
+      state.status = 'awaiting'
+    }
+    // If all steps are terminal (no running, retrying, or waiting), infer completion
+    else if (allStepsTerminal) {
       // Infer completion status
       if (hasFailedSteps) {
         state.status = 'failed'
@@ -350,6 +354,7 @@ export function useFlowState(initialEvents: EventRecord[] = []) {
   const isFailed = computed(() => state.value.status === 'failed')
   const isCanceled = computed(() => state.value.status === 'canceled')
   const isStalled = computed(() => state.value.status === 'stalled')
+  const isAwaiting = computed(() => state.value.status === 'awaiting')
 
   const stepList = computed(() => {
     return Object.entries(state.value.steps).map(([key, step]) => ({
@@ -390,6 +395,7 @@ export function useFlowState(initialEvents: EventRecord[] = []) {
     isFailed,
     isCanceled,
     isStalled,
+    isAwaiting,
     stepList,
     runningSteps,
     waitingSteps,

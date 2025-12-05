@@ -41,8 +41,10 @@ export async function registerEventAwait(
     unsubscribe() // Clean up subscription
   })
 
-  // Calculate timeout with default
-  const timeoutMs = config.timeout && config.timeout > 0 ? config.timeout : (24 * 60 * 60 * 1000) // 24 hours default
+  // Calculate timeout with configurable default
+  const { useAwaitDefaults } = await import('../useAwait')
+  const { eventTimeout: defaultTimeout, timeoutAction: defaultTimeoutAction } = useAwaitDefaults()
+  const timeoutMs = config.timeout && config.timeout > 0 ? config.timeout : defaultTimeout
 
   // Emit await.registered event (wiring will handle storage)
   eventBus.publish({
@@ -59,7 +61,7 @@ export async function registerEventAwait(
       filterKey: config.filterKey,
       timeout: timeoutMs, // Store resolved timeout (with default)
       registeredAt: Date.now(),
-      timeoutAction: config.timeoutAction || 'fail',
+      timeoutAction: config.timeoutAction || defaultTimeoutAction,
     },
   } as any)
 

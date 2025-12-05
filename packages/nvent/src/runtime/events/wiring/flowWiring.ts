@@ -255,10 +255,15 @@ export async function checkAndTriggerPendingSteps(
               throw new Error(`Cannot register await: queue not found for step ${stepName} in flow ${flowName}`)
             }
 
+            // System handlers execute user-defined lifecycle hooks, so they need timeout
+            // Use the same stepTimeout as the step itself since they're part of the step lifecycle
+            const analyzedAwaitStep = (flowDef.analyzed?.steps || {})[stepName]
+            const awaitStepTimeout = analyzedAwaitStep?.stepTimeout
+
             await queue.enqueue(stepQueue, {
               name: SYSTEM_HANDLERS.AWAIT_REGISTER,
               data: payload,
-              opts: { jobId },
+              opts: { jobId, timeout: awaitStepTimeout },
             })
           }
           catch (err) {
@@ -326,7 +331,12 @@ export async function checkAndTriggerPendingSteps(
             w?.flow?.step === stepName && w?.queue?.name === stepMeta.queue,
           )
           const defaultOpts = worker?.queue?.defaultJobOptions || {}
-          const opts = { ...defaultOpts, jobId }
+
+          // Get stepTimeout from analyzed flow metadata (calculated during flow analysis)
+          const analyzedStep = (flowDef.analyzed?.steps || {})[stepName]
+          const stepTimeout = analyzedStep?.stepTimeout
+
+          const opts = { ...defaultOpts, jobId, timeout: stepTimeout }
 
           try {
             await queue.enqueue(stepMeta.queue, { name: stepName, data: payload, opts })
@@ -715,6 +725,30 @@ export function createFlowWiring() {
         await bus.publish(persistedEvent as any)
 
         if (e.type === 'flow.completed' || e.type === 'flow.failed') {
+          // Unschedule ALL flow-related scheduled jobs (stall timeout + await timeouts)
+          try {
+            const scheduler = useScheduler()
+
+            // Query persisted jobs by runId pattern (efficient, works across instances)
+            const flowJobs = await scheduler.getJobsByPattern(runId)
+
+            // Unschedule all matching jobs
+            for (const job of flowJobs) {
+              await scheduler.unschedule(job.id)
+              logger.debug(`Unscheduled job for ${e.type} flow: ${job.id}`)
+            }
+
+            logger.debug(`Unscheduled ${flowJobs.length} scheduled jobs for ${e.type} flow runId '${runId}'`, {
+              jobs: flowJobs.map(j => j.id),
+            })
+          }
+          catch (error) {
+            // Job may not exist or already fired - this is fine
+            logger.debug(`Could not unschedule jobs for runId '${runId}'`, {
+              error: (error as Error).message,
+            })
+          }
+
           // Clean up the publishing tracker after a short delay to ensure
           // all concurrent orchestration handlers have finished their checks
           const publishKey = `${runId}:terminal`
@@ -929,6 +963,7 @@ export function createFlowWiring() {
         // For flow.start, initialize index with running status
         if (e.type === 'flow.start') {
           const timestamp = Date.now()
+
           await indexFlowRun(flowName, runId, timestamp, {
             status: 'running',
             startedAt: timestamp,
@@ -937,6 +972,43 @@ export function createFlowWiring() {
             completedSteps: 0,
             emittedEvents: {}, // Object for atomic updates
           })
+
+          // Schedule per-flow stall timeout job
+          try {
+            // Get stallTimeout from analyzed flows
+            const analyzedFlows = $useAnalyzedFlows() as any[]
+            const flowMeta = analyzedFlows.find((f: any) => f.id === flowName)
+            const stallTimeout = flowMeta?.analyzed?.stallTimeout || (30 * 60 * 1000)
+
+            const scheduler = useScheduler()
+            const stallJobId = `stall-timeout:${runId}`
+
+            await scheduler.schedule({
+              id: stallJobId,
+              name: `Stall Timeout - ${flowName}`,
+              type: 'one-time',
+              executeAt: timestamp + stallTimeout,
+              handler: async () => {
+                // Mark this specific flow as stalled
+                if (stallDetector) {
+                  logger.info(`Per-flow stall timeout fired for '${flowName}' runId '${runId}'`)
+                  await stallDetector.markAsStalled(flowName, runId, 'Stall timeout reached')
+                }
+              },
+              metadata: {
+                component: 'stall-detector',
+                flowName,
+                runId,
+              },
+            })
+
+            logger.debug(`Scheduled stall timeout for flow '${flowName}' runId '${runId}' in ${stallTimeout / 1000}s`, { jobId: stallJobId })
+          }
+          catch (error) {
+            logger.warn(`Failed to schedule stall timeout for flow '${flowName}' runId '${runId}'`, {
+              error: (error as Error).message,
+            })
+          }
         }
 
         // For flow.cancel, update status to canceled
@@ -950,9 +1022,25 @@ export function createFlowWiring() {
 
               logger.info('Marked flow as canceled', { flowName, runId })
             }
+
+            // Unschedule ALL flow-related scheduled jobs (stall timeout + await timeouts)
+            const scheduler = useScheduler()
+
+            // Query persisted jobs by runId pattern (efficient, works across instances)
+            const flowJobs = await scheduler.getJobsByPattern(runId)
+
+            // Unschedule all matching jobs
+            for (const job of flowJobs) {
+              await scheduler.unschedule(job.id)
+              logger.debug(`Unscheduled job for canceled flow: ${job.id}`)
+            }
+
+            logger.debug(`Unscheduled ${flowJobs.length} scheduled jobs for canceled flow runId '${runId}'`, {
+              jobs: flowJobs.map(j => j.id),
+            })
           }
           catch (err) {
-            logger.warn('Failed to update canceled status', {
+            logger.warn('Failed to update canceled status or unschedule flow jobs', {
               flowName,
               runId,
               error: (err as any)?.message,
@@ -960,10 +1048,45 @@ export function createFlowWiring() {
           }
         }
 
-        // For step events, update activity timestamp (stall detection)
+        // For step events, reschedule stall timeout (extend deadline)
         if (e.type === 'step.started' || e.type === 'step.completed' || e.type === 'step.failed' || e.type === 'step.retry') {
-          if (stallDetector) {
-            await stallDetector.updateActivity(flowName, runId)
+          try {
+            const scheduler = useScheduler()
+            const stallJobId = `stall-timeout:${runId}`
+
+            // Get flow-specific stall timeout
+            const analyzedFlows = $useAnalyzedFlows() as any[]
+            const flowMeta = analyzedFlows.find((f: any) => f.id === flowName)
+            const stallTimeout = flowMeta?.analyzed?.stallTimeout || (30 * 60 * 1000)
+
+            // Reschedule by canceling and creating new job with extended deadline
+            await scheduler.unschedule(stallJobId)
+            await scheduler.schedule({
+              id: stallJobId,
+              name: `Stall Timeout - ${flowName}`,
+              type: 'one-time',
+              executeAt: Date.now() + stallTimeout,
+              handler: async () => {
+                if (stallDetector) {
+                  logger.info(`Per-flow stall timeout fired for '${flowName}' runId '${runId}'`)
+                  await stallDetector.markAsStalled(flowName, runId, 'Stall timeout reached')
+                }
+              },
+              metadata: {
+                component: 'stall-detector',
+                flowName,
+                runId,
+                stallTimeout,
+              },
+            })
+
+            logger.debug(`Rescheduled stall timeout for flow '${flowName}' runId '${runId}' (activity: ${e.type})`)
+          }
+          catch (error) {
+            // Job may not exist (already completed) or scheduler not available - log but don't fail
+            logger.debug(`Could not reschedule stall timeout for flow '${flowName}' runId '${runId}'`, {
+              error: (error as Error).message,
+            })
           }
         }
 
@@ -1607,74 +1730,14 @@ export function createFlowWiring() {
     }
 
     // Initialize and start stall detector
+    // Note: Stall detection now uses per-flow scheduler jobs (scheduled on flow.start)
+    // No periodic background job needed
     const config = useRuntimeConfig()
     const flowConfig = (config as any).nvent.flow || {}
     stallDetector = createStallDetector(store, flowConfig.stallDetection)
-    if (flowConfig.stallDetection?.enabled) {
+    if (flowConfig.stallDetection?.enabled !== false) {
       await stallDetector.start()
-
-      // Schedule the periodic check job HERE in flowWiring (not in the class)
-      // This ensures the handler closure has the correct context
-      const scheduleConfig = stallDetector.getScheduleConfig()
-      if (scheduleConfig.enabled) {
-        try {
-          const scheduler = useScheduler()
-
-          logger.info('Scheduling periodic stall detector from flowWiring', {
-            checkInterval: `${scheduleConfig.interval / 1000}s`,
-          })
-
-          const jobId = await scheduler.schedule({
-            id: 'stall-detection',
-            name: 'Flow Stall Detection',
-            type: 'interval',
-            interval: scheduleConfig.interval,
-            handler: async () => {
-              // Guard: Check if detector still exists (shutdown scenario)
-              if (!stallDetector || !wired) {
-                logger.debug('Stall detector handler called but wiring stopped')
-                return
-              }
-
-              try {
-                logger.info('Stall detector running periodic check')
-                // Get flow names and call the detector's check method
-                const analyzedFlows = $useAnalyzedFlows() as any[]
-                const flowNames = analyzedFlows.map((f: any) => f.id).filter(Boolean)
-
-                if (flowNames.length > 0) {
-                  await stallDetector.checkFlowsForStalls(flowNames)
-                }
-              }
-              catch (error) {
-                logger.error('Stall detector periodic check failed', {
-                  error: (error as Error).message,
-                  stack: (error as Error).stack,
-                })
-                // Don't rethrow - let scheduler continue on next interval
-              }
-            },
-            metadata: {
-              component: 'stall-detector',
-              stallTimeout: scheduleConfig.stallTimeout,
-              checkInterval: scheduleConfig.interval,
-            },
-          })
-
-          stallDetector.setSchedulerJobId(jobId)
-          logger.info('Stall detector started and scheduled', { jobId })
-        }
-        catch (error) {
-          logger.error('Failed to schedule stall detector - periodic checks disabled', {
-            error: (error as Error).message,
-            stack: (error as Error).stack,
-          })
-          // Detector still runs startup recovery and lazy detection
-        }
-      }
-      else {
-        logger.info('Stall detector started (periodic check disabled)')
-      }
+      logger.info('Stall detector initialized - using per-flow scheduler jobs')
     }
   }
 

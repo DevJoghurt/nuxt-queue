@@ -1,36 +1,65 @@
 <template>
   <div class="flex flex-col h-full">
     <!-- Filter Bar -->
-    <div class="flex items-center gap-3 px-6 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 shrink-0">
-      <div class="flex items-center gap-2">
-        <span class="text-xs font-medium text-gray-700 dark:text-gray-300">Show:</span>
-        <URadioGroup
-          v-model="filter"
-          :items="filterOptions"
-          orientation="horizontal"
-          size="xs"
-          variant="table"
-          indicator="hidden"
-          :ui="{
-            base: 'size-2',
-            container: 'h-2',
-            item: 'p-1',
-          }"
-        />
-      </div>
+    <div class="h-[72px] px-6 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 shrink-0">
+      <!-- Top Row: Title and Action -->
+      <div class="flex items-center justify-between gap-4 mb-2">
+        <div class="flex items-center gap-2">
+          <UIcon
+            name="i-lucide-activity"
+            class="w-4 h-4 text-gray-400"
+          />
+          <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            Timeline & Logs
+          </span>
+          <span
+            v-if="isLive"
+            class="flex items-center gap-1.5 ml-2"
+          >
+            <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span class="text-xs text-gray-500 dark:text-gray-400">Live</span>
+          </span>
+        </div>
 
-      <div class="flex items-center gap-2 ml-auto">
         <UButton
           size="xs"
           color="neutral"
-          variant="outline"
+          variant="ghost"
+          icon="i-lucide-download"
           :disabled="filteredItems.length === 0"
           @click="$emit('export')"
         >
-          Export JSON
+          Export
         </UButton>
-        <div class="text-xs text-gray-500">
-          {{ filteredItems.length }} item{{ filteredItems.length === 1 ? '' : 's' }}
+      </div>
+
+      <!-- Bottom Row: Filter and Count -->
+      <div class="flex items-center justify-between gap-4 text-[11px]">
+        <div class="flex items-center gap-1.5">
+          <span class="text-gray-500 dark:text-gray-400">Filter:</span>
+          <URadioGroup
+            v-model="filter"
+            :items="filterOptions"
+            orientation="horizontal"
+            size="xs"
+            variant="table"
+            indicator="hidden"
+            :ui="{
+              base: 'text-[9px]',
+              container: 'gap-0',
+              item: 'px-1 py-0',
+            }"
+          />
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <UIcon
+            name="i-lucide-list"
+            class="w-3.5 h-3.5 text-gray-400"
+          />
+          <span class="text-gray-600 dark:text-gray-300">
+            {{ filteredItems.length }} {{ filteredItems.length === 1 ? 'item' : 'items' }}
+          </span>
         </div>
       </div>
     </div>

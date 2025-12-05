@@ -288,12 +288,13 @@
                     :run-status="runSnapshot.status"
                     :started-at="runSnapshot.startedAt"
                     :completed-at="runSnapshot.completedAt"
-                    :steps="flowState.stepList.value"
+                    :steps="enhancedStepList"
                     :flow-name="selectedFlow || undefined"
                     :run-id="selectedRunId || undefined"
                     :trigger-name="flowState.state.value.meta?.triggerName"
                     :trigger-type="flowState.state.value.meta?.triggerType"
                     :flow-def="selectedFlowDef"
+                    :stall-timeout="runSnapshot.stallTimeout"
                     @select-step="handleSelectStep"
                     @cancel-flow="handleCancelFlow"
                   />
@@ -585,12 +586,14 @@ const formatDuration = (start: string | number, end: string | number) => {
 // Computed state from reducer
 const runSnapshot = computed(() => {
   const state = flowState.state.value
+  const flowMeta = selectedFlowMeta.value
   return {
     status: state.status,
     startedAt: state.startedAt,
     completedAt: state.completedAt,
     logsCount: state.logs.length,
     lastLogLevel: state.logs.length > 0 ? state.logs[state.logs.length - 1]?.level : undefined,
+    stallTimeout: flowMeta?.analyzed?.stallTimeout, // Get from analyzed flows (static)
   }
 })
 
@@ -615,6 +618,42 @@ const selectedFlowMeta = computed(() => {
   const id = selectedFlow.value
   if (!id) return null
   return (flows.value || []).find((f: any) => f?.id === id) || null
+})
+
+// Enhance step list with static stepTimeout from analyzed flows
+const enhancedStepList = computed(() => {
+  const steps = flowState.stepList.value
+  const flowMeta = selectedFlowMeta.value
+  if (!flowMeta?.analyzed?.steps) return steps
+
+  // Create a map of stepName -> stepTimeout from analyzed flows
+  const stepTimeoutMap = new Map<string, number>()
+  
+  // Add entry step timeout if exists
+  if (flowMeta.entry?.stepTimeout !== undefined) {
+    stepTimeoutMap.set(flowMeta.entry.step, flowMeta.entry.stepTimeout)
+  }
+  
+  // Add all other step timeouts from analyzed.steps (it's an object, not array)
+  for (const [stepName, analyzedStep] of Object.entries(flowMeta.analyzed.steps)) {
+    if ((analyzedStep as any).stepTimeout !== undefined) {
+      stepTimeoutMap.set(stepName, (analyzedStep as any).stepTimeout)
+    }
+  }
+
+  // Merge stepTimeout into runtime step states
+  return steps.map((step: any) => {
+    // Extract base step name (remove :await-before or :await-after suffix)
+    const baseStepName = step.key.includes(':await-') 
+      ? step.key.split(':await-')[0] 
+      : step.key
+    
+    const staticTimeout = stepTimeoutMap.get(baseStepName)
+    if (staticTimeout !== undefined) {
+      return { ...step, stepTimeout: staticTimeout }
+    }
+    return step
+  })
 })
 
 const handleSelectStep = (stepKey: string | null) => {

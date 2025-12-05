@@ -31,6 +31,7 @@ export type WorkerEntry = {
       subscribe: string[]
       mode?: 'auto' | 'manual'
     }
+    stepTimeout?: number
     awaitBefore?: AwaitConfig
     awaitAfter?: AwaitConfig
   }
@@ -157,6 +158,7 @@ export type FlowEntry = {
   queue: string
   workerId: string
   emits?: string[]
+  stepTimeout?: number
   awaitBefore?: AwaitConfig
   awaitAfter?: AwaitConfig
 }
@@ -166,6 +168,7 @@ export type FlowStep = {
   workerId: string
   subscribes?: string[]
   emits?: string[]
+  stepTimeout?: number
   awaitBefore?: AwaitConfig
   awaitAfter?: AwaitConfig
 }

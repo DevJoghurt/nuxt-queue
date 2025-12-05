@@ -21,13 +21,14 @@
       <template #title="{ item }">
         <div class="flex items-center gap-2 min-w-0">
           <span
-            class="font-mono text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 flex-shrink-0"
+            :class="eventTypeColor(item.eventType)"
+            class="font-mono text-xs px-2 py-1 rounded font-medium flex-shrink-0"
           >
             {{ item.eventType }}
           </span>
           <span
             v-if="item.stepName"
-            class="text-xs text-gray-500 dark:text-gray-400 truncate"
+            class="text-xs text-gray-600 dark:text-gray-300 truncate"
           >
             {{ item.stepName }}
           </span>
@@ -39,26 +40,42 @@
         <!-- Special rendering for log events -->
         <div
           v-if="item.eventType === 'log'"
-          class="space-y-2 mt-2"
+          :class="hasMetadata(item.eventData) ? 'p-3 rounded-lg border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 mt-2' : 'mt-1'"
+          class="space-y-2"
         >
           <div class="flex items-start gap-2">
             <UBadge
               :color="levelColor(item?.eventData?.level)"
-              variant="subtle"
+              variant="solid"
               size="xs"
               class="capitalize mt-0.5 flex-shrink-0"
             >
               {{ item?.eventData?.level || 'info' }}
             </UBadge>
-            <span class="text-sm text-gray-900 dark:text-gray-100 flex-1 break-words">
+            <span class="text-xs text-gray-900 dark:text-gray-100 flex-1 break-words line-clamp-3">
               {{ item?.eventData?.message || '' }}
             </span>
           </div>
-          <div
-            v-if="item?.eventData?.progress"
-            class="mt-2"
-          >
-            <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-y-auto max-h-40 text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap break-words">{{ pretty(item.eventData) }}</pre>
+          <!-- Show metadata in accordion if exists -->
+          <div v-if="hasMetadata(item.eventData)">
+            <UAccordion
+              :items="[{
+                label: 'Metadata',
+                icon: 'i-lucide-info',
+                defaultOpen: false,
+                content: item.eventData,
+              }]"
+              :ui="{
+                trigger: 'text-[10px] py-1',
+                leadingIcon: 'size-3 text-blue-500 dark:text-blue-400',
+                label: 'text-[10px]',
+                item: 'border-0 mt-1',
+              }"
+            >
+              <template #content="{ item: accordionItem }">
+                <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-y-auto max-h-60 text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap break-words">{{ prettyMetadata(accordionItem.content) }}</pre>
+              </template>
+            </UAccordion>
           </div>
         </div>
 
@@ -69,13 +86,13 @@
         >
           <div
             v-if="item.eventData"
-            class="space-y-1"
+            class="space-y-1 p-2 rounded border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700"
           >
             <div
               v-if="item.eventData.awaitType"
               class="flex items-start gap-2"
             >
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Type:</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400 min-w-[60px] flex-shrink-0">Type:</span>
               <UBadge
                 color="blue"
                 variant="subtle"
@@ -89,7 +106,7 @@
               v-if="item.eventData.position"
               class="flex items-start gap-2"
             >
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Position:</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400 min-w-[60px] flex-shrink-0">Position:</span>
               <UBadge
                 color="neutral"
                 variant="subtle"
@@ -103,21 +120,37 @@
               v-if="item.eventData.triggerName"
               class="flex items-start gap-2"
             >
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Trigger:</span>
+              <span class="text-xs text-gray-600 dark:text-gray-300 font-semibold min-w-[60px] flex-shrink-0">Trigger:</span>
               <span class="text-xs text-gray-700 dark:text-gray-300 font-mono">{{ item.eventData.triggerName }}</span>
             </div>
             <div
               v-if="item.eventData.triggerData"
-              class="flex items-start gap-2"
+              class="mt-1"
             >
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Data:</span>
-              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-y-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1 min-w-0 whitespace-pre-wrap break-words">{{ pretty(item.eventData.triggerData) }}</pre>
+              <UAccordion
+                :items="[{
+                  label: 'Trigger Data',
+                  icon: 'i-lucide-braces',
+                  defaultOpen: false,
+                  content: item.eventData.triggerData,
+                }]"
+                :ui="{
+                  trigger: 'text-[10px] py-1',
+                  leadingIcon: 'size-3 text-purple-500 dark:text-purple-400',
+                  label: 'text-[10px]',
+                  item: 'border-0 mt-0',
+                }"
+              >
+                <template #content="{ item: accordionItem }">
+                  <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-y-auto max-h-60 text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap break-words">{{ pretty(accordionItem.content) }}</pre>
+                </template>
+              </UAccordion>
             </div>
             <div
               v-if="item.eventData.duration"
               class="flex items-start gap-2"
             >
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Duration:</span>
+              <span class="text-xs text-gray-600 dark:text-gray-300 font-semibold min-w-[60px] flex-shrink-0">Duration:</span>
               <span class="text-xs text-gray-700 dark:text-gray-300">{{ item.eventData.duration }}ms</span>
             </div>
           </div>
@@ -129,39 +162,158 @@
           class="text-sm mt-2"
         >
           <div
-            v-if="item.eventData"
-            class="space-y-1"
+            v-if="item.eventData && (item.eventData.input || item.eventData.output || item.eventData.error)"
+            class="space-y-1 p-2 rounded border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700"
           >
             <div
               v-if="item.eventData.input"
-              class="flex items-start gap-2"
+              class="mt-1"
             >
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Input:</span>
-              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-y-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1 min-w-0 whitespace-pre-wrap break-words">{{ pretty(item.eventData.input) }}</pre>
+              <UAccordion
+                :items="[{
+                  label: 'Input',
+                  icon: 'i-lucide-arrow-down-to-line',
+                  defaultOpen: false,
+                  content: item.eventData.input,
+                }]"
+                :ui="{
+                  trigger: 'text-[10px] py-1',
+                  leadingIcon: 'size-3 text-green-500 dark:text-green-400',
+                  label: 'text-[10px]',
+                  item: 'border-0 mt-0',
+                }"
+              >
+                <template #content="{ item: accordionItem }">
+                  <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-y-auto max-h-60 text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap break-words">{{ pretty(accordionItem.content) }}</pre>
+                </template>
+              </UAccordion>
             </div>
             <div
               v-if="item.eventData.output"
-              class="flex items-start gap-2"
+              class="mt-1"
             >
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-medium min-w-[60px] flex-shrink-0">Output:</span>
-              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 overflow-y-auto max-h-20 text-gray-700 dark:text-gray-300 font-mono flex-1 min-w-0 whitespace-pre-wrap break-words">{{ pretty(item.eventData.output) }}</pre>
+              <UAccordion
+                :items="[{
+                  label: 'Output',
+                  icon: 'i-lucide-arrow-up-from-line',
+                  defaultOpen: false,
+                  content: item.eventData.output,
+                }]"
+                :ui="{
+                  trigger: 'text-[10px] py-1',
+                  leadingIcon: 'size-3 text-blue-500 dark:text-blue-400',
+                  label: 'text-[10px]',
+                  item: 'border-0 mt-0',
+                }"
+              >
+                <template #content="{ item: accordionItem }">
+                  <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-y-auto max-h-60 text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap break-words">{{ pretty(accordionItem.content) }}</pre>
+                </template>
+              </UAccordion>
             </div>
             <div
               v-if="item.eventData.error"
-              class="flex items-start gap-2"
+              class="mt-1"
             >
-              <span class="text-xs text-red-500 dark:text-red-400 font-medium min-w-[60px] flex-shrink-0">Error:</span>
-              <pre class="text-xs bg-red-50 dark:bg-red-900/20 rounded px-2 py-1 overflow-y-auto max-h-20 text-red-700 dark:text-red-300 font-mono flex-1 min-w-0 whitespace-pre-wrap break-words">{{ pretty(item.eventData.error) }}</pre>
+              <UAccordion
+                :items="[{
+                  label: 'Error Details',
+                  icon: 'i-lucide-alert-circle',
+                  defaultOpen: true,
+                  content: item.eventData.error,
+                }]"
+                :ui="{
+                  trigger: 'text-[10px] py-1 text-red-600 dark:text-red-400',
+                  leadingIcon: 'size-3 text-red-500 dark:text-red-400',
+                  label: 'text-[10px]',
+                  item: 'border-0 mt-0',
+                }"
+              >
+                <template #content="{ item: accordionItem }">
+                  <pre class="text-xs bg-red-50 dark:bg-red-900/20 rounded p-2 overflow-y-auto max-h-60 text-red-700 dark:text-red-300 font-mono whitespace-pre-wrap break-words">{{ pretty(accordionItem.content) }}</pre>
+                </template>
+              </UAccordion>
             </div>
           </div>
         </div>
 
-        <!-- Default rendering -->
+        <!-- Special rendering for emit events -->
+        <div
+          v-else-if="isEmitEvent(item.eventType)"
+          class="mt-2"
+        >
+          <div
+            v-if="item.eventData && item.eventData.payload"
+            class="p-2 rounded border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700"
+          >
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-xs text-gray-500 dark:text-gray-400">Event:</span>
+              <UBadge
+                color="primary"
+                variant="solid"
+                size="xs"
+              >
+                {{ item.eventData.name || 'unknown' }}
+              </UBadge>
+            </div>
+            <UAccordion
+              v-if="item.eventData.payload"
+              :items="[{
+                label: 'Payload',
+                icon: 'i-lucide-package',
+                defaultOpen: false,
+                content: item.eventData.payload,
+              }]"
+              :ui="{
+                trigger: 'text-[10px] py-1',
+                leadingIcon: 'size-3 text-emerald-500 dark:text-emerald-400',
+                label: 'text-[10px]',
+                item: 'border-0 mt-0',
+              }"
+            >
+              <template #content="{ item: accordionItem }">
+                <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-y-auto max-h-60 text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap break-words">{{ pretty(accordionItem.content) }}</pre>
+              </template>
+            </UAccordion>
+          </div>
+          <div
+            v-else-if="item.eventData"
+            class="flex items-center gap-2 mt-1"
+          >
+            <span class="text-xs text-gray-500 dark:text-gray-400">Event:</span>
+            <UBadge
+              color="primary"
+              variant="solid"
+              size="xs"
+            >
+              {{ item.eventData.name || 'unknown' }}
+            </UBadge>
+          </div>
+        </div>
+
+        <!-- Default rendering with accordion -->
         <div
           v-else-if="item.eventData && Object.keys(item.eventData).length > 0"
           class="mt-2"
         >
-          <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-y-auto max-h-40 text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap break-words">{{ pretty(item.eventData) }}</pre>
+          <UAccordion
+            :items="[{
+              label: 'Event Data',
+              icon: 'i-lucide-braces',
+              defaultOpen: false,
+              content: item.eventData,
+            }]"
+            :ui="{
+              trigger: 'text-[10px] py-1',
+              leadingIcon: 'size-3 text-gray-500 dark:text-gray-400',
+              label: 'text-[10px]',
+              item: 'border-0 mt-1',
+            }"
+          >
+            <template #content="{ item: accordionItem }">
+              <pre class="text-xs bg-gray-50 dark:bg-gray-800 rounded p-2 overflow-y-auto max-h-60 text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap break-words">{{ pretty(accordionItem.content) }}</pre>
+            </template>
+          </UAccordion>
         </div>
       </template>
     </UTimeline>
@@ -292,12 +444,65 @@ function levelColor(level?: string) {
   }
 }
 
+function eventTypeColor(type: string) {
+  if (!type) return 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+  
+  // Flow events
+  if (type.startsWith('flow.')) {
+    if (type === 'flow.start') return 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300'
+    if (type === 'flow.completed') return 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300'
+    if (type === 'flow.failed') return 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300'
+    return 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300'
+  }
+  
+  // Step events
+  if (type.startsWith('step.')) {
+    if (type === 'step.completed') return 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300'
+    if (type === 'step.failed') return 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300'
+    return 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300'
+  }
+  
+  // Await events
+  if (type.startsWith('await.')) {
+    if (type === 'await.resolved') return 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300'
+    if (type === 'await.timeout') return 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300'
+    return 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
+  }
+  
+  // Log events
+  if (type === 'log') return 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300'
+  
+  // Emit events
+  if (type === 'emit') return 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
+  
+  // Default
+  return 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+}
+
 function isFlowEvent(type: string) {
   return type?.startsWith('flow.') || type?.startsWith('step.')
 }
 
 function isAwaitEvent(type: string) {
   return type?.startsWith('await.')
+}
+
+function isEmitEvent(type: string) {
+  return type === 'emit'
+}
+
+function hasMetadata(eventData: any): boolean {
+  if (!eventData || typeof eventData !== 'object') return false
+  // Check if there's metadata beyond message and level for logs
+  const keys = Object.keys(eventData).filter(k => k !== 'message' && k !== 'level' && k !== 'msg')
+  return keys.length > 0
+}
+
+function prettyMetadata(eventData: any): string {
+  if (!eventData || typeof eventData !== 'object') return ''
+  // Filter out message and level for log metadata display
+  const { message, level, msg, ...metadata } = eventData
+  return pretty(metadata)
 }
 </script>
 

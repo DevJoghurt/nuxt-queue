@@ -49,6 +49,14 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
         checkInterval: 15 * 60 * 1000, // 15 minutes
         enablePeriodicCheck: true,
       },
+      awaitDefaults: {
+        webhookTimeout: 24 * 60 * 60 * 1000, // 24 hours
+        eventTimeout: 24 * 60 * 60 * 1000, // 24 hours
+        timeTimeout: undefined, // No default timeout for time awaits
+        scheduleTimeout: undefined, // No default timeout for schedule awaits
+        timeoutAction: 'fail',
+      },
+      stepTimeout: 5 * 60 * 1000, // 5 minutes default step execution timeout
     },
     webhooks: {
       // baseUrl will be determined at runtime from Nitro context

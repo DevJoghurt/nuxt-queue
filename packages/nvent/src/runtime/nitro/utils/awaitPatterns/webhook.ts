@@ -51,8 +51,10 @@ export async function registerWebhookAwait(
 
   logger.info(`Registering webhook await: ${fullWebhookUrl}`, { runId, stepName })
 
-  // Calculate timeout with default
-  const timeoutMs = config.timeout && config.timeout > 0 ? config.timeout : (24 * 60 * 60 * 1000) // 24 hours default
+  // Calculate timeout with configurable default
+  const { useAwaitDefaults } = await import('../useAwait')
+  const { webhookTimeout: defaultTimeout, timeoutAction: defaultTimeoutAction } = useAwaitDefaults()
+  const timeoutMs = config.timeout && config.timeout > 0 ? config.timeout : defaultTimeout
 
   // Emit await.registered event (wiring will handle flow state updates)
   eventBus.publish({
@@ -70,7 +72,7 @@ export async function registerWebhookAwait(
       timeout: timeoutMs, // Store resolved timeout (with default)
       registeredAt: Date.now(),
       webhookUrl: fullWebhookUrl,
-      timeoutAction: config.timeoutAction || 'fail',
+      timeoutAction: config.timeoutAction || defaultTimeoutAction,
     },
   })
 

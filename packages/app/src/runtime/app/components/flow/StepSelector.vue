@@ -78,6 +78,18 @@
           >
             {{ getAwaitPosition(item.step.key) }}
           </UBadge>
+          <!-- Step Timeout Badge (only for regular steps, not await steps) -->
+          <span
+            v-if="item.step.stepTimeout && !isAwaitStep(item.step.key)"
+            class="flex items-center gap-1"
+            :title="`Step Execution Timeout: ${formatDuration(item.step.stepTimeout)}`"
+          >
+            <UIcon
+              name="i-lucide-hourglass"
+              class="w-3 h-3 opacity-60"
+            />
+            <span>{{ formatDuration(item.step.stepTimeout) }}</span>
+          </span>
         </div>
         <div
           v-else

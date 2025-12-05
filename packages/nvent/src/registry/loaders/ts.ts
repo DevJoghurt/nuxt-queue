@@ -42,6 +42,7 @@ export async function loadTsConfig(absPath: string): Promise<ConfigMeta> {
           emits: flowCfg.emits,
           subscribes,
           triggers: flowCfg.triggers,
+          stepTimeout: flowCfg.stepTimeout,
           awaitBefore: flowCfg.awaitBefore,
           awaitAfter: flowCfg.awaitAfter,
         }

@@ -111,6 +111,13 @@ export interface SchedulerAdapter {
   getScheduledJobs(): Promise<ScheduledJob[]>
 
   /**
+   * Get jobs matching a pattern (e.g., by runId)
+   * Queries persisted store, works across all instances
+   * More efficient than getAllPersistedJobs() when filtering
+   */
+  getJobsByPattern(pattern: string): Promise<ScheduledJob[]>
+
+  /**
    * Get all persisted jobs from store (across all instances)
    * Useful for debugging and monitoring in horizontal setups
    */

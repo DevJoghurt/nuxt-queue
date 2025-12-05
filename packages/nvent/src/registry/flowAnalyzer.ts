@@ -12,6 +12,7 @@ interface FlowEntry {
   runtime?: 'nodejs' | 'python'
   runtype?: 'inprocess' | 'task'
   emits?: string[]
+  stepTimeout?: number
   awaitBefore?: AwaitConfig
   awaitAfter?: AwaitConfig
 }
@@ -23,6 +24,7 @@ interface FlowStep {
   runtime?: 'nodejs' | 'python'
   runtype?: 'inprocess' | 'task'
   emits?: string[]
+  stepTimeout?: number
   awaitBefore?: AwaitConfig
   awaitAfter?: AwaitConfig
 }
@@ -39,6 +41,7 @@ interface AnalyzedStep extends FlowStep {
   triggers: string[] // Steps that this step triggers
   level: number // Execution level (0 = entry, 1 = first level, etc.)
   hasAwaitPattern?: boolean // Quick flag for runtime checks
+  stepTimeout?: number // Step execution timeout in ms (from queue config), undefined = use global default
 }
 
 interface AnalyzedFlow {
@@ -250,20 +253,83 @@ function findTriggeredSteps(
 }
 
 /**
- * Calculate total timeout for a single step (awaitBefore + awaitAfter)
+ * Get default timeout for an await pattern based on its type
+ * These must match the defaults configured in flow.awaitDefaults
+ */
+function getAwaitDefaultTimeout(awaitConfig?: AwaitConfig): number {
+  if (!awaitConfig) return 0
+
+  // If explicit timeout is set, use it
+  if (awaitConfig.timeout && awaitConfig.timeout > 0) {
+    return awaitConfig.timeout
+  }
+
+  // Apply defaults based on type (matching runtime defaults)
+  // TODO: Read from runtime config when available in build context
+  const type = awaitConfig.type
+  switch (type) {
+    case 'webhook':
+      return 24 * 60 * 60 * 1000 // 24 hours (matches flow.awaitDefaults.webhookTimeout)
+    case 'event':
+      return 24 * 60 * 60 * 1000 // 24 hours (matches flow.awaitDefaults.eventTimeout)
+    case 'time':
+      return 0 // No timeout for time awaits by default
+    case 'schedule':
+      return 0 // No timeout for schedule awaits by default
+    default:
+      return 0
+  }
+}
+
+/**
+ * Calculate total await timeout for a single step (awaitBefore + awaitAfter)
+ * Applies default timeouts when not explicitly specified
+ * NOTE: This is for stall timeout calculation, NOT for step execution timeout
  */
 function getStepAwaitTimeout(step: AnalyzedStep): number {
   let timeout = 0
-  if (step.awaitBefore?.timeout) timeout += step.awaitBefore.timeout
-  if (step.awaitAfter?.timeout) timeout += step.awaitAfter.timeout
+  if (step.awaitBefore) {
+    timeout += getAwaitDefaultTimeout(step.awaitBefore)
+  }
+  if (step.awaitAfter) {
+    timeout += getAwaitDefaultTimeout(step.awaitAfter)
+  }
   return timeout
 }
 
 /**
- * Calculate flow-level stall timeout based on await patterns
+ * Get step execution timeout with proper priority chain
+ * Priority: defineFunctionConfig.flow.stepTimeout > flow.stepTimeout > queue.defaultJobOptions.timeout
+ *
+ * @param step - The analyzed step
+ * @param config - Module configuration
+ * @returns Step execution timeout in milliseconds, or undefined if not configured
+ */
+function getStepExecutionTimeout(step: AnalyzedStep, config?: AnalyzerConfig): number | undefined {
+  // Priority 1: Per-function defineFunctionConfig({ flow: { stepTimeout: X } })
+  if (step.stepTimeout !== undefined) {
+    return step.stepTimeout
+  }
+
+  // Priority 2: Global flow.stepTimeout
+  if (config?.flow?.stepTimeout !== undefined) {
+    return config.flow.stepTimeout
+  }
+
+  // Priority 3: queue.defaultJobOptions.timeout
+  if (config?.queue?.defaultJobOptions?.timeout !== undefined) {
+    return config.queue.defaultJobOptions.timeout
+  }
+
+  // No timeout configured
+  return undefined
+}
+
+/**
+ * Calculate flow-level stall timeout based on step execution timeouts + await timeouts
  *
  * Strategy:
- * - Within same level (parallel): use MAX timeout
+ * - Within same level (parallel): use MAX (step timeout + await timeout)
  * - Across different levels (sequential): SUM timeouts
  * - Add buffer for processing time
  */
@@ -271,10 +337,10 @@ function calculateFlowStallTimeout(steps: Record<string, AnalyzedStep>, levels: 
   const DEFAULT_STALL_TIMEOUT = 30 * 60 * 1000 // 30 minutes
   const MIN_BUFFER = 5 * 60 * 1000 // 5 minutes
   const BUFFER_PERCENTAGE = 0.1 // 10%
+  const DEFAULT_STEP_TIMEOUT = 5 * 60 * 1000 // 5 minutes if not configured
 
-  // Calculate max await timeout per level
+  // Calculate max total timeout per level (step execution + await timeouts)
   const levelTimeouts: number[] = []
-  let awaitCount = 0
 
   for (const levelSteps of levels) {
     let maxLevelTimeout = 0
@@ -283,10 +349,17 @@ function calculateFlowStallTimeout(steps: Record<string, AnalyzedStep>, levels: 
       const step = steps[stepName]
       if (!step) continue
 
-      const stepTimeout = getStepAwaitTimeout(step)
-      if (stepTimeout > 0) {
-        awaitCount++
-        maxLevelTimeout = Math.max(maxLevelTimeout, stepTimeout)
+      // Step execution timeout
+      const stepExecTimeout = step.stepTimeout ?? DEFAULT_STEP_TIMEOUT
+
+      // Await timeouts (for waiting periods)
+      const awaitTimeout = getStepAwaitTimeout(step)
+
+      // Total time for this step
+      const totalStepTimeout = stepExecTimeout + awaitTimeout
+
+      if (totalStepTimeout > 0) {
+        maxLevelTimeout = Math.max(maxLevelTimeout, totalStepTimeout)
       }
     }
 
@@ -311,9 +384,8 @@ function calculateFlowStallTimeout(steps: Record<string, AnalyzedStep>, levels: 
   // Log if significantly different from default
   if (calculatedTimeout > DEFAULT_STALL_TIMEOUT * 2) {
     console.log(
-      `[flow-analyzer] Flow has ${awaitCount} await patterns across ${levelTimeouts.length} levels, `
-      + `calculated stall timeout: ${calculatedTimeout / 1000}s `
-      + `(total await time: ${totalAwaitTimeout / 1000}s, level timeouts: [${levelTimeouts.map(t => `${t / 1000}s`).join(', ')}])`,
+      `[flow-analyzer] Flow stall timeout calculated across ${levelTimeouts.length} levels: ${calculatedTimeout / 1000}s `
+      + `(total time: ${totalAwaitTimeout / 1000}s, level timeouts: [${levelTimeouts.map(t => `${t / 1000}s`).join(', ')}])`,
     )
   }
 
@@ -321,9 +393,29 @@ function calculateFlowStallTimeout(steps: Record<string, AnalyzedStep>, levels: 
 }
 
 /**
+ * Configuration needed for flow analysis
+ */
+interface AnalyzerConfig {
+  flow?: {
+    stepTimeout?: number
+    awaitDefaults?: {
+      webhookTimeout?: number
+      eventTimeout?: number
+      timeTimeout?: number
+      scheduleTimeout?: number
+    }
+  }
+  queue?: {
+    defaultJobOptions?: {
+      timeout?: number
+    }
+  }
+}
+
+/**
  * Analyze flow structure and relationships
  */
-export function analyzeFlow(flow: FlowMeta): AnalyzedFlow {
+export function analyzeFlow(flow: FlowMeta, config?: AnalyzerConfig): AnalyzedFlow {
   const entryStepName = flow.entry?.step
   const steps = flow.steps || {}
 
@@ -339,10 +431,11 @@ export function analyzeFlow(flow: FlowMeta): AnalyzedFlow {
   // Include entry step if it exists
   if (flow.entry && entryStepName) {
     const hasAwaitPattern = !!(flow.entry.awaitBefore || flow.entry.awaitAfter)
-    analyzedSteps[entryStepName] = {
+    const entryStep = {
       queue: flow.entry.queue,
       workerId: flow.entry.workerId,
       emits: flow.entry.emits,
+      stepTimeout: flow.entry.stepTimeout, // Include stepTimeout from flow metadata
       awaitBefore: flow.entry.awaitBefore,
       awaitAfter: flow.entry.awaitAfter,
       name: entryStepName,
@@ -351,19 +444,24 @@ export function analyzeFlow(flow: FlowMeta): AnalyzedFlow {
       level: 0,
       hasAwaitPattern,
     }
+    entryStep.stepTimeout = getStepExecutionTimeout(entryStep, config)
+    analyzedSteps[entryStepName] = entryStep
   }
 
   // Analyze regular steps
   for (const [stepName, step] of Object.entries(steps)) {
     const hasAwaitPattern = !!(step.awaitBefore || step.awaitAfter)
-    analyzedSteps[stepName] = {
+    const analyzedStep = {
       ...step,
       name: stepName,
       dependsOn: dependencies[stepName] || [],
       triggers: findTriggeredSteps(stepName, step, steps),
       level: levels[stepName] ?? 1,
       hasAwaitPattern,
+      stepTimeout: undefined as number | undefined, // Step execution timeout from config
     }
+    analyzedStep.stepTimeout = getStepExecutionTimeout(analyzedStep, config)
+    analyzedSteps[stepName] = analyzedStep
   }
 
   // Group steps by level

@@ -1,83 +1,28 @@
 <template>
   <div class="flex flex-col h-full w-full max-w-full min-w-0">
     <!-- Fixed Header with Run Stats -->
-    <div class="px-6 py-[17px] border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 shrink-0">
-      <div class="flex items-center justify-between gap-4 text-xs">
-        <div class="flex items-center gap-4">
-          <!-- Status -->
-          <div class="flex items-center gap-1.5">
-            <div
-              class="w-1.5 h-1.5 rounded-full"
-              :class="getStatusColor(runStatus)"
-            />
-            <span class="text-gray-700 dark:text-gray-300 font-medium capitalize">
-              {{ runStatus || 'unknown' }}
-            </span>
-          </div>
-
-          <!-- Divider -->
-          <div class="w-px h-3 bg-gray-300 dark:bg-gray-700" />
-
-          <!-- Entry Trigger -->
+    <div class="h-[72px] px-6 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 shrink-0">
+      <!-- Top Row: Status and Action -->
+      <div class="flex items-center justify-between gap-4 mb-2">
+        <div class="flex items-center gap-2">
           <div
+            class="w-2 h-2 rounded-full"
+            :class="getStatusColor(runStatus)"
+          />
+          <span class="text-sm font-semibold text-gray-900 dark:text-gray-100 capitalize">
+            {{ runStatus || 'unknown' }}
+          </span>
+          <span
             v-if="triggerName"
-            class="flex items-center gap-1.5"
+            class="text-xs text-gray-500 dark:text-gray-400 ml-1"
           >
-            <UIcon
-              :name="getTriggerIcon(triggerType)"
-              class="w-3 h-3 text-gray-500"
-            />
-            <span class="text-gray-700 dark:text-gray-300">
-              {{ triggerName }}
-            </span>
-          </div>
-
-          <!-- Divider -->
-          <div class="w-px h-3 bg-gray-300 dark:bg-gray-700" />
-
-          <!-- Total Steps -->
-          <div class="flex items-center gap-1.5">
-            <UIcon
-              name="i-lucide-layers"
-              class="w-3 h-3 text-gray-500"
-            />
-            <span class="text-gray-700 dark:text-gray-300">
-              {{ steps.length }} {{ steps.length === 1 ? 'step' : 'steps' }}
-            </span>
-          </div>
-
-          <!-- Divider -->
-          <div class="w-px h-3 bg-gray-300 dark:bg-gray-700" />
-
-          <!-- Started -->
-          <div class="flex items-center gap-1.5">
-            <UIcon
-              name="i-lucide-clock"
-              class="w-3 h-3 text-gray-500"
-            />
-            <span class="text-gray-600 dark:text-gray-400">
-              {{ startedAt ? formatTime(startedAt) : 'Not started' }}
-            </span>
-          </div>
-
-          <!-- Divider -->
-          <div class="w-px h-3 bg-gray-300 dark:bg-gray-700" />
-
-          <!-- Duration -->
-          <div class="flex items-center gap-1.5">
-            <UIcon
-              name="i-lucide-timer"
-              class="w-3 h-3 text-gray-500"
-            />
-            <span class="text-gray-600 dark:text-gray-400">
-              {{ getDuration(startedAt, completedAt) }}
-            </span>
-          </div>
+            via {{ triggerName }}
+          </span>
         </div>
 
-        <!-- Cancel Button (only show for running flows) -->
+        <!-- Cancel Button (only show for running/awaiting flows) -->
         <UButton
-          v-if="runStatus === 'running'"
+          v-if="runStatus === 'running' || runStatus === 'awaiting'"
           color="neutral"
           variant="ghost"
           icon="i-lucide-x-circle"
@@ -85,6 +30,56 @@
           label="Cancel"
           @click="handleCancelFlow"
         />
+      </div>
+
+      <!-- Bottom Row: Compact Stats Grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
+        <!-- Steps -->
+        <div class="flex items-center gap-1.5">
+          <UIcon
+            name="i-lucide-layers"
+            class="w-3.5 h-3.5 text-gray-400"
+          />
+          <span class="text-gray-600 dark:text-gray-300">
+            {{ steps.length }} {{ steps.length === 1 ? 'step' : 'steps' }}
+          </span>
+        </div>
+
+        <!-- Started -->
+        <div class="flex items-center gap-1.5">
+          <UIcon
+            name="i-lucide-clock"
+            class="w-3.5 h-3.5 text-gray-400"
+          />
+          <span class="text-gray-600 dark:text-gray-300">
+            {{ startedAt ? formatTime(startedAt) : 'Not started' }}
+          </span>
+        </div>
+
+        <!-- Duration -->
+        <div class="flex items-center gap-1.5">
+          <UIcon
+            name="i-lucide-timer"
+            class="w-3.5 h-3.5 text-gray-400"
+          />
+          <span class="text-gray-600 dark:text-gray-300">
+            {{ getDuration(startedAt, completedAt) }}
+          </span>
+        </div>
+
+        <!-- Stall Warning (for running/awaiting flows) -->
+        <div
+          v-if="(runStatus === 'running' || runStatus === 'awaiting') && stallTimeout"
+          class="flex items-center gap-1.5"
+        >
+          <UIcon
+            name="i-lucide-alert-triangle"
+            class="w-3.5 h-3.5 text-amber-500"
+          />
+          <span class="text-gray-600 dark:text-gray-300">
+            Stall in {{ formatStallTimeout(startedAt, stallTimeout) }}
+          </span>
+        </div>
       </div>
     </div>
 
@@ -124,6 +119,7 @@ const props = defineProps<{
   triggerName?: string
   triggerType?: 'manual' | 'event' | 'webhook' | 'schedule'
   flowDef?: any
+  stallTimeout?: number
 }>()
 
 const emit = defineEmits<{
@@ -140,7 +136,7 @@ const handleCancelFlow = () => {
 const selectedStep = ref<string>('all-steps')
 
 // Track the first step key to detect run changes
-const firstStepKey = computed(() => props.steps[0]?.key)
+const firstStepKey = computed(() => props.steps?.length > 0 ? props.steps[0]?.key : undefined)
 
 // Reset selection only when run changes (first step key changes), not when new events arrive
 watch(firstStepKey, (newKey, oldKey) => {
@@ -294,20 +290,30 @@ const getStatusColor = (status?: string) => {
     case 'completed': return 'bg-emerald-500'
     case 'failed': return 'bg-red-500'
     case 'running': return 'bg-blue-500 animate-pulse'
+    case 'awaiting': return 'bg-purple-500 animate-pulse'
     case 'canceled': return 'bg-orange-500'
     case 'stalled': return 'bg-amber-600'
     default: return 'bg-gray-300'
   }
 }
 
-// Trigger icon helper
-const getTriggerIcon = (type?: string) => {
-  switch (type) {
-    case 'manual': return 'i-lucide-hand'
-    case 'event': return 'i-lucide-zap'
-    case 'webhook': return 'i-lucide-webhook'
-    case 'schedule': return 'i-lucide-calendar-clock'
-    default: return 'i-lucide-play-circle'
-  }
+// Format time until stall timeout
+const formatStallTimeout = (start?: string | number, timeout?: number) => {
+  if (!start || !timeout) return '—'
+  const startTime = new Date(start).getTime()
+  const stallTime = startTime + timeout
+  const remaining = stallTime - Date.now()
+  
+  if (remaining <= 0) return 'now'
+  
+  const seconds = Math.floor(remaining / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+  
+  if (days > 0) return `${days}d ${hours % 24}h`
+  if (hours > 0) return `${hours}h ${minutes % 60}m`
+  if (minutes > 0) return `${minutes}m`
+  return `${seconds}s`
 }
 </script>

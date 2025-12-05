@@ -11,7 +11,37 @@ import {
   registerTimeAwait,
   resolveTimeAwait,
 } from './awaitPatterns'
-import { useStoreAdapter, useStreamTopics, useNventLogger } from '#imports'
+import { useStoreAdapter, useStreamTopics, useNventLogger, useRuntimeConfig } from '#imports'
+
+/**
+ * Get default timeout values for await patterns from runtime config
+ * These are configurable via module options and used throughout the system
+ * Exported for use by await pattern implementations
+ */
+export function useAwaitDefaults() {
+  try {
+    const config = useRuntimeConfig()
+    const awaitDefaults = (config as any)?.nvent?.flow?.awaitDefaults
+
+    return {
+      webhookTimeout: awaitDefaults?.webhookTimeout ?? (24 * 60 * 60 * 1000), // 24 hours
+      eventTimeout: awaitDefaults?.eventTimeout ?? (24 * 60 * 60 * 1000), // 24 hours
+      timeTimeout: awaitDefaults?.timeTimeout, // undefined by default
+      scheduleTimeout: awaitDefaults?.scheduleTimeout, // undefined by default
+      timeoutAction: awaitDefaults?.timeoutAction ?? 'fail',
+    }
+  }
+  catch {
+    // Fallback if config is not available
+    return {
+      webhookTimeout: 24 * 60 * 60 * 1000, // 24 hours
+      eventTimeout: 24 * 60 * 60 * 1000, // 24 hours
+      timeTimeout: undefined,
+      scheduleTimeout: undefined,
+      timeoutAction: 'fail' as const,
+    }
+  }
+}
 
 /**
  * Await pattern composable
@@ -113,8 +143,8 @@ export function useAwait() {
         registeredAt: string
       }> = []
 
-      if (!store.indexScan) {
-        logger.warn('Store does not support indexScan')
+      if (!store.index.read) {
+        logger.warn('Store does not support index read')
         return activeAwaits
       }
 

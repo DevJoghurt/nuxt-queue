@@ -147,7 +147,7 @@ const props = defineProps<{
   showMiniMap?: boolean
   showBackground?: boolean
   stepStates?: Record<string, StepStatus> // Current execution state
-  flowStatus?: 'running' | 'completed' | 'failed' | 'canceled' | 'stalled' // Overall flow status
+  flowStatus?: 'running' | 'completed' | 'failed' | 'canceled' | 'stalled' | 'awaiting' // Overall flow status
 }>()
 
 const heightClass = computed(() => props.heightClass || 'h-80')
@@ -193,12 +193,12 @@ const nodes = computed<FlowNode[]>(() => {
   if (!f) return out
 
   const states = props.stepStates || {}
-  const colWidth = 280
-  const rowHeight = 160
-  const horizontalGap = 50
-  const verticalGap = 80
+  const colWidth = 320
+  const rowHeight = 180
+  const horizontalGap = 60
+  const verticalGap = 90
   const awaitRowHeight = 140 // Height for await node rows (matches step row height)
-  const nodeWidth = 260
+  const nodeWidth = 300
 
   let y = 0
 
@@ -206,6 +206,9 @@ const nodes = computed<FlowNode[]>(() => {
   if (f.entry) {
     const entryState = states[f.entry.step]
     const status = mapStatusToNodeStatus(entryState?.status)
+    
+    // Get stepTimeout from analyzed flow metadata (static data)
+    const entryStepTimeout = (f.entry as any).stepTimeout
 
     out.push({
       id: `entry:${f.entry.step}`,
@@ -222,6 +225,7 @@ const nodes = computed<FlowNode[]>(() => {
         emits: f.entry.emits,
         awaitBefore: f.entry.awaitBefore,
         awaitAfter: f.entry.awaitAfter,
+        stepTimeout: entryStepTimeout,
       },
       type: 'flow-entry',
       style: { minWidth: `${nodeWidth}px` },
@@ -318,6 +322,10 @@ const nodes = computed<FlowNode[]>(() => {
         const x = rowStartX + col * (colWidth + horizontalGap)
         const yPos = y + row * (rowHeight + verticalGap)
 
+        // Get stepTimeout from analyzed flow metadata (static data)
+        const analyzedStep = f.analyzed?.steps?.[stepName]
+        const stepStepTimeout = (analyzedStep as any)?.stepTimeout
+
         out.push({
           id: `step:${stepName}`,
           position: { x, y: yPos },
@@ -334,6 +342,7 @@ const nodes = computed<FlowNode[]>(() => {
             emits: step?.emits,
             awaitBefore: step?.awaitBefore,
             awaitAfter: step?.awaitAfter,
+            stepTimeout: stepStepTimeout,
           },
           type: 'flow-step',
           style: { minWidth: `${nodeWidth}px` },
@@ -406,6 +415,10 @@ const nodes = computed<FlowNode[]>(() => {
       const x = rowStartX + col * (colWidth + horizontalGap)
       const yPos = y + row * (rowHeight + verticalGap)
 
+      // Get stepTimeout from analyzed flow metadata (static data)
+      const analyzedStep = f.analyzed?.steps?.[name]
+      const stepStepTimeout = (analyzedStep as any)?.stepTimeout
+
       out.push({
         id: `step:${name}`,
         position: { x, y: yPos },
@@ -419,6 +432,7 @@ const nodes = computed<FlowNode[]>(() => {
           runtime: step?.runtime,
           runtype: step?.runtype,
           emits: step?.emits,
+          stepTimeout: stepStepTimeout,
         },
         type: 'flow-step',
         style: { minWidth: `${nodeWidth}px` },
@@ -493,7 +507,7 @@ const edges = computed<FlowEdge[]>(() => {
 
     // Animate if source is completed/resolved and target is running/pending/waiting
     // Don't animate if flow is canceled or completed/failed
-    const shouldAnimate = props.flowStatus === 'running'
+    const shouldAnimate = (props.flowStatus === 'running' || props.flowStatus === 'awaiting')
       && (sourceState?.status === 'completed' || sourceState?.status === 'resolved')
       && (targetState?.status === 'running' || targetState?.status === 'pending' || targetState?.status === 'waiting' || !targetState)
 

@@ -113,8 +113,8 @@ export function generateAnalyzedFlowsTemplate(registry: any): string {
       steps,
     }
 
-    // Analyze flow structure
-    const analyzed = analyzeFlow(flowMeta)
+    // Analyze flow structure with config
+    const analyzed = analyzeFlow(flowMeta, registry.config)
 
     return {
       ...flowMeta,

@@ -2,74 +2,46 @@
  * Flow Stall Detection System
  *
  * Detects and marks flows that have been in "running" state for too long without activity.
- * Uses a hybrid approach:
- * 1. Lazy detection: Check stall status when flows are queried (zero overhead)
- * 2. Periodic cleanup: Background job that checks all running flows periodically (safety net)
+ * Uses per-flow scheduler jobs for precise timeout tracking:
  *
- * A flow is considered "stalled" when:
- * - Status is "running"
- * - No activity (step events) for longer than STALL_TIMEOUT
- * - lastActivityAt timestamp is older than threshold
+ * - On flow.start: Schedule timeout job with flow-specific deadline
+ * - On step events: Reschedule to extend timeout from current time
+ * - On flow end: Unschedule the timeout job
+ * - When timeout fires: Mark flow as stalled
+ *
+ * Startup recovery handles flows left running from previous server instance.
  */
 
 import type { StoreAdapter } from '../../adapters/interfaces/store'
-import { useNventLogger, useStreamTopics, $useAnalyzedFlows, useScheduler } from '#imports'
+import { useNventLogger, useStreamTopics, $useAnalyzedFlows } from '#imports'
 
 export interface StallDetectorConfig {
   /**
-   * Time in milliseconds after which a running flow without activity is considered stalled
-   * @default 1800000 (30 minutes)
-   */
-  stallTimeout?: number
-
-  /**
-   * Interval in milliseconds for periodic stall checks
-   * @default 900000 (15 minutes)
-   */
-  checkInterval?: number
-
-  /**
-   * Enable periodic background checks
-   * Set to false to use only lazy detection
+   * Enable stall detection system
    * @default true
    */
-  enablePeriodicCheck?: boolean
+  enabled?: boolean
 }
 
 export type FlowStatus = 'running' | 'completed' | 'failed' | 'canceled' | 'stalled'
-
-export interface FlowActivity {
-  runId: string
-  flowName: string
-  status: FlowStatus
-  startedAt: number
-  lastActivityAt: number
-  metadata?: any
-}
-
-const DEFAULT_STALL_TIMEOUT = 30 * 60 * 1000 // 30 minutes
-const DEFAULT_CHECK_INTERVAL = 15 * 60 * 1000 // 15 minutes
 
 export class FlowStallDetector {
   private store: StoreAdapter
   private config: Required<StallDetectorConfig>
   private logger = useNventLogger('stall-detector')
-  private schedulerJobId?: string
   private started = false
 
   constructor(store: StoreAdapter, config: StallDetectorConfig = {}) {
     this.store = store
     this.config = {
-      stallTimeout: config.stallTimeout ?? DEFAULT_STALL_TIMEOUT,
-      checkInterval: config.checkInterval ?? DEFAULT_CHECK_INTERVAL,
-      enablePeriodicCheck: config.enablePeriodicCheck ?? true,
+      enabled: config.enabled ?? true,
     }
   }
 
   /**
-   * Start the periodic stall detector
-   * Should be called once per instance after adapters are initialized
+   * Start the stall detector
    * Runs startup recovery to clean up flows from previous server instances
+   * Note: Periodic checking removed - now uses per-flow scheduler jobs
    */
   async start(): Promise<void> {
     if (this.started) {
@@ -82,136 +54,15 @@ export class FlowStallDetector {
     // Run startup recovery first to handle flows left running from previous instance
     await this.runStartupRecovery()
 
-    this.logger.info(`Stall detector started - periodicCheck: ${this.config.enablePeriodicCheck}, stallTimeout: ${this.config.stallTimeout / 1000}s, checkInterval: ${this.config.checkInterval / 1000}s`)
+    this.logger.info('Stall detector started - using per-flow scheduler jobs for stall timeouts')
   }
 
   /**
-   * Get the configuration for scheduling
-   * Returns config needed by flowWiring to register the scheduler job
-   */
-  getScheduleConfig() {
-    return {
-      enabled: this.config.enablePeriodicCheck,
-      interval: this.config.checkInterval,
-      stallTimeout: this.config.stallTimeout,
-    }
-  }
-
-  /**
-   * Set the scheduler job ID (called from flowWiring after scheduling)
-   */
-  setSchedulerJobId(jobId: string) {
-    this.schedulerJobId = jobId
-  }
-
-  /**
-   * Stop the periodic stall detector
+   * Stop the stall detector
    */
   async stop(): Promise<void> {
-    if (this.schedulerJobId) {
-      try {
-        const scheduler = useScheduler()
-        await scheduler.unschedule(this.schedulerJobId)
-        this.schedulerJobId = undefined
-        this.logger.info('Stopped periodic stall detector')
-      }
-      catch (error) {
-        this.logger.error(`Failed to stop stall detector: ${(error as Error).message}`)
-      }
-    }
     this.started = false
-  }
-
-  /**
-   * Get stall timeout for a specific flow
-   * Uses flow-specific timeout from analyzed metadata, falls back to global config
-   */
-  private async getFlowStallTimeout(flowName: string): Promise<number> {
-    try {
-      const analyzedFlows = $useAnalyzedFlows() as any[]
-      const flowMeta = analyzedFlows.find((f: any) => f.id === flowName)
-
-      if (flowMeta?.stallTimeout) {
-        this.logger.debug(`Using flow-specific stall timeout for '${flowName}': ${flowMeta.stallTimeout / 1000}s`)
-        return flowMeta.stallTimeout
-      }
-    }
-    catch (error) {
-      this.logger.warn(`Failed to get flow-specific stall timeout for '${flowName}': ${(error as Error).message}`)
-    }
-
-    // Fall back to global config
-    return this.config.stallTimeout
-  }
-
-  /**
-   * Update activity timestamp for a flow
-   * Should be called on every step event (started, completed, failed, retry)
-   */
-  async updateActivity(flowName: string, runId: string): Promise<void> {
-    const { StoreSubjects } = useStreamTopics()
-    const indexKey = StoreSubjects.flowRunIndex(flowName)
-
-    try {
-      // Update lastActivityAt timestamp in index metadata
-      if (!this.store.index.update) {
-        this.logger.warn('Store does not support indexUpdate, cannot update activity')
-        return
-      }
-
-      await this.store.index.update(indexKey, runId, {
-        lastActivityAt: Date.now(),
-      })
-    }
-    catch (error) {
-      this.logger.warn(`Failed to update flow activity for '${flowName}' runId '${runId}': ${(error as Error).message}`)
-    }
-  }
-
-  /**
-   * Check if a specific flow is stalled (lazy detection)
-   * Returns true if the flow should be marked as stalled
-   * v0.5: Await-aware - uses flow-specific timeout and skips awaiting flows
-   */
-  async isStalled(flowName: string, runId: string): Promise<boolean> {
-    const { StoreSubjects } = useStreamTopics()
-    const indexKey = StoreSubjects.flowRunIndex(flowName)
-
-    try {
-      if (!this.store.index.get) return false
-
-      const flowEntry = await this.store.index.get(indexKey, runId)
-      if (!flowEntry?.metadata) return false
-
-      // Only check running flows
-      if (flowEntry.metadata.status !== 'running') return false
-
-      // v0.5: Skip flows with active awaits - they are legitimately paused
-      const awaitingSteps = flowEntry.metadata.awaitingSteps || {}
-      const hasActiveAwaits = Object.keys(awaitingSteps).length > 0
-      if (hasActiveAwaits) {
-        this.logger.debug(`Flow '${flowName}' runId '${runId}' has active awaits [${Object.keys(awaitingSteps).join(', ')}], skipping stall check`)
-        return false
-      }
-
-      // v0.5: Use flow-specific stall timeout
-      const stallTimeout = await this.getFlowStallTimeout(flowName)
-
-      // Check activity timestamp
-      const lastActivity = flowEntry.metadata.lastActivityAt || flowEntry.metadata.startedAt || 0
-      const timeSinceActivity = Date.now() - lastActivity
-
-      if (timeSinceActivity > stallTimeout) {
-        this.logger.info(`Flow detected as stalled (lazy check) - '${flowName}' runId '${runId}': ${Math.round(timeSinceActivity / 1000)}s since activity (timeout: ${stallTimeout / 1000}s)`)
-        return true
-      }
-
-      return false
-    }
-    catch (error) {
-      this.logger.warn(`Failed to check if flow is stalled for '${flowName}' runId '${runId}': ${(error as Error).message}`)
-      return false
-    }
+    this.logger.info('Stall detector stopped')
   }
 
   /**
@@ -263,102 +114,6 @@ export class FlowStallDetector {
     }
     catch (error) {
       this.logger.error(`Failed to mark flow as stalled for '${flowName}' runId '${runId}': ${(error as Error).message}`)
-    }
-  }
-
-  /**
-   * Check all running flows and mark stalled ones
-   * This is called by the periodic background job
-   *
-   * Note: This method requires knowledge of which flows exist.
-   * For now, we'll need to pass flow names to check, or iterate known flows from registry.
-   */
-  async checkFlowsForStalls(flowNames: string[]): Promise<void> {
-    this.logger.info(`Running periodic stall check for ${flowNames.length} flows`)
-
-    try {
-      if (!this.store.index.get || !this.store.index.read) {
-        this.logger.warn('Store does not support required index operations')
-        return
-      }
-
-      const { StoreSubjects } = useStreamTopics()
-      let checkedCount = 0
-      let stalledCount = 0
-
-      // Check each flow
-      for (const flowName of flowNames) {
-        const indexKey = StoreSubjects.flowRunIndex(flowName)
-
-        // v0.5: Get flow-specific stall timeout (pre-calculated during analysis)
-        const flowStallTimeout = await this.getFlowStallTimeout(flowName)
-
-        // Get all flow runs from the index
-        const entries = await this.store.index.read(indexKey, { limit: 1000 })
-
-        for (const entry of entries) {
-          if (!entry.metadata) continue
-
-          checkedCount++
-
-          // Only check running or awaiting flows
-          if (entry.metadata.status !== 'running' && entry.metadata.status !== 'awaiting') continue
-
-          // Check if flow has active awaits - mark as stalled if any have expired
-          const awaitingSteps = entry.metadata.awaitingSteps || {}
-          const awaitingStepNames = Object.keys(awaitingSteps)
-
-          if (awaitingStepNames.length > 0) {
-            let hasOverdueAwaits = false
-            let hasLegacyAwait = false
-
-            for (const stepName of awaitingStepNames) {
-              const awaitState = awaitingSteps[stepName]
-
-              if (awaitState?.status === 'awaiting') {
-                if (!awaitState.timeoutAt) {
-                  // Legacy await without timeout - treat as valid
-                  hasLegacyAwait = true
-                }
-                else if (Date.now() > awaitState.timeoutAt) {
-                  // Check if this await has timed out
-                  hasOverdueAwaits = true
-                  break
-                }
-              }
-            }
-
-            if (hasOverdueAwaits) {
-              // At least one await has timed out - mark as stalled
-              await this.markAsStalled(flowName, entry.id, 'Await pattern timed out')
-              stalledCount++
-              continue
-            }
-
-            // All awaits are valid (or legacy) - skip this flow (legitimately waiting)
-            if (hasLegacyAwait) {
-              this.logger.debug(`Skipping flow with legacy await (no timeout) - '${flowName}' runId '${entry.id}'`)
-            }
-            continue
-          }
-
-          // No active awaits - check normal stall timeout using flow-specific timeout
-          const lastActivity = entry.metadata.lastActivityAt || entry.metadata.startedAt || 0
-          const timeSinceActivity = Date.now() - lastActivity
-
-          if (timeSinceActivity > flowStallTimeout) {
-            await this.markAsStalled(flowName, entry.id, 'Periodic check detected no activity')
-            stalledCount++
-          }
-        }
-      }
-
-      this.logger.info(`Periodic stall check completed - checked: ${checkedCount}, stalled: ${stalledCount}`)
-    }
-    catch (error) {
-      this.logger.error('Failed to run periodic stall check', {
-        error: (error as Error).message,
-      })
     }
   }
 
@@ -603,36 +358,12 @@ export class FlowStallDetector {
   }
 
   /**
-   * Internal method for periodic checks
-   * Gets flow names from registry and checks them
-   */
-  private async checkAllRunningFlows(): Promise<void> {
-    try {
-      // Get all flow names from the analyzed flows registry
-      const analyzedFlows = $useAnalyzedFlows() as any[]
-      const flowNames = analyzedFlows.map((f: any) => f.id).filter(Boolean)
-
-      if (flowNames.length === 0) {
-        this.logger.debug('No flows registered, skipping stall check')
-        return
-      }
-
-      await this.checkFlowsForStalls(flowNames)
-    }
-    catch (error) {
-      this.logger.error(`Failed to run periodic stall check: ${(error as Error).message}`)
-    }
-  }
-
-  /**
    * Get stall detector statistics
    */
   getStats() {
     return {
       enabled: this.started,
-      periodicCheckEnabled: this.config.enablePeriodicCheck,
-      stallTimeout: this.config.stallTimeout,
-      checkInterval: this.config.checkInterval,
+      mode: 'per-flow-scheduler',
     }
   }
 }

@@ -116,6 +116,14 @@ export interface FlowConfig {
     mode?: 'auto' | 'manual'
   }
   /**
+   * Step execution timeout in milliseconds (v0.5.1)
+   * Overrides global flow.stepTimeout and queue.defaultJobOptions.timeout for this specific step
+   * 
+   * @example 600000 // 10 minutes
+   * @example 3600000 // 1 hour
+   */
+  stepTimeout?: number
+  /**
    * Await pattern: Wait BEFORE step execution (v0.5)
    * Step won't execute until trigger fires
    */
