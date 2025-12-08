@@ -131,54 +131,23 @@
           </div>
           <div
             v-else
-            ref="runsScrollContainer"
-            class="flex-1 overflow-y-auto min-h-0 divide-y divide-gray-100 dark:divide-gray-800"
-            @scroll="handleRunsScroll"
+            class="flex-1 min-h-0 flex flex-col overflow-hidden"
           >
-            <div
-              v-for="r in runs"
-              :key="r.id"
-              class="group"
-            >
-              <div
-                class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors cursor-pointer"
-                :class="{ 'bg-gray-50 dark:bg-gray-900': selectedRunId === r.id }"
+            <div class="flex-1 min-h-0 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
+              <SelectableListItem
+                v-for="r in runs"
+                :key="r.id"
+                :selected="selectedRunId === r.id"
+                :icon="getRunStatusIcon(r.status)"
+                :icon-class="getRunStatusIconClass(r.status)"
+                :subtitle="truncateId(r.id)"
+                :meta="formatTime(r.createdAt)"
                 @click="selectRun(r.id)"
               >
-                <div class="flex items-start justify-between gap-3">
-                  <div class="flex-1 min-w-0">
-                    <div class="text-xs font-mono text-gray-900 dark:text-gray-100 truncate">
-                      {{ r.id?.substring(0, 8) }}...{{ r.id?.substring(r.id?.length - 4) }}
-                    </div>
-                    <div class="flex items-center gap-3 mt-1.5">
-                      <div class="text-xs text-gray-500">
-                        {{ formatTime(r.createdAt) }}
-                      </div>
-                      <!-- Step progress -->
-                      <div
-                        v-if="r.stepCount > 0"
-                        class="text-xs text-gray-500 flex items-center gap-1"
-                      >
-                        <UIcon
-                          name="i-lucide-list-checks"
-                          class="w-3 h-3"
-                        />
-                        <span>{{ r.completedSteps }}/{{ r.stepCount }}</span>
-                      </div>
-                      <!-- Duration (if completed) -->
-                      <div
-                        v-if="r.completedAt && r.startedAt"
-                        class="text-xs text-gray-500 flex items-center gap-1"
-                      >
-                        <UIcon
-                          name="i-lucide-timer"
-                          class="w-3 h-3"
-                        />
-                        <span>{{ formatDuration(r.startedAt, r.completedAt) }}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <!-- Status badge -->
+                <template #title>
+                  Run {{ r.id?.substring(0, 8) }}
+                </template>
+                <template #badge>
                   <FlowRunStatusBadge
                     :is-running="r.status === 'running'"
                     :is-completed="r.status === 'completed'"
@@ -187,28 +156,56 @@
                     :is-stalled="r.status === 'stalled'"
                     :is-awaiting="r.status === 'awaiting'"
                   />
-                </div>
+                </template>
+                <template #meta>
+                  <span>{{ formatTime(r.createdAt) }}</span>
+                  <span
+                    v-if="r.stepCount > 0"
+                    class="flex items-center gap-1"
+                  >
+                    <UIcon
+                      name="i-lucide-list-checks"
+                      class="w-3 h-3"
+                    />
+                    {{ r.completedSteps }}/{{ r.stepCount }}
+                  </span>
+                  <span
+                    v-if="r.completedAt && r.startedAt"
+                    class="flex items-center gap-1"
+                  >
+                    <UIcon
+                      name="i-lucide-timer"
+                      class="w-3 h-3"
+                    />
+                    {{ formatDuration(r.startedAt, r.completedAt) }}
+                  </span>
+                </template>
+              </SelectableListItem>
+
+              <!-- Loading indicator -->
+              <div
+                v-if="loadingRuns"
+                class="px-4 py-3 text-center text-xs text-gray-400"
+              >
+                <UIcon
+                  name="i-lucide-loader-2"
+                  class="w-4 h-4 animate-spin inline-block"
+                />
+                <span class="ml-2">Loading runs...</span>
               </div>
             </div>
 
-            <!-- Loading indicator for infinite scroll -->
+            <!-- Pagination Footer -->
             <div
-              v-if="loadingRuns"
-              class="px-4 py-3 text-center text-xs text-gray-400"
+              v-if="totalRuns > runsPerPage"
+              class="border-t border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-center shrink-0"
             >
-              <UIcon
-                name="i-lucide-loader-2"
-                class="w-4 h-4 animate-spin inline-block"
+              <UPagination
+                v-model:page="currentPage"
+                :items-per-page="runsPerPage"
+                :total="totalRuns"
+                size="xs"
               />
-              <span class="ml-2">Loading more runs...</span>
-            </div>
-
-            <!-- End of list indicator -->
-            <div
-              v-else-if="!hasMoreRuns && runs.length > 0"
-              class="px-4 py-3 text-center text-xs text-gray-400"
-            >
-              All runs loaded
             </div>
           </div>
         </div>
@@ -391,19 +388,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from '#imports'
+import { ref, computed, watch, onMounted, onUnmounted } from '#imports'
 import FlowDiagram from '../../components/flow/Diagram.vue'
 import FlowRunOverview from '../../components/flow/RunOverview.vue'
 import FlowRunTimeline from '../../components/flow/RunTimeline.vue'
 import FlowRunStatusBadge from '../../components/flow/RunStatusBadge.vue'
 import ConfirmDialog from '../../components/ConfirmDialog.vue'
+import SelectableListItem from '../../components/SelectableListItem.vue'
 import { useRoute, useRouter } from '#app'
 
 // Composables
 import { useAnalyzedFlows } from '../../composables/useAnalyzedFlows'
-import { useFlowRunsInfinite } from '../../composables/useFlowRunsInfinite'
+import { useFlowRuns } from '../../composables/useFlowRuns'
 import { useFlowRunTimeline } from '../../composables/useFlowRunTimeline'
-import { useFlowRunsPolling } from '../../composables/useFlowRunsPolling'
 import { useComponentRouter } from '../../composables/useComponentRouter'
 
 const componentRouter = useComponentRouter()
@@ -473,24 +470,83 @@ const selectedFlowDef = computed(() => {
 const selectedFlowRef = computed(() => selectedFlow.value || '')
 const selectedRunIdRef = computed(() => selectedRunId.value || '')
 
-// Fetch runs for selected flow with infinite scroll (persists across HMR)
+// URL-based pagination state
+const runsPerPage = 20
+
+const currentPage = computed({
+  get: () => {
+    const page = route.query.page as string
+    return page ? Number.parseInt(page, 10) : 1
+  },
+  set: (value: number) => {
+    router.push({
+      query: {
+        ...route.query,
+        page: value > 1 ? value.toString() : undefined,
+      },
+    })
+  },
+})
+
+// Build query options for server-side pagination
+const runsQueryOptions = computed(() => ({
+  limit: runsPerPage,
+  offset: (currentPage.value - 1) * runsPerPage,
+}))
+
+// Fetch runs for selected flow with pagination
 const {
-  items: runs,
-  total: totalRuns,
-  loading: loadingRuns,
-  hasMore: hasMoreRuns,
-  loadMore: loadMoreRuns,
+  runs: runsResponse,
   refresh: refreshRuns,
-  checkForNewRuns,
-} = useFlowRunsInfinite(selectedFlowRef)
+  status: runsStatus,
+} = useFlowRuns(selectedFlowRef, runsQueryOptions)
+
+// Derived state from response
+const runs = computed(() => runsResponse.value?.items || [])
+const totalRuns = computed(() => runsResponse.value?.total || 0)
+const loadingRuns = computed(() => runsStatus.value === 'pending')
 
 // Manage timeline/SSE for selected run
 const { flowState, isConnected, isReconnecting } = useFlowRunTimeline(selectedFlowRef, selectedRunIdRef)
 
-// Auto-poll runs list to keep it fresh (always poll when a flow is selected)
-// Use checkForNewRuns instead of refresh to avoid scroll reset
-const shouldPoll = computed(() => !!selectedFlow.value)
-useFlowRunsPolling(checkForNewRuns, shouldPoll)
+// Auto-refresh runs list with polling
+let pollInterval: NodeJS.Timeout | null = null
+
+const startPolling = () => {
+  if (pollInterval) return
+  pollInterval = setInterval(() => {
+    if (selectedFlow.value) {
+      refreshRuns()
+    }
+  }, 3000)
+}
+
+const stopPolling = () => {
+  if (pollInterval) {
+    clearInterval(pollInterval)
+    pollInterval = null
+  }
+}
+
+// Start/stop polling based on flow selection
+watch(selectedFlow, (flow) => {
+  if (flow) {
+    startPolling()
+  }
+  else {
+    stopPolling()
+  }
+}, { immediate: true })
+
+onMounted(() => {
+  if (import.meta.client && selectedFlow.value) {
+    startPolling()
+  }
+})
+
+onUnmounted(() => {
+  stopPolling()
+})
 
 // Start flow modal state
 const startFlowModalOpen = ref(false)
@@ -530,24 +586,6 @@ watch(flowInputJson, (value) => {
   }
 })
 
-// Ref for scroll container
-const runsScrollContainer = ref<HTMLElement | null>(null)
-
-// Infinite scroll handler
-const handleRunsScroll = (event: Event) => {
-  if (!hasMoreRuns.value || loadingRuns.value) return
-
-  const container = event.target as HTMLElement
-  const scrollTop = container.scrollTop
-  const scrollHeight = container.scrollHeight
-  const clientHeight = container.clientHeight
-
-  // Load more when scrolled to within 200px of the bottom
-  if (scrollTop + clientHeight >= scrollHeight - 200) {
-    loadMoreRuns()
-  }
-}
-
 // Helper to format timestamps
 const formatTime = (timestamp: string | number | Date) => {
   const date = new Date(timestamp)
@@ -583,6 +621,38 @@ const formatDuration = (start: string | number, end: string | number) => {
     return `${minutes}m ${remainingSeconds}s`
   }
   return `${seconds}s`
+}
+
+// Helper to truncate run IDs
+const truncateId = (id: string) => {
+  if (!id || id.length <= 16) return id
+  return `${id.substring(0, 8)}...${id.substring(id.length - 8)}`
+}
+
+// Helper to get run status icon
+const getRunStatusIcon = (status: string) => {
+  switch (status) {
+    case 'running': return 'i-lucide-loader-2'
+    case 'completed': return 'i-lucide-check-circle'
+    case 'failed': return 'i-lucide-x-circle'
+    case 'canceled': return 'i-lucide-ban'
+    case 'stalled': return 'i-lucide-alert-triangle'
+    case 'awaiting': return 'i-lucide-pause-circle'
+    default: return 'i-lucide-circle'
+  }
+}
+
+// Helper to get run status icon color class
+const getRunStatusIconClass = (status: string) => {
+  switch (status) {
+    case 'running': return 'text-blue-500 animate-spin'
+    case 'completed': return 'text-emerald-500'
+    case 'failed': return 'text-red-500'
+    case 'canceled': return 'text-gray-500'
+    case 'stalled': return 'text-amber-500'
+    case 'awaiting': return 'text-purple-500'
+    default: return 'text-gray-400'
+  }
 }
 
 // Computed state from reducer

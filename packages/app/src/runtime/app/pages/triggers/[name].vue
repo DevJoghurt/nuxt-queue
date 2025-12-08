@@ -184,47 +184,19 @@
             class="flex-1 min-h-0 overflow-y-auto"
           >
             <div class="divide-y divide-gray-100 dark:divide-gray-800">
-              <div
+              <SelectableListItem
                 v-for="(event, idx) in paginatedEvents"
                 :key="idx"
-                class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 cursor-pointer transition-colors"
-                :class="{
-                  'bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-500': selectedEvent && selectedEvent.type === event.type && (selectedEvent.ts || selectedEvent.timestamp) === (event.ts || event.timestamp),
-                }"
+                :selected="!!(selectedEvent && selectedEvent.type === event.type && (selectedEvent.ts || selectedEvent.timestamp) === (event.ts || event.timestamp))"
+                :icon="getEventIcon(event.type)"
+                :icon-class="getEventIconColor(event.type)"
+                :title="event.type"
+                :subtitle="formatDate(event.ts || event.timestamp)"
+                :badge="event.type.split('.')[1] || 'event'"
+                :badge-color="getEventBadgeColor(event.type)"
+                :meta="formatTime(event.ts || event.timestamp)"
                 @click="selectEvent(event)"
-              >
-                <div class="flex items-start gap-3">
-                  <div class="flex-shrink-0 mt-0.5">
-                    <UIcon
-                      :name="getEventIcon(event.type)"
-                      class="w-5 h-5"
-                      :class="getEventIconColor(event.type)"
-                    />
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center justify-between gap-2 mb-1">
-                      <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                        {{ event.type }}
-                      </h3>
-                      <UBadge
-                        :label="event.type.split('.')[1] || 'event'"
-                        :color="getEventBadgeColor(event.type)"
-                        variant="subtle"
-                        size="xs"
-                        class="capitalize flex-shrink-0"
-                      />
-                    </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 font-mono truncate mb-1">
-                      {{ formatDate(event.ts || event.timestamp) }}
-                    </p>
-                    <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                      <span>
-                        {{ formatTime(event.ts || event.timestamp) }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              />
             </div>
           </div>
 
@@ -549,6 +521,7 @@ import { useComponentRouter } from '../../composables/useComponentRouter'
 import { useTriggerWebSocket } from '../../composables/useTriggerWebSocket'
 import { useRoute, useRouter } from '#app'
 import StatCard from '../../components/StatCard.vue'
+import SelectableListItem from '../../components/SelectableListItem.vue'
 
 const componentRouter = useComponentRouter()
 const router = useRouter()

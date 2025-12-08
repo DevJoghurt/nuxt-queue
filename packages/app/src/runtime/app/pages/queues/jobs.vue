@@ -88,50 +88,27 @@
             class="flex-1 min-h-0 overflow-y-auto"
           >
             <div class="divide-y divide-gray-100 dark:divide-gray-800">
-              <div
+              <SelectableListItem
                 v-for="job in paginatedJobs"
                 :key="job.id"
-                class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 cursor-pointer transition-colors"
-                :class="{
-                  'bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-500': selectedJobId === job.id,
-                }"
+                :selected="selectedJobId === job.id"
+                :icon="getJobIcon(job.state)"
+                :icon-class="getJobIconColor(job.state)"
+                :title="job.name"
+                :subtitle="truncateId(job.id)"
+                :badge="job.state || 'unknown'"
+                :badge-color="getStateBadgeColor(job.state)"
                 @click="selectJob(job.id)"
               >
-                <div class="flex items-start gap-3">
-                  <div class="flex-shrink-0 mt-0.5">
-                    <UIcon
-                      :name="getJobIcon(job.state)"
-                      class="w-5 h-5"
-                      :class="getJobIconColor(job.state)"
-                    />
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center justify-between gap-2 mb-1">
-                      <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                        {{ job.name }}
-                      </h3>
-                      <UBadge
-                        :label="job.state || 'unknown'"
-                        :color="getStateBadgeColor(job.state)"
-                        variant="subtle"
-                        size="xs"
-                        class="capitalize flex-shrink-0"
-                      />
-                    </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 font-mono truncate mb-1">
-                      {{ truncateId(job.id) }}
-                    </p>
-                    <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                      <span v-if="job.timestamp">
-                        {{ formatTime(job.timestamp) }}
-                      </span>
-                      <span v-if="job.finishedOn && job.processedOn">
-                        • {{ formatDuration(job.processedOn, job.finishedOn) }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                <template #meta>
+                  <span v-if="job.timestamp">
+                    {{ formatTime(job.timestamp) }}
+                  </span>
+                  <span v-if="job.finishedOn && job.processedOn">
+                    • {{ formatDuration(job.processedOn, job.finishedOn) }}
+                  </span>
+                </template>
+              </SelectableListItem>
             </div>
           </div>
 
@@ -409,6 +386,7 @@ import { useComponentRouter } from '../../composables/useComponentRouter'
 import { useRoute, useRouter } from '#app'
 import StatCard from '../../components/StatCard.vue'
 import QueueConfiguration from '../../components/QueueConfiguration.vue'
+import SelectableListItem from '../../components/SelectableListItem.vue'
 
 const componentRouter = useComponentRouter()
 const router = useRouter()

@@ -368,7 +368,7 @@ export class PostgresStoreAdapter implements StoreAdapter {
     this.prefix = options.prefix || 'nvent'
     this.schema = options.schema || 'public'
     this.router = new SubjectRouter(this.prefix, this.schema)
-    this.validator = createStoreValidator()
+    this.validator = createStoreValidator('postgres')
 
     // Initialize stream methods
     this.stream = {
