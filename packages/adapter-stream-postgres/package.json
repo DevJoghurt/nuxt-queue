@@ -1,6 +1,6 @@
 {
   "name": "@nvent-addon/adapter-stream-postgres",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "PostgreSQL LISTEN/NOTIFY stream adapter for nvent",
   "repository": "DevJoghurt/nvent",
   "license": "MIT",
