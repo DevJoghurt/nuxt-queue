@@ -493,15 +493,22 @@ function isEmitEvent(type: string) {
 
 function hasMetadata(eventData: any): boolean {
   if (!eventData || typeof eventData !== 'object') return false
-  // Check if there's metadata beyond message and level for logs
-  const keys = Object.keys(eventData).filter(k => k !== 'message' && k !== 'level' && k !== 'msg')
+  // Check if there's user-provided metadata beyond the auto-injected fields
+  // 'value' is used when the 3rd param is a primitive (boolean, string, number, array)
+  const autoInjectedKeys = ['message', 'level', 'msg', 'stepName', 'stepId', 'stepRunId', 'attempt', 'flowName']
+  const keys = Object.keys(eventData).filter(k => !autoInjectedKeys.includes(k))
   return keys.length > 0
 }
 
 function prettyMetadata(eventData: any): string {
   if (!eventData || typeof eventData !== 'object') return ''
-  // Filter out message and level for log metadata display
-  const { message, level, msg, ...metadata } = eventData
+  // Filter out message, level, and auto-injected step context fields
+  // to show only the user-provided 3rd parameter metadata
+  const { message, level, msg, stepName, stepId, stepRunId, attempt, flowName, ...metadata } = eventData
+  // If the only key is 'value', display the value directly for better UX
+  if (Object.keys(metadata).length === 1 && 'value' in metadata) {
+    return pretty(metadata.value)
+  }
   return pretty(metadata)
 }
 </script>

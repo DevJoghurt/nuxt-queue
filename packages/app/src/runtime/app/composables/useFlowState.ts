@@ -276,42 +276,21 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
   }
 
   // Infer flow status based on step states
-  // A flow status is determined by:
-  // 1. It has started
-  // 2. It has at least one step
+  // Note: We can only infer 'awaiting' status here. We should NOT infer 'completed'
+  // because we don't know how many total steps the flow has. The backend should
+  // emit flow.completed when the flow is actually done.
   if (state.status === 'running' && state.startedAt && Object.keys(state.steps).length > 0) {
     const hasActiveRunningSteps = Object.values(state.steps).some(
       s => s.status === 'running' || s.status === 'retrying',
     )
     const hasWaitingSteps = Object.values(state.steps).some(s => s.status === 'waiting')
-    const hasFailedSteps = Object.values(state.steps).some(s => s.status === 'failed')
-    const allStepsTerminal = Object.values(state.steps).every(
-      s => s.status === 'completed' || s.status === 'failed' || s.status === 'timeout',
-    )
 
     // If there are waiting steps and no actively running steps, set status to 'awaiting'
     if (hasWaitingSteps && !hasActiveRunningSteps) {
       state.status = 'awaiting'
     }
-    // If all steps are terminal (no running, retrying, or waiting), infer completion
-    else if (allStepsTerminal) {
-      // Infer completion status
-      if (hasFailedSteps) {
-        state.status = 'failed'
-      }
-      else {
-        state.status = 'completed'
-      }
-      // Set completion time to the latest step completion time
-      const latestCompletion = Object.values(state.steps)
-        .map(s => s.completedAt)
-        .filter(Boolean)
-        .sort()
-        .pop()
-      if (latestCompletion) {
-        state.completedAt = latestCompletion
-      }
-    }
+    // Don't infer completion here - wait for explicit flow.completed event
+    // The backend knows when the flow is truly complete
   }
 
   return state

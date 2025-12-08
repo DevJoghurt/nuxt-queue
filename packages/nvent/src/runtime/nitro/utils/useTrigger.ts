@@ -188,6 +188,15 @@ export function useTrigger() {
         )
       }
 
+      // Check if trigger is active
+      if (trigger && trigger.status !== 'active') {
+        logger.info(
+          `Trigger '${name}' is ${trigger.status}, not emitting. `
+          + `Update status to 'active' to enable firing.`,
+        )
+        return
+      }
+
       // Check payload threshold
       const threshold = opts?.payloadThreshold
         || trigger?.config?.payloadThreshold
@@ -319,6 +328,9 @@ export function useTrigger() {
           // Load embedded subscriptions
           if (metadata.subscriptions) {
             for (const [flowName, subData] of Object.entries(metadata.subscriptions)) {
+              // Skip null/undefined subscriptions (removed subscriptions may be stored as null)
+              if (!subData) continue
+
               const subscription: TriggerSubscription = {
                 triggerName: entry.id,
                 flowName,
@@ -336,30 +348,6 @@ export function useTrigger() {
         logger.info(
           `Loaded ${activeCount} active triggers with ${totalSubscriptions} subscriptions from index`,
         )
-      }
-      else {
-        // Fallback to old doc-based loading for backward compatibility
-        logger.warn('Store does not support indexRead, falling back to doc-based loading')
-
-        if (store.list) {
-          // Use deprecated patterns for backward compatibility
-          const triggers = await store.list('triggers')
-          for (const { id, doc } of triggers) {
-            runtime.addTrigger(id, doc as TriggerEntry)
-          }
-
-          // Load subscriptions from store
-          const subscriptions = await store.list('trigger-subscriptions')
-          for (const { doc } of subscriptions) {
-            const sub = doc as TriggerSubscription & { filter?: string, transform?: string }
-            runtime.addSubscription(sub.triggerName, sub.flowName, sub)
-          }
-
-          logger.info(
-            `Loaded ${triggers.length} triggers and `
-            + `${subscriptions.length} subscriptions from doc store (legacy)`,
-          )
-        }
       }
 
       runtime.setInitialized(true)

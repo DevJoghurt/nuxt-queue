@@ -369,7 +369,8 @@ const saveSuccess = ref(false)
 
 // Form submission handler
 const onSubmit = async (event: FormSubmitEvent<any>) => {
-  if (!trigger.value) return
+  // Prevent double submission
+  if (!trigger.value || isSaving.value) return
 
   isSaving.value = true
   saveError.value = null

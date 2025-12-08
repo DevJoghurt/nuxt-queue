@@ -791,19 +791,57 @@ export class PostgresStoreAdapter implements StoreAdapter {
         return null
       },
 
-      read: async (key: string, opts?: { offset?: number, limit?: number }) => {
+      read: async (key: string, opts?: { offset?: number, limit?: number, filter?: Record<string, any> }) => {
         const subject = key
         const routeInfo = this.router.getTableInfo(subject)
         const offset = opts?.offset || 0
         const limit = opts?.limit || 100
 
+        // Helper to build WHERE clause from filter
+        const buildFilterClause = (
+          filter: Record<string, any> | undefined,
+          startParamIndex: number,
+          columnMap: Record<string, string>,
+        ): { clause: string, params: any[], nextParamIndex: number } => {
+          if (!filter || Object.keys(filter).length === 0) {
+            return { clause: '', params: [], nextParamIndex: startParamIndex }
+          }
+
+          const conditions: string[] = []
+          const params: any[] = []
+          let paramIndex = startParamIndex
+
+          for (const [field, value] of Object.entries(filter)) {
+            const column = columnMap[field] || field
+            if (Array.isArray(value)) {
+              // IN query for array values
+              conditions.push(`${column} = ANY($${paramIndex})`)
+              params.push(value)
+            }
+            else {
+              conditions.push(`${column} = $${paramIndex}`)
+              params.push(value)
+            }
+            paramIndex++
+          }
+
+          return {
+            clause: conditions.length > 0 ? ` AND ${conditions.join(' AND ')}` : '',
+            params,
+            nextParamIndex: paramIndex,
+          }
+        }
+
         if (routeInfo.type === 'flow_runs') {
+          const columnMap: Record<string, string> = { status: 'status', startedAt: 'started_at', completedAt: 'completed_at' }
+          const { clause: filterClause, params: filterParams, nextParamIndex } = buildFilterClause(opts?.filter, 2, columnMap)
+
           const result = await this.pool.query(`
             SELECT * FROM ${routeInfo.table}
-            WHERE flow_name = $1
+            WHERE flow_name = $1${filterClause}
             ORDER BY started_at DESC
-            LIMIT $2 OFFSET $3
-          `, [routeInfo.extractedKey, limit, offset])
+            LIMIT $${nextParamIndex} OFFSET $${nextParamIndex + 1}
+          `, [routeInfo.extractedKey, ...filterParams, limit, offset])
 
           return result.rows.map(row => ({
             id: row.run_id,
@@ -812,11 +850,16 @@ export class PostgresStoreAdapter implements StoreAdapter {
           }))
         }
         else if (routeInfo.type === 'flows') {
+          const columnMap: Record<string, string> = { name: 'flow_name', displayName: 'display_name' }
+          const { clause: filterClause, params: filterParams, nextParamIndex } = buildFilterClause(opts?.filter, 1, columnMap)
+
+          const whereClause = filterClause ? `WHERE 1=1${filterClause}` : ''
           const result = await this.pool.query(`
             SELECT * FROM ${routeInfo.table}
+            ${whereClause}
             ORDER BY registered_at DESC
-            LIMIT $1 OFFSET $2
-          `, [limit, offset])
+            LIMIT $${nextParamIndex} OFFSET $${nextParamIndex + 1}
+          `, [...filterParams, limit, offset])
 
           return result.rows.map(row => ({
             id: row.flow_name,
@@ -825,11 +868,16 @@ export class PostgresStoreAdapter implements StoreAdapter {
           }))
         }
         else if (routeInfo.type === 'triggers') {
+          const columnMap: Record<string, string> = { status: 'status', type: 'trigger_type', triggerType: 'trigger_type' }
+          const { clause: filterClause, params: filterParams, nextParamIndex } = buildFilterClause(opts?.filter, 1, columnMap)
+
+          const whereClause = filterClause ? `WHERE 1=1${filterClause}` : ''
           const result = await this.pool.query(`
             SELECT * FROM ${routeInfo.table}
+            ${whereClause}
             ORDER BY registered_at DESC
-            LIMIT $1 OFFSET $2
-          `, [limit, offset])
+            LIMIT $${nextParamIndex} OFFSET $${nextParamIndex + 1}
+          `, [...filterParams, limit, offset])
 
           return result.rows.map(row => ({
             id: row.trigger_name,
@@ -838,11 +886,16 @@ export class PostgresStoreAdapter implements StoreAdapter {
           }))
         }
         else if (routeInfo.type === 'scheduler_jobs') {
+          const columnMap: Record<string, string> = { status: 'status', type: 'type', enabled: 'enabled' }
+          const { clause: filterClause, params: filterParams, nextParamIndex } = buildFilterClause(opts?.filter, 1, columnMap)
+
+          const whereClause = filterClause ? `WHERE 1=1${filterClause}` : ''
           const result = await this.pool.query(`
             SELECT * FROM ${routeInfo.table}
+            ${whereClause}
             ORDER BY scheduled_at DESC
-            LIMIT $1 OFFSET $2
-          `, [limit, offset])
+            LIMIT $${nextParamIndex} OFFSET $${nextParamIndex + 1}
+          `, [...filterParams, limit, offset])
 
           return result.rows.map(row => ({
             id: row.job_id,

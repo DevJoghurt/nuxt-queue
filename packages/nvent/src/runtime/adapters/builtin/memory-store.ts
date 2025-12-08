@@ -257,8 +257,24 @@ export class MemoryStoreAdapter implements StoreAdapter {
       return entry ? { ...entry } : null
     },
 
-    read: async (key: string, opts?: { offset?: number, limit?: number }): Promise<Array<{ id: string, score: number, metadata?: any }>> => {
-      const index = this.sortedIndices.get(key) || []
+    read: async (key: string, opts?: { offset?: number, limit?: number, filter?: Record<string, any> }): Promise<Array<{ id: string, score: number, metadata?: any }>> => {
+      let index = this.sortedIndices.get(key) || []
+
+      // Apply filter if provided
+      if (opts?.filter) {
+        index = index.filter((entry) => {
+          for (const [field, value] of Object.entries(opts.filter!)) {
+            // Support array values for "in" queries (e.g., status: ['running', 'awaiting'])
+            if (Array.isArray(value)) {
+              if (!value.includes(entry.metadata?.[field])) return false
+            }
+            else if (entry.metadata?.[field] !== value) {
+              return false
+            }
+          }
+          return true
+        })
+      }
 
       const offset = opts?.offset || 0
       const limit = opts?.limit || 50
@@ -438,9 +454,9 @@ export class MemoryStoreAdapter implements StoreAdapter {
   /**
    * Convert dot notation keys to nested objects
    * e.g., { 'stats.totalFires': 5 } -> { stats: { totalFires: 5 } }
-   * null values are preserved for deletion
+   * null values are tracked for deletion after merge
    */
-  private expandDotNotation(obj: Record<string, any>): Record<string, any> {
+  private expandDotNotation(obj: Record<string, any>, parentPath: string[] = []): Record<string, any> {
     const result: Record<string, any> = {}
     const deleteMarkers: Array<{ path: string[], delete: boolean }> = []
 
@@ -456,7 +472,7 @@ export class MemoryStoreAdapter implements StoreAdapter {
 
         // Track null values for deletion after merge
         if (value === null || value === undefined) {
-          deleteMarkers.push({ path: keys, delete: true })
+          deleteMarkers.push({ path: [...parentPath, ...keys], delete: true })
           continue
         }
 
@@ -470,6 +486,25 @@ export class MemoryStoreAdapter implements StoreAdapter {
         }
 
         current[keys[keys.length - 1]] = value
+      }
+      else if (value === null || value === undefined) {
+        // Track null values for deletion
+        deleteMarkers.push({ path: [...parentPath, key], delete: true })
+      }
+      else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        // Recursively process nested objects to find null values
+        const nested = this.expandDotNotation(value, [...parentPath, key])
+        const nestedDeleteMarkers = (nested as any).__deleteMarkers
+        delete (nested as any).__deleteMarkers
+
+        if (nestedDeleteMarkers) {
+          deleteMarkers.push(...nestedDeleteMarkers)
+        }
+
+        // Only add the nested object if it has non-null values
+        if (Object.keys(nested).length > 0) {
+          result[key] = nested
+        }
       }
       else {
         result[key] = value

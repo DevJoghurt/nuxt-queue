@@ -445,6 +445,16 @@ export async function handleTriggerFired(event: TriggerFiredEvent): Promise<stri
 
   logger.debug('Trigger fired', { trigger: triggerName })
 
+  // Check if trigger is active before proceeding
+  const triggerEntry = trigger.getTrigger(triggerName)
+  if (triggerEntry && triggerEntry.status !== 'active') {
+    logger.info(`Trigger '${triggerName}' is ${triggerEntry.status}, skipping flow starts`, {
+      trigger: triggerName,
+      status: triggerEntry.status,
+    })
+    return []
+  }
+
   // Get all subscribed flows
   const subscriptions = trigger.getAllSubscriptions()
     .filter(sub => sub.triggerName === triggerName)

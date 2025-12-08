@@ -220,6 +220,25 @@ export type {
   ListOptions,
 } from ${JSON.stringify(resolverFn('./runtime/adapters/interfaces/store'))}
 
+// Flow Types
+export type {
+  FlowStats,
+  StartFlowResult,
+  CancelFlowResult,
+  RunningFlow,
+  FlowComposable,
+} from ${JSON.stringify(resolverFn('./runtime/nitro/utils/useFlow'))}
+
+// Runner Context Types
+export type {
+  QueueJob,
+  RunLogger,
+  RunState,
+  RunContextFlow,
+  RunContext,
+  NodeHandler,
+} from ${JSON.stringify(resolverFn('./runtime/worker/node/runner'))}
+
 // Event Types
 export type {
   EventType,

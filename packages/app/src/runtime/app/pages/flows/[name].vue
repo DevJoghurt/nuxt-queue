@@ -435,7 +435,8 @@ const goBack = () => {
 }
 
 // Main tab state (Diagram or Timeline)
-const mainTab = ref<'diagram' | 'timeline'>('diagram')
+// Initialize based on URL - if run is already selected, start with timeline
+const mainTab = ref<'diagram' | 'timeline'>(route.query.run ? 'timeline' : 'diagram')
 
 // Tab configurations
 const mainTabs = computed(() => [
@@ -593,7 +594,8 @@ const runSnapshot = computed(() => {
     completedAt: state.completedAt,
     logsCount: state.logs.length,
     lastLogLevel: state.logs.length > 0 ? state.logs[state.logs.length - 1]?.level : undefined,
-    stallTimeout: flowMeta?.analyzed?.stallTimeout, // Get from analyzed flows (static)
+    // Use stallTimeout from event data if available, otherwise fall back to static flow definition
+    stallTimeout: state.meta?.stallTimeout || flowMeta?.analyzed?.stallTimeout,
   }
 })
 

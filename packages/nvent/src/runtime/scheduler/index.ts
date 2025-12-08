@@ -9,7 +9,9 @@ import { Scheduler } from './scheduler'
 import type { SchedulerAdapter } from './types'
 import { useRuntimeConfig } from '#imports'
 
-let schedulerInstance: SchedulerAdapter | null = null
+// Use globalThis to ensure singleton survives HMR reloads when used as npm package
+const SCHEDULER_KEY = '__nvent_scheduler__'
+let schedulerInstance: SchedulerAdapter | null = (globalThis as any)[SCHEDULER_KEY] || null
 
 /**
  * Create a scheduler instance
@@ -52,6 +54,7 @@ export async function initializeScheduler(store: any): Promise<SchedulerAdapter>
   }
 
   schedulerInstance = createScheduler(store)
+  ;(globalThis as any)[SCHEDULER_KEY] = schedulerInstance
   await schedulerInstance.start()
 
   return schedulerInstance
@@ -65,6 +68,7 @@ export async function shutdownScheduler(): Promise<void> {
   if (schedulerInstance) {
     await schedulerInstance.stop()
     schedulerInstance = null
+    ;(globalThis as any)[SCHEDULER_KEY] = null
   }
 }
 
@@ -73,4 +77,5 @@ export async function shutdownScheduler(): Promise<void> {
  */
 export function resetScheduler(): void {
   schedulerInstance = null
+  ;(globalThis as any)[SCHEDULER_KEY] = null
 }

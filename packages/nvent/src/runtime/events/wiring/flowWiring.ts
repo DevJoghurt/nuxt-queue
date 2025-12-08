@@ -848,8 +848,16 @@ export function createFlowWiring() {
           logger.debug('Updated flow stats for failure', { flowName })
         }
         else if (e.type === 'flow.cancel') {
+          // Decrement the correct counter based on previous status
           if (store.index.increment) {
-            await store.index.increment(flowIndexKey, flowName, 'stats.running', -1)
+            const previousStatus = e.data?.previousStatus
+            if (previousStatus === 'awaiting') {
+              await store.index.increment(flowIndexKey, flowName, 'stats.awaiting', -1)
+            }
+            else {
+              // Default to running if previousStatus not available
+              await store.index.increment(flowIndexKey, flowName, 'stats.running', -1)
+            }
             await store.index.increment(flowIndexKey, flowName, 'stats.cancel', 1)
           }
 
@@ -859,7 +867,7 @@ export function createFlowWiring() {
             })
           }
 
-          logger.debug('Updated flow stats for cancellation', { flowName })
+          logger.debug('Updated flow stats for cancellation', { flowName, previousStatus: e.data?.previousStatus })
         }
         else if (e.type === 'flow.stalled') {
           // Flow detected as stalled - decrement the correct counter based on previous status
@@ -1121,6 +1129,16 @@ export function createFlowWiring() {
 
           try {
             if (store.index.updateWithRetry) {
+              // Check if flow is already canceled before updating status
+              if (store.index.get) {
+                const currentEntry = await store.index.get(indexKey, runId)
+                const currentStatus = (currentEntry?.metadata as any)?.status
+                if (currentStatus === 'canceled') {
+                  logger.debug('Flow already canceled, skipping await registration', { flowName, runId, stepName })
+                  return // Don't register await for canceled flow
+                }
+              }
+
               const now = Date.now()
 
               // Calculate timeoutAt based on await type and config
@@ -1188,6 +1206,16 @@ export function createFlowWiring() {
           const { stepName, triggerData, position } = awaitEvent
 
           try {
+            // Check if flow is already canceled before resuming
+            if (store.index.get) {
+              const currentEntry = await store.index.get(indexKey, runId)
+              const currentStatus = (currentEntry?.metadata as any)?.status
+              if (currentStatus === 'canceled') {
+                logger.debug('Flow already canceled, skipping await resolution', { flowName, runId, stepName })
+                return // Don't resume canceled flow
+              }
+            }
+
             if (store.index.updateWithRetry) {
               // Use composite key: stepName:position to support both awaitBefore and awaitAfter
               const awaitKey = `${stepName}:${position}`
@@ -1298,6 +1326,16 @@ export function createFlowWiring() {
           const timeoutEvent = e as any
           const { stepName, timeoutAction, position, awaitType } = timeoutEvent
           const action = timeoutAction || 'fail'
+
+          // Check if flow is already canceled before processing timeout
+          if (store.index.get) {
+            const currentEntry = await store.index.get(indexKey, runId)
+            const currentStatus = (currentEntry?.metadata as any)?.status
+            if (currentStatus === 'canceled') {
+              logger.debug('Flow already canceled, skipping await timeout handling', { flowName, runId, stepName })
+              return // Don't process timeout for canceled flow
+            }
+          }
 
           logger.warn('Await timeout occurred', {
             runId,
@@ -1541,10 +1579,18 @@ export function createFlowWiring() {
                 updateMetadata.completedAt = analysis.completedAt
               }
 
-              // IMPORTANT: Check if flow has active awaits before updating status
-              // If there are awaits, preserve 'awaiting' status
+              // IMPORTANT: Check current status and awaits before updating
+              // Preserve 'canceled' status if already set (terminal state)
               if (store.index.get) {
                 const currentEntry = await store.index.get(indexKey, runId)
+                const currentStatus = (currentEntry?.metadata as any)?.status
+
+                // If flow is already canceled, don't overwrite with non-terminal status
+                // This prevents race conditions when canceling from within a step
+                if (currentStatus === 'canceled') {
+                  logger.debug('Flow already canceled, skipping status update', { flowName, runId })
+                  return // Exit early, don't update status
+                }
 
                 // Check for active or timed-out awaits
                 const awaitingStepsObj = (currentEntry?.metadata as any)?.awaitingSteps || {}

@@ -10,6 +10,7 @@ import {
   useQueueAdapter,
 } from '#imports'
 import { SYSTEM_HANDLERS } from '../system'
+import type { FlowStats, StartFlowResult, CancelFlowResult, RunningFlow } from '../../nitro/utils/useFlow'
 
 const logger = useNventLogger('node-runner')
 
@@ -37,6 +38,45 @@ export interface RunState {
   delete(key: string): Promise<void>
 }
 
+/**
+ * Flow context available within step handlers
+ * Provides context-aware versions of flow operations with auto-injected flowId/flowName
+ */
+export interface RunContextFlow {
+  /** Start a new flow with the given payload */
+  startFlow: (flowName: string, payload?: any) => Promise<StartFlowResult>
+  /** Emit a trigger event (auto-injects flowId, flowName, stepName from context) */
+  emit: (trigger: string, payload?: any) => Promise<any[]>
+  /** Cancel a specific flow by name and runId */
+  cancelFlow: (flowName: string, runId: string) => Promise<CancelFlowResult>
+  /** Cancel the current flow (uses flowId from context) */
+  cancel: () => Promise<CancelFlowResult>
+  /**
+   * Check if a flow is currently running
+   * @param flowName - Optional flow name (defaults to current flow)
+   * @param runId - Optional specific run ID to check
+   * @param options - Optional configuration (auto-excludes current flow if not specified)
+   */
+  isRunning: (flowName?: string, runId?: string, options?: { excludeRunIds?: string[] }) => Promise<boolean>
+  /**
+   * Get all currently running flows
+   * @param flowName - Optional flow name (defaults to current flow)
+   * @param options - Optional configuration (auto-excludes current flow if not specified)
+   */
+  getRunningFlows: (flowName?: string, options?: { excludeRunIds?: string[] }) => Promise<RunningFlow[]>
+  /** Get flow statistics by name */
+  getFlowStats: (flowName: string) => Promise<FlowStats | null>
+  /** Get all flows with their statistics */
+  getAllFlowStats: (options?: {
+    sortBy?: 'registeredAt' | 'lastRunAt' | 'name'
+    order?: 'asc' | 'desc'
+    limit?: number
+    offset?: number
+  }) => Promise<FlowStats[]>
+  /** Check if a flow has statistics in the index */
+  hasFlowStats: (flowName: string) => Promise<boolean>
+}
+
 export interface RunContext {
   jobId?: string
   queue?: string
@@ -47,7 +87,7 @@ export interface RunContext {
   attempt?: number
   logger: RunLogger
   state: RunState
-  flow: ReturnType<typeof useFlow>
+  flow: RunContextFlow
   /**
    * Resolved data from await pattern (awaitBefore only)
    * Available when step resumes after await resolution
@@ -101,14 +141,18 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
         // publish log event directly
         const runId = partial?.flowId || 'unknown'
         const flowName = meta?.flowName || 'unknown'
+        // Handle non-object meta by wrapping it in a 'value' key
+        const metaObj = meta !== null && meta !== undefined
+          ? (typeof meta === 'object' && !Array.isArray(meta) ? meta : { value: meta })
+          : {}
         void eventManager.publishBus({
           type: 'log',
           runId,
           flowName,
-          stepName: meta?.stepName,
-          stepId: meta?.stepId || meta?.stepRunId,
-          attempt: meta?.attempt,
-          data: { level, message: msg, ...meta },
+          stepName: metaObj?.stepName,
+          stepId: metaObj?.stepId || metaObj?.stepRunId,
+          attempt: metaObj?.attempt,
+          data: { level, message: msg, ...metaObj },
         })
       },
     }
@@ -134,21 +178,25 @@ export function buildContext(partial?: Partial<RunContext>): RunContext {
       }
       return baseFlowEngine.cancelFlow(partial.flowName, partial.flowId)
     },
-    isRunning: async (flowName?: string, runId?: string) => {
+    isRunning: async (flowName?: string, runId?: string, options?: { excludeRunIds?: string[] }) => {
       // Use provided flowName or current context flowName
       const targetFlowName = flowName || partial?.flowName
       if (!targetFlowName) {
         throw new Error('flowName is required to check if flow is running')
       }
-      return baseFlowEngine.isRunning(targetFlowName, runId)
+      // Auto-exclude current flow if no excludeRunIds provided and we have a flowId
+      const effectiveOptions = options || (partial?.flowId ? { excludeRunIds: [partial.flowId] } : undefined)
+      return baseFlowEngine.isRunning(targetFlowName, runId, effectiveOptions)
     },
-    getRunningFlows: async (flowName?: string) => {
+    getRunningFlows: async (flowName?: string, options?: { excludeRunIds?: string[] }) => {
       // Use provided flowName or current context flowName
       const targetFlowName = flowName || partial?.flowName
       if (!targetFlowName) {
         throw new Error('flowName is required to get running flows')
       }
-      return baseFlowEngine.getRunningFlows(targetFlowName)
+      // Auto-exclude current flow if no excludeRunIds provided and we have a flowId
+      const effectiveOptions = options || (partial?.flowId ? { excludeRunIds: [partial.flowId] } : undefined)
+      return baseFlowEngine.getRunningFlows(targetFlowName, effectiveOptions)
     },
   }
 
@@ -230,7 +278,11 @@ export function createJobProcessor(handler: NodeHandler, queueName: string) {
     // Derive a logger that injects stepName/attempt/stepRunId by default during this attempt
     const attemptLogger = {
       log: (level: 'debug' | 'info' | 'warn' | 'error', msg: string, meta?: any) => {
-        const enriched = { ...(meta || {}), stepName: job.name, attempt, stepRunId, flowName }
+        // Handle non-object meta by wrapping it in a 'value' key
+        const metaObj = meta !== null && meta !== undefined
+          ? (typeof meta === 'object' && !Array.isArray(meta) ? meta : { value: meta })
+          : {}
+        const enriched = { ...metaObj, stepName: job.name, attempt, stepRunId, flowName }
         ctx.logger.log(level, msg, enriched)
       },
     }

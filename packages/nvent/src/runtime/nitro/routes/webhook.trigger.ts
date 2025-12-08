@@ -53,6 +53,17 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // Check if trigger is active
+  if (triggerEntry.status !== 'active') {
+    logger.info(`Trigger '${triggerName}' is ${triggerEntry.status}, rejecting webhook`)
+    return {
+      error: 'Trigger not active',
+      triggerName,
+      status: triggerEntry.status,
+      message: `Trigger '${triggerName}' is ${triggerEntry.status}. Update status to 'active' to enable.`,
+    }
+  }
+
   // Verify method matches
   const expectedMethod = triggerEntry.webhook?.method || 'POST'
   if (event.method !== expectedMethod) {

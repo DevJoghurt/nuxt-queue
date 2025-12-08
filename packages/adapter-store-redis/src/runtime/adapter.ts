@@ -275,7 +275,7 @@ export class RedisStoreAdapter implements StoreAdapter {
           const metaKey = `${key}:meta:${id}`
           // Initialize with version 0 for optimistic locking support
           const metaToStore = { version: 0, ...metadata }
-          const serialized = this.serializeHashFields(metaToStore)
+          const { serialized } = this.serializeHashFields(metaToStore)
           await this.redis.hset(metaKey, serialized)
         }
       },
@@ -307,16 +307,74 @@ export class RedisStoreAdapter implements StoreAdapter {
         }
       },
 
-      read: async (key: string, opts?: { offset?: number, limit?: number }) => {
+      read: async (key: string, opts?: { offset?: number, limit?: number, filter?: Record<string, any> }) => {
         if (!this.redis.status || this.redis.status === 'end') {
           await this.redis.connect()
         }
 
         const offset = opts?.offset || 0
         const limit = opts?.limit || 50
-        const end = offset + limit - 1
 
-        // Read from sorted set in reverse order (newest first) with scores
+        // Helper to check if entry matches filter
+        const matchesFilter = (metadata: any, filter: Record<string, any>): boolean => {
+          for (const [field, value] of Object.entries(filter)) {
+            if (Array.isArray(value)) {
+              if (!value.includes(metadata?.[field])) return false
+            }
+            else if (metadata?.[field] !== value) {
+              return false
+            }
+          }
+          return true
+        }
+
+        // If filter is provided, we need to scan more entries and filter
+        // This is less efficient for Redis but necessary since we can't query hash fields
+        if (opts?.filter && Object.keys(opts.filter).length > 0) {
+          // Fetch more entries to account for filtering
+          // We'll fetch in batches until we have enough matching entries
+          const matchingEntries: Array<{ id: string, score: number, metadata?: any }> = []
+          let scanOffset = 0
+          const batchSize = 100
+          const maxScanned = 10000 // Safety limit
+
+          while (matchingEntries.length < offset + limit && scanOffset < maxScanned) {
+            const end = scanOffset + batchSize - 1
+            const results = await this.redis.zrevrange(key, scanOffset, end, 'WITHSCORES')
+
+            if (results.length === 0) break // No more entries
+
+            for (let i = 0; i < results.length; i += 2) {
+              const id = results[i]
+              const score = Number.parseInt(results[i + 1])
+
+              // Fetch metadata
+              const metaKey = `${key}:meta:${id}`
+              const rawMetadata = await this.redis.hgetall(metaKey)
+
+              let metadata: any = undefined
+              if (Object.keys(rawMetadata).length > 0) {
+                metadata = this.parseHashFields(rawMetadata)
+              }
+
+              // Check if matches filter
+              if (matchesFilter(metadata, opts.filter!)) {
+                matchingEntries.push({ id, score, metadata })
+              }
+
+              // Stop if we have enough
+              if (matchingEntries.length >= offset + limit) break
+            }
+
+            scanOffset += batchSize
+          }
+
+          // Apply offset and limit to matching entries
+          return matchingEntries.slice(offset, offset + limit)
+        }
+
+        // No filter - use efficient direct range query
+        const end = offset + limit - 1
         const results = await this.redis.zrevrange(key, offset, end, 'WITHSCORES')
 
         // Results alternate between member and score
@@ -360,11 +418,21 @@ export class RedisStoreAdapter implements StoreAdapter {
         const currentVersion = current ? Number.parseInt(current, 10) : 0
 
         // Optimistic lock: only update if version matches
+        // Script args: version, setCount, [set key/value pairs...], [delete keys...]
         const script = `
           local current = redis.call('HGET', KEYS[1], 'version')
           if current == ARGV[1] then
-            for i = 2, #ARGV, 2 do
-              redis.call('HSET', KEYS[1], ARGV[i], ARGV[i + 1])
+            local setCount = tonumber(ARGV[2])
+            -- Process HSET operations (pairs starting at ARGV[3])
+            for i = 1, setCount do
+              local keyIdx = 3 + (i - 1) * 2
+              local valIdx = keyIdx + 1
+              redis.call('HSET', KEYS[1], ARGV[keyIdx], ARGV[valIdx])
+            end
+            -- Process HDEL operations (keys starting after set pairs)
+            local deleteStart = 3 + setCount * 2
+            for i = deleteStart, #ARGV do
+              redis.call('HDEL', KEYS[1], ARGV[i])
             end
             redis.call('HSET', KEYS[1], 'version', tonumber(ARGV[1]) + 1)
             return 1
@@ -373,14 +441,19 @@ export class RedisStoreAdapter implements StoreAdapter {
           end
         `
 
-        // Serialize metadata generically
-        const serialized = this.serializeHashFields(metadata)
+        // Serialize metadata generically (returns both values and null keys)
+        const { serialized, nullKeys } = this.serializeHashFields(metadata)
 
-        // Build arguments: [version, key1, val1, key2, val2, ...]
-        const args = [currentVersion.toString()]
-        for (const [k, v] of Object.entries(serialized)) {
+        // Build arguments: [version, setCount, key1, val1, key2, val2, ..., delKey1, delKey2, ...]
+        const setEntries = Object.entries(serialized)
+        const args = [currentVersion.toString(), setEntries.length.toString()]
+        for (const [k, v] of setEntries) {
           args.push(k)
           args.push(v)
+        }
+        // Add keys to delete
+        for (const delKey of nullKeys) {
+          args.push(delKey)
         }
 
         const result = await this.redis.eval(script, 1, metaKey, ...args) as number
@@ -586,23 +659,31 @@ export class RedisStoreAdapter implements StoreAdapter {
   /**
    * Flatten nested objects to dot notation for Redis hash storage
    * e.g., { stats: { totalFires: 5 } } -> { 'stats.totalFires': 5 }
+   * Returns both values and null keys (for deletion)
    */
-  private flattenToHashFields(obj: Record<string, any>, prefix = ''): Record<string, any> {
-    const result: Record<string, any> = {}
+  private flattenToHashFields(obj: Record<string, any>, prefix = ''): { values: Record<string, any>, nullKeys: string[] } {
+    const values: Record<string, any> = {}
+    const nullKeys: string[] = []
 
     for (const [key, value] of Object.entries(obj)) {
       const newKey = prefix ? `${prefix}.${key}` : key
 
-      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      if (value === null) {
+        // Track null values as keys to delete
+        nullKeys.push(newKey)
+      }
+      else if (typeof value === 'object' && !Array.isArray(value)) {
         // Recursively flatten nested objects
-        Object.assign(result, this.flattenToHashFields(value, newKey))
+        const nested = this.flattenToHashFields(value, newKey)
+        Object.assign(values, nested.values)
+        nullKeys.push(...nested.nullKeys)
       }
       else {
-        result[newKey] = value
+        values[newKey] = value
       }
     }
 
-    return result
+    return { values, nullKeys }
   }
 
   /**
@@ -610,11 +691,12 @@ export class RedisStoreAdapter implements StoreAdapter {
    * - Nested objects → Flattened with dot notation
    * - Arrays → JSON
    * - Others → String
+   * Returns both serialized values and keys to delete (null values)
    */
-  private serializeHashFields(obj: Record<string, any>): Record<string, string> {
+  private serializeHashFields(obj: Record<string, any>): { serialized: Record<string, string>, nullKeys: string[] } {
     // First expand any dot notation, then flatten to ensure consistency
     const expanded = this.expandDotNotation(obj)
-    const flattened = this.flattenToHashFields(expanded)
+    const { values: flattened, nullKeys } = this.flattenToHashFields(expanded)
 
     const serialized: Record<string, string> = {}
 
@@ -630,7 +712,7 @@ export class RedisStoreAdapter implements StoreAdapter {
       }
     }
 
-    return serialized
+    return { serialized, nullKeys }
   }
 
   // ============================================================

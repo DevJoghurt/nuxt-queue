@@ -3,6 +3,9 @@ import { createStreamWiring } from './streamWiring'
 import { createStateWiring } from './stateWiring'
 import { createTriggerWiring } from './triggerWiring'
 
+// Use globalThis to ensure singleton survives HMR reloads when used as npm package
+const WIRING_KEY = '__nvent_wiring__'
+
 export interface Wiring {
   start(): void | Promise<void>
   stop(): void | Promise<void>
@@ -24,6 +27,12 @@ export interface WiringRegistryOptions {
 }
 
 export function createWiringRegistry(opts?: WiringRegistryOptions): Wiring {
+  // Check if wiring already exists (HMR protection)
+  const existingWiring = (globalThis as any)[WIRING_KEY] as Wiring | undefined
+  if (existingWiring) {
+    return existingWiring
+  }
+
   // Multiple wirings
   const wirings: Wiring[] = [
     // 1. Flow orchestration (persistence, completion tracking, step triggering)
@@ -41,7 +50,7 @@ export function createWiringRegistry(opts?: WiringRegistryOptions): Wiring {
     createTriggerWiring(),
   ]
   let started = false
-  return {
+  const wiring: Wiring = {
     async start() {
       if (started) return
       started = true
@@ -57,6 +66,13 @@ export function createWiringRegistry(opts?: WiringRegistryOptions): Wiring {
         }
       }
       started = false
+      // Clear globalThis on stop to allow fresh initialization after explicit shutdown
+      ;(globalThis as any)[WIRING_KEY] = null
     },
   }
+
+  // Store in globalThis to survive HMR
+  ;(globalThis as any)[WIRING_KEY] = wiring
+
+  return wiring
 }

@@ -18,11 +18,49 @@ export interface FlowStats {
   version?: number
 }
 
+export interface StartFlowResult {
+  id: string
+  queue: string
+  step: string
+  flowId: string
+}
+
+export interface CancelFlowResult {
+  success: boolean
+  runId: string
+  flowName: string
+}
+
+export interface RunningFlow {
+  id: string
+  flowName: string
+  status: string
+  startedAt: string | undefined
+  stepCount: number
+  completedSteps: number
+}
+
+export interface FlowComposable {
+  startFlow: (flowName: string, payload?: any) => Promise<StartFlowResult>
+  emit: (trigger: string, payload?: any) => Promise<any[]>
+  cancelFlow: (flowName: string, runId: string) => Promise<CancelFlowResult>
+  isRunning: (flowName: string, runId?: string, options?: { excludeRunIds?: string[] }) => Promise<boolean>
+  getRunningFlows: (flowName: string, options?: { excludeRunIds?: string[] }) => Promise<RunningFlow[]>
+  getFlowStats: (flowName: string) => Promise<FlowStats | null>
+  getAllFlowStats: (options?: {
+    sortBy?: 'registeredAt' | 'lastRunAt' | 'name'
+    order?: 'asc' | 'desc'
+    limit?: number
+    offset?: number
+  }) => Promise<FlowStats[]>
+  hasFlowStats: (flowName: string) => Promise<boolean>
+}
+
 /**
  * Flow composable for managing flows and accessing flow statistics
  * Provides methods for starting, canceling, and querying flows
  */
-export function useFlow() {
+export function useFlow(): FlowComposable {
   const registry = $useFunctionRegistry()
   const queueAdapter = useQueueAdapter()
   const eventsManager = useEventManager()
@@ -113,16 +151,28 @@ export function useFlow() {
      */
     async cancelFlow(flowName: string, runId: string) {
       try {
+        // Look up current status to include in cancel event for correct stats handling
+        let previousStatus: string | undefined
+        try {
+          const runIndexKey = StoreSubjects.flowRunIndex(flowName)
+          const entry = await store.index.get(runIndexKey, runId)
+          previousStatus = entry?.metadata?.status
+        }
+        catch {
+          // Best effort - if we can't get status, stats may be slightly off
+        }
+
         await eventsManager.publishBus({
           type: 'flow.cancel',
           runId,
           flowName,
           data: {
             canceledAt: new Date().toISOString(),
+            previousStatus, // Include for correct stats counter decrement
           },
         })
 
-        logger.info('Flow canceled', { flowName, runId })
+        logger.info('Flow canceled', { flowName, runId, previousStatus })
         return { success: true, runId, flowName }
       }
       catch (err) {
@@ -132,25 +182,39 @@ export function useFlow() {
     },
 
     /**
-     * Check if a flow is currently running
+     * Check if a flow is currently running (includes 'running' and 'awaiting' status)
+     * @param flowName - The name of the flow to check
+     * @param runId - Optional specific run ID to check (if provided, only checks that run)
+     * @param options - Optional configuration
+     * @param options.excludeRunIds - Exclude these run IDs from the check (useful when called from within a flow)
      */
-    async isRunning(flowName: string, runId?: string) {
+    async isRunning(flowName: string, runId?: string, options?: { excludeRunIds?: string[] }) {
       try {
         if (!store.index.read) {
           return false
         }
 
         const runIndexKey = StoreSubjects.flowRunIndex(flowName)
-        const entries = await store.index.read(runIndexKey, { limit: 1000 })
+        const activeStatuses = ['running', 'awaiting']
 
-        // If runId is provided, check specific run
+        // If runId is provided, check specific run via index.get (more efficient)
         if (runId) {
-          const run = entries.find(e => e.id === runId)
-          return run?.metadata?.status === 'running'
+          const run = await store.index.get(runIndexKey, runId)
+          return activeStatuses.includes(run?.metadata?.status)
         }
 
-        // Otherwise, check if ANY run of this flow is running
-        return entries.some(e => e.metadata?.status === 'running')
+        // Use filter to only fetch active runs (efficient for Postgres, reasonable for Redis/memory)
+        const entries = await store.index.read(runIndexKey, {
+          limit: 1000,
+          filter: { status: activeStatuses },
+        })
+
+        const excludeSet = new Set(options?.excludeRunIds || [])
+
+        // Filter out excluded runs
+        const matchingRuns = entries.filter(e => !excludeSet.has(e.id))
+
+        return matchingRuns.length > 0
       }
       catch (err) {
         logger.error('Error checking flow status:', err)
@@ -159,27 +223,39 @@ export function useFlow() {
     },
 
     /**
-     * Get all currently running flows
+     * Get all currently running flows (includes 'running' and 'awaiting' status)
+     * @param flowName - The name of the flow to check
+     * @param options - Optional configuration
+     * @param options.excludeRunIds - Exclude these run IDs from the results (useful when called from within a flow)
      */
-    async getRunningFlows(flowName: string) {
+    async getRunningFlows(flowName: string, options?: { excludeRunIds?: string[] }) {
       try {
         if (!store.index.read) {
           return []
         }
 
         const runIndexKey = StoreSubjects.flowRunIndex(flowName)
-        const entries = await store.index.read(runIndexKey, { limit: 1000 })
+        const activeStatuses = ['running', 'awaiting']
 
-        return entries
-          .filter(e => e.metadata?.status === 'running')
-          .map(e => ({
-            id: e.id,
-            flowName,
-            status: e.metadata?.status,
-            startedAt: e.metadata?.startedAt,
-            stepCount: e.metadata?.stepCount || 0,
-            completedSteps: e.metadata?.completedSteps || 0,
-          }))
+        // Use filter to only fetch active runs
+        const entries = await store.index.read(runIndexKey, {
+          limit: 1000,
+          filter: { status: activeStatuses },
+        })
+
+        const excludeSet = new Set(options?.excludeRunIds || [])
+
+        // Filter out excluded runs
+        const filteredEntries = entries.filter(e => !excludeSet.has(e.id))
+
+        return filteredEntries.map(e => ({
+          id: e.id,
+          flowName,
+          status: e.metadata?.status,
+          startedAt: e.metadata?.startedAt,
+          stepCount: e.metadata?.stepCount || 0,
+          completedSteps: e.metadata?.completedSteps || 0,
+        }))
       }
       catch (err) {
         logger.error('Error getting running flows:', err)

@@ -188,12 +188,13 @@ export interface StoreAdapter {
     /**
      * Read entries from a sorted index (ordered by score descending)
      * @param key - Index key
-     * @param opts - Pagination options
+     * @param opts - Pagination and filter options
      * @param opts.offset - Number of entries to skip
      * @param opts.limit - Maximum number of entries to return
+     * @param opts.filter - Optional filter criteria for metadata fields (adapter-dependent efficiency)
      * @returns Array of entries with scores and metadata
      */
-    read(key: string, opts?: { offset?: number, limit?: number }): Promise<Array<{ id: string, score: number, metadata?: any }>>
+    read(key: string, opts?: { offset?: number, limit?: number, filter?: Record<string, any> }): Promise<Array<{ id: string, score: number, metadata?: any }>>
 
     /**
      * Update metadata for an entry in a sorted index

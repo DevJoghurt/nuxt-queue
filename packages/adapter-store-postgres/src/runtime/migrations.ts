@@ -40,6 +40,7 @@ export const migrations: Migration[] = [
         // ============================================================
         // HELPER FUNCTION: Deep JSONB Merge
         // Only used for complex nested fields (emittedEvents, awaitingSteps)
+        // Null values in source will DELETE the corresponding key from target
         // ============================================================
         await client.query(`
           CREATE OR REPLACE FUNCTION jsonb_deep_merge(target jsonb, source jsonb) 
@@ -53,7 +54,10 @@ export const migrations: Migration[] = [
             END IF;
             
             FOR key, value IN SELECT * FROM jsonb_each(source) LOOP
-              IF target ? key AND jsonb_typeof(target->key) = 'object' AND jsonb_typeof(value) = 'object' THEN
+              IF value = 'null'::jsonb THEN
+                -- NULL value means DELETE the key
+                target := target - key;
+              ELSIF target ? key AND jsonb_typeof(target->key) = 'object' AND jsonb_typeof(value) = 'object' THEN
                 target := jsonb_set(target, ARRAY[key], jsonb_deep_merge(target->key, value));
               ELSE
                 target := jsonb_set(target, ARRAY[key], value);
@@ -330,6 +334,60 @@ export const migrations: Migration[] = [
           INSERT INTO ${schema}.${prefix}_schema_version (version, description)
           VALUES (1, 'Optimized flat schema with minimal JSONB usage')
           ON CONFLICT (version) DO NOTHING
+        `)
+
+        await client.query('COMMIT')
+      }
+      catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+      }
+      finally {
+        client.release()
+      }
+    },
+  },
+  {
+    version: 2,
+    name: 'fix_jsonb_deep_merge_null_handling',
+    up: async (pool: Pool, prefix: string, schema: string) => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+
+        // Update the jsonb_deep_merge function to properly handle null values
+        // Null values in source will DELETE the corresponding key from target
+        await client.query(`
+          CREATE OR REPLACE FUNCTION jsonb_deep_merge(target jsonb, source jsonb) 
+          RETURNS jsonb AS $$
+          DECLARE
+            key text;
+            value jsonb;
+          BEGIN
+            IF jsonb_typeof(source) != 'object' OR jsonb_typeof(target) != 'object' THEN
+              RETURN source;
+            END IF;
+            
+            FOR key, value IN SELECT * FROM jsonb_each(source) LOOP
+              IF value = 'null'::jsonb THEN
+                -- NULL value means DELETE the key
+                target := target - key;
+              ELSIF target ? key AND jsonb_typeof(target->key) = 'object' AND jsonb_typeof(value) = 'object' THEN
+                target := jsonb_set(target, ARRAY[key], jsonb_deep_merge(target->key, value));
+              ELSE
+                target := jsonb_set(target, ARRAY[key], value);
+              END IF;
+            END LOOP;
+            
+            RETURN target;
+          END;
+          $$ LANGUAGE plpgsql IMMUTABLE;
+        `)
+
+        // Record migration
+        await client.query(`
+          INSERT INTO ${schema}.${prefix}_schema_version (version, description)
+          VALUES (2, 'Fix jsonb_deep_merge to handle null values as key deletion')
         `)
 
         await client.query('COMMIT')

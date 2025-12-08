@@ -12,6 +12,19 @@ export const config = defineFunctionConfig({
   },
 })
 
-export default defineFunction(async (_input, _ctx) => {
-
+export default defineFunction(async (_input, ctx) => {
+  const isRunning = await ctx.flow.isRunning('test-flow')
+  ctx.logger.log('info', `Is 'test-flow' running? ${isRunning}`, isRunning)
+  if (isRunning) {
+    // get current running flows
+    const runningFlows = await ctx.flow.getRunningFlows('test-flow', {
+      excludeRunIds: [],
+    })
+    ctx.logger.log('info', `Current running flows for 'test-flow':`, runningFlows)
+    // cancel all running flows
+    for (const flow of runningFlows) {
+      await ctx.flow.cancelFlow('test-flow', flow.id)
+      ctx.logger.log('info', `Cancelled flow: ${ctx.flowName} (${flow.id})`)
+    }
+  }
 })
