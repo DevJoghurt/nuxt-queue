@@ -1,6 +1,6 @@
 {
   "name": "@nvent-addon/adapter-stream-redis",
-  "version": "0.5.9",
+  "version": "0.5.10",
   "description": "Redis Pub/Sub stream adapter for nvent",
   "repository": "DevJoghurt/nvent",
   "license": "MIT",

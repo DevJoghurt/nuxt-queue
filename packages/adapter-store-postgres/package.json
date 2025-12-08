@@ -1,6 +1,6 @@
 {
   "name": "@nvent-addon/adapter-store-postgres",
-  "version": "0.5.9",
+  "version": "0.5.10",
   "description": "PostgreSQL store adapter for nvent with automatic schema management",
   "repository": "DevJoghurt/nvent",
   "license": "MIT",
