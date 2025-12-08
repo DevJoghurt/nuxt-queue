@@ -48,7 +48,7 @@ export default defineNuxtConfig({
 
     // Queue adapter configuration
     queue: {
-      adapter: 'postgres', // Use file for development (change to 'redis' for production)
+      adapter: 'redis', // Use file for development (change to 'redis' for production)
       // redis connection inherited from connections.redis
       schema: 'nvent_queue', // pg-boss tables in nvent_queue schema
       prefix: 'nvent',
@@ -73,13 +73,13 @@ export default defineNuxtConfig({
 
     // Stream adapter configuration
     stream: {
-      adapter: 'postgres', // Use memory for single-instance dev
+      adapter: 'redis', // Use memory for single-instance dev
       prefix: 'nvent',
     },
 
     // Store adapter configuration
     store: {
-      adapter: 'postgres', // Use file for development (change to 'redis' for production)
+      adapter: 'redis', // Use file for development (change to 'redis' for production)
       // file.dataDir inherited from connections.file → becomes '.data/store'
       schema: 'nvent_store', // store tables in nvent_store schema
       state: {

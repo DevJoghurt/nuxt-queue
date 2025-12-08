@@ -16,7 +16,7 @@ export interface FlowState {
 }
 
 export interface StepState {
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'retrying' | 'waiting' | 'timeout'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'retrying' | 'waiting' | 'timeout' | 'stalled'
   attempt: number
   startedAt?: string
   completedAt?: string
@@ -154,6 +154,17 @@ export function reduceFlowState(events: EventRecord[]): FlowState {
         state.steps[stepKey].status = 'retrying'
         state.steps[stepKey].attempt = e.data?.nextAttempt || e.attempt || 1
         state.steps[stepKey].error = e.data?.error
+        break
+      }
+
+      case 'step.stalled': {
+        if (!stepKey) break
+        if (!state.steps[stepKey]) {
+          state.steps[stepKey] = { status: 'stalled', attempt: 1 }
+        }
+        state.steps[stepKey].status = 'stalled'
+        state.steps[stepKey].error = e.data?.reason || 'Step execution interrupted'
+        state.steps[stepKey].completedAt = e.ts
         break
       }
 

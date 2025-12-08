@@ -134,7 +134,7 @@ interface FlowMeta {
 }
 
 interface StepStatus {
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'retrying' | 'waiting' | 'timeout' | 'canceled'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'retrying' | 'waiting' | 'timeout' | 'canceled' | 'stalled'
   attempt?: number
   error?: string
   scheduledTriggerAt?: string
@@ -454,6 +454,7 @@ function mapStatusToNodeStatus(status?: string): 'idle' | 'running' | 'error' | 
       return 'done'
     case 'failed':
     case 'timeout':
+    case 'stalled':
       return 'error'
     case 'canceled':
       return 'canceled'

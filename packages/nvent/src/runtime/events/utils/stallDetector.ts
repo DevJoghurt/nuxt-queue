@@ -68,6 +68,7 @@ export class FlowStallDetector {
   /**
    * Mark a flow as stalled
    * Emits a flow.stalled event and updates the flow status
+   * Also emits step.stalled events for any steps that were running when the flow stalled
    */
   async markAsStalled(flowName: string, runId: string, reason: string = 'No activity timeout'): Promise<void> {
     const { StoreSubjects } = useStreamTopics()
@@ -98,8 +99,47 @@ export class FlowStallDetector {
         })
       }
 
-      // Emit flow.stalled event with previous status for stats tracking
       const streamName = StoreSubjects.flowRun(runId)
+      const stalledAt = Date.now()
+
+      // Find steps that were running (step.started but no terminal event)
+      // and emit step.stalled events for them so UI shows correct status
+      try {
+        const allEvents = await this.store.stream.read(streamName)
+        const stalledSteps = this.findStalledSteps(allEvents)
+
+        // Emit step.stalled event for each running step
+        for (const stepName of stalledSteps) {
+          await this.store.stream.append(streamName, {
+            type: 'step.stalled',
+            runId,
+            flowName,
+            stepName,
+            data: {
+              reason: 'Flow stalled - step execution interrupted',
+              stalledAt,
+            },
+          })
+          this.logger.debug(`Emitted step.stalled for step '${stepName}'`, { flowName, runId })
+        }
+
+        if (stalledSteps.length > 0) {
+          this.logger.info(`Marked ${stalledSteps.length} step(s) as stalled`, {
+            flowName,
+            runId,
+            steps: stalledSteps,
+          })
+        }
+      }
+      catch (err) {
+        this.logger.warn('Failed to emit step.stalled events', {
+          flowName,
+          runId,
+          error: (err as Error).message,
+        })
+      }
+
+      // Emit flow.stalled event with previous status for stats tracking
       await this.store.stream.append(streamName, {
         type: 'flow.stalled',
         runId,
@@ -107,6 +147,7 @@ export class FlowStallDetector {
         data: {
           reason,
           previousStatus, // Include previous status so stats handler knows which counter to decrement
+          stalledAt,
         },
       })
 
@@ -115,6 +156,52 @@ export class FlowStallDetector {
     catch (error) {
       this.logger.error(`Failed to mark flow as stalled for '${flowName}' runId '${runId}': ${(error as Error).message}`)
     }
+  }
+
+  /**
+   * Find steps that were running when the flow stalled
+   * A step is considered "running" if it has step.started but no terminal event
+   * (step.completed, step.failed, step.stalled)
+   */
+  private findStalledSteps(events: any[]): string[] {
+    const stepStates = new Map<string, 'started' | 'completed' | 'failed' | 'stalled'>()
+
+    for (const e of events) {
+      const stepName = e.stepName
+      if (!stepName) continue
+
+      // Track step state based on event type
+      if (e.type === 'step.started') {
+        // Only set to started if not already in terminal state
+        if (!stepStates.has(stepName) || stepStates.get(stepName) === 'started') {
+          stepStates.set(stepName, 'started')
+        }
+      }
+      else if (e.type === 'step.completed') {
+        stepStates.set(stepName, 'completed')
+      }
+      else if (e.type === 'step.failed') {
+        // Check if this is a final failure (not a retry)
+        // step.failed without retry indicates terminal state
+        const willRetry = e.data?.willRetry || e.data?.retry
+        if (!willRetry) {
+          stepStates.set(stepName, 'failed')
+        }
+      }
+      else if (e.type === 'step.stalled') {
+        stepStates.set(stepName, 'stalled')
+      }
+    }
+
+    // Return step names that are still in 'started' state (running but never completed/failed)
+    const stalledSteps: string[] = []
+    for (const [stepName, state] of stepStates) {
+      if (state === 'started') {
+        stalledSteps.push(stepName)
+      }
+    }
+
+    return stalledSteps
   }
 
   /**

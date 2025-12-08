@@ -225,6 +225,7 @@ export type {
   FlowStats,
   StartFlowResult,
   CancelFlowResult,
+  RestartFlowResult,
   RunningFlow,
   FlowComposable,
 } from ${JSON.stringify(resolverFn('./runtime/nitro/utils/useFlow'))}

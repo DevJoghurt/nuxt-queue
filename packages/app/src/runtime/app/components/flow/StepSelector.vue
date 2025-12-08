@@ -468,6 +468,7 @@ const getStepStatusBg = (status?: string) => {
   switch (status) {
     case 'completed': return 'bg-emerald-50 dark:bg-emerald-900/20'
     case 'failed': return 'bg-red-50 dark:bg-red-900/20'
+    case 'stalled': return 'bg-amber-50 dark:bg-amber-900/20'
     case 'running': return 'bg-blue-50 dark:bg-blue-900/20'
     default: return 'bg-gray-50 dark:bg-gray-900/20'
   }
@@ -477,6 +478,7 @@ const getStepStatusIcon = (status?: string) => {
   switch (status) {
     case 'completed': return 'i-lucide-check-circle'
     case 'failed': return 'i-lucide-x-circle'
+    case 'stalled': return 'i-lucide-alert-triangle'
     case 'running': return 'i-lucide-loader-circle'
     default: return 'i-lucide-circle'
   }
@@ -486,6 +488,7 @@ const getStepStatusIconColor = (status?: string) => {
   switch (status) {
     case 'completed': return 'text-emerald-600 dark:text-emerald-400'
     case 'failed': return 'text-red-600 dark:text-red-400'
+    case 'stalled': return 'text-amber-600 dark:text-amber-400'
     case 'running': return 'text-blue-600 dark:text-blue-400 animate-spin'
     default: return 'text-gray-400'
   }
@@ -495,6 +498,7 @@ const getStepStatusTextColor = (status?: string) => {
   switch (status) {
     case 'completed': return 'text-emerald-600 dark:text-emerald-400'
     case 'failed': return 'text-red-600 dark:text-red-400'
+    case 'stalled': return 'text-amber-600 dark:text-amber-400'
     case 'running': return 'text-blue-600 dark:text-blue-400'
     default: return 'text-gray-500'
   }

@@ -368,6 +368,7 @@ function updateTriggerStats(data: any) {
 
 onMounted(async () => {
   await fetchTriggers()
+  loading.value = false
 
   if (import.meta.client) {
     // Subscribe to trigger stats updates
@@ -382,9 +383,6 @@ onMounted(async () => {
       },
       {
         autoReconnect: true,
-        onOpen: () => {
-          loading.value = false
-        },
         onError: (err) => {
           console.error('[Trigger Stats] Error:', err)
         },

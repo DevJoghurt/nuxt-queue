@@ -31,6 +31,13 @@ export interface CancelFlowResult {
   flowName: string
 }
 
+export interface RestartFlowResult {
+  success: boolean
+  oldRunId: string
+  newRunId: string
+  flowName: string
+}
+
 export interface RunningFlow {
   id: string
   flowName: string
@@ -44,6 +51,7 @@ export interface FlowComposable {
   startFlow: (flowName: string, payload?: any) => Promise<StartFlowResult>
   emit: (trigger: string, payload?: any) => Promise<any[]>
   cancelFlow: (flowName: string, runId: string) => Promise<CancelFlowResult>
+  restartFlow: (flowName: string, runId: string) => Promise<RestartFlowResult>
   isRunning: (flowName: string, runId?: string, options?: { excludeRunIds?: string[] }) => Promise<boolean>
   getRunningFlows: (flowName: string, options?: { excludeRunIds?: string[] }) => Promise<RunningFlow[]>
   getFlowStats: (flowName: string) => Promise<FlowStats | null>
@@ -177,6 +185,65 @@ export function useFlow(): FlowComposable {
       }
       catch (err) {
         logger.error('Failed to cancel flow', { flowName, runId, error: err })
+        throw err
+      }
+    },
+
+    /**
+     * Restart a flow by canceling the current run and starting a new one with the same input
+     * @param flowName - The name of the flow
+     * @param runId - The run ID to restart
+     */
+    async restartFlow(flowName: string, runId: string): Promise<RestartFlowResult> {
+      try {
+        // 1. Get the original input from the flow.start event
+        const streamName = StoreSubjects.flowRun(runId)
+        const events = await store.stream.read(streamName)
+
+        // Find the flow.start event to get the original input
+        const startEvent = events.find((e: any) => e.type === 'flow.start' || e.type === 'flow.started')
+        const originalInput = startEvent?.data?.input || {}
+
+        logger.debug('Found original input for restart', { flowName, runId, hasInput: !!startEvent })
+
+        // 2. Cancel the current run (if still active)
+        const runIndexKey = StoreSubjects.flowRunIndex(flowName)
+        const entry = await store.index.get(runIndexKey, runId)
+        const currentStatus = entry?.metadata?.status
+
+        // Only cancel if flow is still active
+        if (currentStatus === 'running' || currentStatus === 'awaiting') {
+          await eventsManager.publishBus({
+            type: 'flow.cancel',
+            runId,
+            flowName,
+            data: {
+              canceledAt: new Date().toISOString(),
+              previousStatus: currentStatus,
+              reason: 'Restarted',
+            },
+          })
+          logger.info('Canceled flow for restart', { flowName, runId, previousStatus: currentStatus })
+        }
+
+        // 3. Start a new flow with the same input
+        const newResult = await this.startFlow(flowName, originalInput)
+
+        logger.info('Flow restarted', {
+          flowName,
+          oldRunId: runId,
+          newRunId: newResult.flowId,
+        })
+
+        return {
+          success: true,
+          oldRunId: runId,
+          newRunId: newResult.flowId,
+          flowName,
+        }
+      }
+      catch (err) {
+        logger.error('Failed to restart flow', { flowName, runId, error: err })
         throw err
       }
     },

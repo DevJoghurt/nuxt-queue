@@ -549,6 +549,7 @@ export class RedisStoreAdapter implements StoreAdapter {
    * Generic hash field parser - attempts to deserialize values intelligently
    * - Tries JSON parse for arrays/objects
    * - Tries number parse for numeric strings
+   * - Handles boolean strings ('true'/'false')
    * - Falls back to string
    */
   private parseHashFields(hash: Record<string, string>): Record<string, any> {
@@ -565,6 +566,16 @@ export class RedisStoreAdapter implements StoreAdapter {
         catch {
           // Not valid JSON, continue
         }
+      }
+
+      // Handle boolean strings
+      if (v === 'true') {
+        flat[k] = true
+        continue
+      }
+      if (v === 'false') {
+        flat[k] = false
+        continue
       }
 
       // Try number parse (integers and floats)

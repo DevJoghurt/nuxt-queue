@@ -21,15 +21,27 @@
         </div>
 
         <!-- Cancel Button (only show for running/awaiting flows) -->
-        <UButton
-          v-if="runStatus === 'running' || runStatus === 'awaiting'"
-          color="neutral"
-          variant="ghost"
-          icon="i-lucide-x-circle"
-          size="xs"
-          label="Cancel"
-          @click="handleCancelFlow"
-        />
+        <div class="flex items-center gap-2">
+          <UButton
+            v-if="runStatus === 'running' || runStatus === 'awaiting'"
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-x-circle"
+            size="xs"
+            label="Cancel"
+            @click="handleCancelFlow"
+          />
+          <!-- Restart Button (show for terminal states) -->
+          <UButton
+            v-if="runStatus === 'failed' || runStatus === 'stalled' || runStatus === 'canceled' || runStatus === 'completed'"
+            color="primary"
+            variant="ghost"
+            icon="i-lucide-rotate-ccw"
+            size="xs"
+            label="Restart"
+            @click="handleRestartFlow"
+          />
+        </div>
       </div>
 
       <!-- Bottom Row: Compact Stats Grid -->
@@ -125,11 +137,17 @@ const props = defineProps<{
 const emit = defineEmits<{
   'select-step': [stepKey: string | null]
   'cancel-flow': []
+  'restart-flow': []
 }>()
 
 // Handle cancel flow action
 const handleCancelFlow = () => {
   emit('cancel-flow')
+}
+
+// Handle restart flow action
+const handleRestartFlow = () => {
+  emit('restart-flow')
 }
 
 // Selected step ('all-steps' = all steps, null would break URadioGroup)

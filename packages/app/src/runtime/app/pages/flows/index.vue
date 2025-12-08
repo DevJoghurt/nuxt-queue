@@ -290,20 +290,19 @@ function updateFlowStats(data: any) {
     awaiting: metadata['stats.awaiting'] || 0,
   }
 
-  // Create a new flow object to trigger Vue reactivity
-  flows.value[flowIndex] = {
-    ...flows.value[flowIndex],
-    stats: {
-      total: stats.total || 0,
-      success: stats.success || 0,
-      failure: stats.failure || 0,
-      cancel: stats.cancel || 0,
-      running: stats.running || 0,
-      awaiting: stats.awaiting || 0,
-    },
-    lastRunAt: metadata.lastRunAt,
-    lastCompletedAt: metadata.lastCompletedAt,
+  // Update stats in place to avoid re-rendering the entire list
+  // This preserves scroll position
+  const flow = flows.value[flowIndex]
+  flow.stats = {
+    total: stats.total || 0,
+    success: stats.success || 0,
+    failure: stats.failure || 0,
+    cancel: stats.cancel || 0,
+    running: stats.running || 0,
+    awaiting: stats.awaiting || 0,
   }
+  flow.lastRunAt = metadata.lastRunAt
+  flow.lastCompletedAt = metadata.lastCompletedAt
 }
 
 onMounted(async () => {

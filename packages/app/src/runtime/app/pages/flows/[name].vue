@@ -297,6 +297,7 @@
                     :stall-timeout="runSnapshot.stallTimeout"
                     @select-step="handleSelectStep"
                     @cancel-flow="handleCancelFlow"
+                    @restart-flow="handleRestartFlow"
                   />
                 </div>
               </div>
@@ -668,6 +669,29 @@ const handleCancelFlow = async () => {
   }
   catch (error) {
     console.error('Failed to cancel flow:', error)
+  }
+}
+
+// Handle restart flow
+const handleRestartFlow = async () => {
+  if (!selectedFlow.value || !selectedRunId.value) return
+
+  try {
+    const result = await $fetch<{ newRunId: string }>(`/api/_flows/${selectedFlow.value}/runs/${selectedRunId.value}/restart`, {
+      method: 'POST',
+    })
+
+    // Navigate to the new run
+    if (result?.newRunId) {
+      selectedRunId.value = result.newRunId
+      mainTab.value = 'timeline'
+    }
+
+    // Refresh runs list to show the new run
+    await refreshRuns()
+  }
+  catch (error) {
+    console.error('Failed to restart flow:', error)
   }
 }
 

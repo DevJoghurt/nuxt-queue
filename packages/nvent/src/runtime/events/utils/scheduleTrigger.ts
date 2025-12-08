@@ -11,6 +11,7 @@ export async function scheduleTrigger(triggerName: string, scheduleConfig: any, 
 
   try {
     const jobId = `trigger:${triggerName}`
+    const isEnabled = triggerStatus === 'active'
 
     // Job handler: fire the trigger
     const handler = async () => {
@@ -41,7 +42,7 @@ export async function scheduleTrigger(triggerName: string, scheduleConfig: any, 
         type: 'schedule-trigger',
         scheduleConfig,
       },
-      enabled: triggerStatus === 'active',
+      enabled: isEnabled,
     }
 
     // Add schedule-specific fields
@@ -57,6 +58,7 @@ export async function scheduleTrigger(triggerName: string, scheduleConfig: any, 
 
     logger.info('Scheduled trigger', {
       trigger: triggerName,
+      enabled: isEnabled,
       cron: scheduleConfig.cron,
       interval: scheduleConfig.interval,
       timezone: scheduleConfig.timezone,
