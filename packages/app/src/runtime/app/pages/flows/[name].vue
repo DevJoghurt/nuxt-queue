@@ -388,7 +388,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from '#imports'
+import { ref, computed, watch } from '#imports'
 import FlowDiagram from '../../components/flow/Diagram.vue'
 import FlowRunOverview from '../../components/flow/RunOverview.vue'
 import FlowRunTimeline from '../../components/flow/RunTimeline.vue'
@@ -401,6 +401,7 @@ import { useRoute, useRouter } from '#app'
 import { useAnalyzedFlows } from '../../composables/useAnalyzedFlows'
 import { useFlowRuns } from '../../composables/useFlowRuns'
 import { useFlowRunTimeline } from '../../composables/useFlowRunTimeline'
+import { useFlowRunsUpdates } from '../../composables/useFlowRunsUpdates'
 import { useComponentRouter } from '../../composables/useComponentRouter'
 
 const componentRouter = useComponentRouter()
@@ -509,43 +510,15 @@ const loadingRuns = computed(() => runsStatus.value === 'pending')
 // Manage timeline/SSE for selected run
 const { flowState, isConnected, isReconnecting } = useFlowRunTimeline(selectedFlowRef, selectedRunIdRef)
 
-// Auto-refresh runs list with polling
-let pollInterval: NodeJS.Timeout | null = null
+// WebSocket updates for flow runs (similar to queue pattern)
+const { shouldRefreshRuns, resetRefreshFlag } = useFlowRunsUpdates(selectedFlowRef)
 
-const startPolling = () => {
-  if (pollInterval) return
-  pollInterval = setInterval(() => {
-    if (selectedFlow.value) {
-      refreshRuns()
-    }
-  }, 3000)
-}
-
-const stopPolling = () => {
-  if (pollInterval) {
-    clearInterval(pollInterval)
-    pollInterval = null
+// Watch for shouldRefreshRuns flag and auto-refresh the runs list
+watch(shouldRefreshRuns, async (shouldRefresh) => {
+  if (shouldRefresh) {
+    await refreshRuns()
+    resetRefreshFlag()
   }
-}
-
-// Start/stop polling based on flow selection
-watch(selectedFlow, (flow) => {
-  if (flow) {
-    startPolling()
-  }
-  else {
-    stopPolling()
-  }
-}, { immediate: true })
-
-onMounted(() => {
-  if (import.meta.client && selectedFlow.value) {
-    startPolling()
-  }
-})
-
-onUnmounted(() => {
-  stopPolling()
 })
 
 // Start flow modal state
