@@ -37,7 +37,7 @@ jobs:
       - name: Configure npm for authentication
         run: |
           cat > ~/.npmrc << EOF
-          //registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}
+          //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
           registry=https://registry.npmjs.org/
           always-auth=true
           EOF
