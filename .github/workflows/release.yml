@@ -42,5 +42,3 @@ jobs:
         run: |
           chmod +x ./scripts/release.sh
           ./scripts/release.sh
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
