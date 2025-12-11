@@ -4,6 +4,7 @@ permissions:
   contents: write
   packages: read
   pull-requests: write
+  id-token: write  # Required for npm provenance
 
 on:
   push:
@@ -25,6 +26,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: pnpm install
@@ -41,4 +43,4 @@ jobs:
           chmod +x ./scripts/release.sh
           ./scripts/release.sh
         env:
-          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
