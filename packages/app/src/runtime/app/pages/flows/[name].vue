@@ -419,7 +419,7 @@ const selectedFlow = computed(() => {
 const selectedRunId = computed({
   get: () => (route.query.run as string) || '',
   set: (value: string) => {
-    router.push({
+    router.replace({
       query: {
         ...route.query,
         run: value || undefined,
@@ -480,7 +480,7 @@ const currentPage = computed({
     return page ? Number.parseInt(page, 10) : 1
   },
   set: (value: number) => {
-    router.push({
+    router.replace({
       query: {
         ...route.query,
         page: value > 1 ? value.toString() : undefined,
