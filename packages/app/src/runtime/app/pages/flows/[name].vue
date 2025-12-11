@@ -415,29 +415,16 @@ const selectedFlow = computed(() => {
   return match && match[1] ? decodeURIComponent(match[1]) : null
 })
 
-// Get run ID from URL query parameter
-const selectedRunId = ref<string>((route.query.run as string) || '')
-
-// Sync URL with selectedRunId (but don't trigger on URL changes to avoid scroll issues)
-watch(selectedRunId, (newValue) => {
-  if (newValue !== route.query.run) {
-    router.replace({
-      query: {
-        ...route.query,
-        run: newValue || undefined,
-      },
-    })
-  }
-})
-
 // Back navigation
 const goBack = () => {
   componentRouter.push('/flows')
 }
 
+// Selected run ID (local state, not in URL)
+const selectedRunId = ref<string>('')
+
 // Main tab state (Diagram or Timeline)
-// Initialize based on URL - if run is already selected, start with timeline
-const mainTab = ref<'diagram' | 'timeline'>(route.query.run ? 'timeline' : 'diagram')
+const mainTab = ref<'diagram' | 'timeline'>('diagram')
 
 // Tab configurations
 const mainTabs = computed(() => [
