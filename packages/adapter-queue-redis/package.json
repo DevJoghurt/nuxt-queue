@@ -25,14 +25,14 @@
     "nvent": "workspace:*"
   },
   "dependencies": {
-    "@nuxt/kit": "^4.2.1",
+    "@nuxt/kit": "^4.2.2",
     "bullmq": "5.65.1",
     "defu": "^6.1.4",
     "ioredis": "5.8.2"
   },
   "devDependencies": {
     "@nuxt/module-builder": "^1.0.2",
-    "@nuxt/schema": "^4.2.1",
+    "@nuxt/schema": "^4.2.2",
     "typescript": "latest"
   }
 }

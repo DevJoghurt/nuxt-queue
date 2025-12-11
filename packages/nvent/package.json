@@ -22,23 +22,23 @@
     "prepack": "pnpm build"
   },
   "dependencies": {
-    "@nuxt/kit": "4.2.1",
+    "@nuxt/kit": "4.2.2",
     "chokidar": "^5.0.0",
-    "cron": "^4.3.5",
+    "cron": "^4.4.0",
     "cron-parser": "^5.4.0",
     "defu": "^6.1.4",
     "fastq": "^1.19.1",
     "globby": "16.0.0",
     "magicast": "^0.5.1",
-    "nuxt": "4.2.1",
+    "nuxt": "4.2.2",
     "pathe": "^2.0.3",
     "perfect-debounce": "^2.0.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
     "@nuxt/module-builder": "^1.0.2",
-    "@nuxt/schema": "4.2.1",
-    "@types/node": "^24.10.1",
+    "@nuxt/schema": "4.2.2",
+    "@types/node": "^25.0.0",
     "typescript": "latest",
     "vitest": "^4.0.15"
   }
