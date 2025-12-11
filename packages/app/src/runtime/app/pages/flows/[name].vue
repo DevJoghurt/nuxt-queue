@@ -416,16 +416,18 @@ const selectedFlow = computed(() => {
 })
 
 // Get run ID from URL query parameter
-const selectedRunId = computed({
-  get: () => (route.query.run as string) || '',
-  set: (value: string) => {
+const selectedRunId = ref<string>((route.query.run as string) || '')
+
+// Sync URL with selectedRunId (but don't trigger on URL changes to avoid scroll issues)
+watch(selectedRunId, (newValue) => {
+  if (newValue !== route.query.run) {
     router.replace({
       query: {
         ...route.query,
-        run: value || undefined,
+        run: newValue || undefined,
       },
     })
-  },
+  }
 })
 
 // Back navigation

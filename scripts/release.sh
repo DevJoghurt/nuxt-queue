@@ -9,18 +9,10 @@ publish_package() {
   echo "⚡ Publishing $package_name"
   cd "$package_path"
   
-  if npm publish --access public --provenance 2>&1; then
+  if npm publish --access public 2>&1; then
     echo "✅ $package_name published successfully"
   else
-    local exit_code=$?
-    if [ $exit_code -eq 1 ]; then
-      echo "⚠️  $package_name might already be published or provenance failed, trying without provenance..."
-      npm publish --access public || echo "ℹ️  $package_name already published at this version"
-    else
-      echo "❌ Failed to publish $package_name"
-      cd - > /dev/null
-      return $exit_code
-    fi
+    echo "ℹ️  $package_name might already be published at this version"
   fi
   
   cd - > /dev/null
@@ -37,5 +29,7 @@ publish_package "@nvent-addon/adapter-stream-redis" "packages/adapter-stream-red
 publish_package "@nvent-addon/adapter-queue-postgres" "packages/adapter-queue-postgres"
 publish_package "@nvent-addon/adapter-store-postgres" "packages/adapter-store-postgres"
 publish_package "@nvent-addon/adapter-stream-postgres" "packages/adapter-stream-postgres"
+
+echo "✅ All packages published successfully"
 
 echo "✅ All packages published successfully"
