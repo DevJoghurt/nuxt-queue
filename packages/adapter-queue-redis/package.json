@@ -1,6 +1,6 @@
 {
   "name": "@nvent-addon/adapter-queue-redis",
-  "version": "0.5.14",
+  "version": "0.5.15",
   "description": "Redis queue adapter for nvent using BullMQ",
   "repository": "DevJoghurt/nvent",
   "license": "MIT",
