@@ -40,14 +40,39 @@ export class RedisStoreAdapter implements StoreAdapter {
 
   constructor(private options: RedisStoreAdapterOptions) {
     const conn = options.connection
+
+    console.log('[adapter-store-redis] Initializing with connection:', {
+      host: conn?.host || 'localhost',
+      port: conn?.port || 6379,
+      hasPassword: !!conn?.password,
+      db: conn?.db || 0,
+    })
+
     this.redis = new IORedis({
-      host: conn.host || 'localhost',
-      port: conn.port || 6379,
-      username: conn.username,
-      password: conn.password,
-      db: conn.db || 0,
+      host: conn?.host || 'localhost',
+      port: conn?.port || 6379,
+      username: conn?.username,
+      password: conn?.password,
+      db: conn?.db || 0,
       lazyConnect: true,
       enableReadyCheck: false,
+      retryStrategy: (times) => {
+        if (times > 3) {
+          console.error('[adapter-store-redis] Failed to connect after 3 attempts')
+          return null // Stop retrying
+        }
+        console.log(`[adapter-store-redis] Retry attempt ${times}`)
+        return Math.min(times * 100, 3000)
+      },
+    })
+
+    // Handle connection errors
+    this.redis.on('error', (err) => {
+      console.error('[adapter-store-redis] Redis connection error:', err.message)
+    })
+
+    this.redis.on('connect', () => {
+      console.log('[adapter-store-redis] Connected to Redis')
     })
 
     this.prefix = options.prefix || 'nvent'

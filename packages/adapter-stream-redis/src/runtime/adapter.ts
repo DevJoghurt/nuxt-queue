@@ -128,14 +128,39 @@ export class RedisStreamAdapter implements StreamAdapter {
 
   constructor(private options: RedisStreamAdapterOptions) {
     const conn = options.connection
+    
+    console.log('[adapter-stream-redis] Initializing with connection:', {
+      host: conn?.host || 'localhost',
+      port: conn?.port || 6379,
+      hasPassword: !!conn?.password,
+      db: conn?.db || 0,
+    })
+    
     this.redis = new IORedisConstructor({
-      host: conn.host || 'localhost',
-      port: conn.port || 6379,
-      username: conn.username,
-      password: conn.password,
-      db: conn.db || 0,
+      host: conn?.host || 'localhost',
+      port: conn?.port || 6379,
+      username: conn?.username,
+      password: conn?.password,
+      db: conn?.db || 0,
       lazyConnect: true,
       enableReadyCheck: false,
+      retryStrategy: (times) => {
+        if (times > 3) {
+          console.error('[adapter-stream-redis] Failed to connect after 3 attempts')
+          return null // Stop retrying
+        }
+        console.log(`[adapter-stream-redis] Retry attempt ${times}`)
+        return Math.min(times * 100, 3000)
+      },
+    })
+
+    // Handle connection errors
+    this.redis.on('error', (err) => {
+      console.error('[adapter-stream-redis] Redis connection error:', err.message)
+    })
+    
+    this.redis.on('connect', () => {
+      console.log('[adapter-stream-redis] Connected to Redis')
     })
 
     // Create dedicated subscriber connection for Pub/Sub
@@ -147,6 +172,18 @@ export class RedisStreamAdapter implements StreamAdapter {
       db: conn.db || 0,
       lazyConnect: true,
       enableReadyCheck: false,
+      retryStrategy: (times) => {
+        if (times > 3) {
+          console.error('[adapter-stream-redis] Subscriber failed to connect after 3 attempts')
+          return null // Stop retrying
+        }
+        return Math.min(times * 100, 3000)
+      },
+    })
+
+    // Handle subscriber connection errors
+    subscriber.on('error', (err) => {
+      console.error('[adapter-stream-redis] Redis subscriber error:', err.message)
     })
 
     // Create gateway to manage pub/sub subscriptions efficiently
@@ -255,13 +292,25 @@ export default defineNitroPlugin(async (nitroApp) => {
       || nventConfig.connections?.redis
 
     if (!connection) {
-      console.warn('[adapter-stream-redis] No Redis connection config found')
+      console.error('[adapter-stream-redis] No Redis connection config found. Please configure Redis connection in your nuxt.config.ts:')
+      console.error('  nvent: {')
+      console.error('    connections: {')
+      console.error('      redis: {')
+      console.error('        host: process.env.REDIS_HOST || "localhost",')
+      console.error('        port: parseInt(process.env.REDIS_PORT || "6379"),')
+      console.error('        // password: process.env.REDIS_PASSWORD,')
+      console.error('      }')
+      console.error('    }')
+      console.error('  }')
+      throw new Error('[adapter-stream-redis] Redis connection configuration is required')
     }
 
     const config = defu(moduleOptions, {
       connection,
       prefix: nventConfig.stream?.prefix || 'nvent',
     })
+
+    console.log(`[adapter-stream-redis] Connecting to Redis at ${config.connection.host}:${config.connection.port}`)
 
     // Create and register adapter
     const adapter = new RedisStreamAdapter({
