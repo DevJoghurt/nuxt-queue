@@ -64,7 +64,8 @@ export default defineNuxtModule<ModuleOptions>().with({
     const runtimeConfig = nuxt.options.runtimeConfig
 
     // Convert normalized config to runtime config format
-    runtimeConfig.nvent = defu(runtimeConfig.nvent || {}, toRuntimeConfig(config)) as any
+    // Use normalized config as source so it takes precedence over any pre-existing values
+    runtimeConfig.nvent = defu(toRuntimeConfig(config), runtimeConfig.nvent || {}) as any
 
     // Add rootDir to runtime config for file-based adapters
     if (!runtimeConfig.nvent) runtimeConfig.nvent = {} as any

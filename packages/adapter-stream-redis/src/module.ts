@@ -21,10 +21,7 @@ export default defineNuxtModule<ModuleOptions>({
     configKey: 'nventStreamRedis',
   },
   defaults: {
-    connection: {
-      host: 'localhost',
-      port: 6379,
-    },
+    // Connection is inherited from nvent.connections.redis
     prefix: 'nvent',
   },
   setup(options, nuxt) {

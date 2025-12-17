@@ -68,6 +68,14 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
   // Merge user options with defaults
   const normalized = defu(options, defaults) as Required<ModuleOptions>
 
+  // Debug: log the connections being used
+  if (normalized.connections?.redis) {
+    console.log('[nvent-config] Redis connection after normalization:', {
+      host: normalized.connections.redis.host,
+      port: normalized.connections.redis.port,
+    })
+  }
+
   // Determine which connection types are needed based on adapter selections
   const neededConnections = new Set<string>()
 
@@ -114,8 +122,11 @@ export function normalizeModuleOptions(options: ModuleOptions): Required<ModuleO
 
   if (neededConnections.has('redis') && !normalized.connections.redis) {
     normalized.connections.redis = {
-      host: '127.0.0.1',
-      port: 6379,
+      host: process.env.REDIS_HOST || '127.0.0.1',
+      port: Number.parseInt(process.env.REDIS_PORT || '6379', 10),
+      password: process.env.REDIS_PASSWORD,
+      username: process.env.REDIS_USERNAME,
+      db: process.env.REDIS_DB ? Number.parseInt(process.env.REDIS_DB, 10) : 0,
     }
   }
 
@@ -220,8 +231,11 @@ export function getRedisStorageConfig(normalizedOptions: Required<ModuleOptions>
 
   if (!redisConfig) {
     return {
-      host: '127.0.0.1',
-      port: 6379,
+      host: process.env.REDIS_HOST || '127.0.0.1',
+      port: Number.parseInt(process.env.REDIS_PORT || '6379', 10),
+      username: process.env.REDIS_USERNAME,
+      password: process.env.REDIS_PASSWORD,
+      db: process.env.REDIS_DB ? Number.parseInt(process.env.REDIS_DB, 10) : 0,
     }
   }
 

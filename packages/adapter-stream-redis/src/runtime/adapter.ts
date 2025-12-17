@@ -291,6 +291,13 @@ export default defineNitroPlugin(async (nitroApp) => {
       || nventConfig.stream?.connection
       || nventConfig.connections?.redis
 
+    console.log('[adapter-stream-redis] DEBUG - connection source:', {
+      moduleOptions: moduleOptions.connection,
+      streamConnection: nventConfig.stream?.connection,
+      redisConnection: nventConfig.connections?.redis,
+      finalConnection: connection,
+    })
+
     if (!connection) {
       console.error('[adapter-stream-redis] No Redis connection config found. Please configure Redis connection in your nuxt.config.ts:')
       console.error('  nvent: {')
